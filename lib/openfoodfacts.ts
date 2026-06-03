@@ -12,6 +12,10 @@ export type ScannedProduct = {
   carbs: number;
   fat: number;
   fiber: number | null;
+  sugar: number | null;
+  saturatedFat: number | null;
+  salt: number | null;
+  sodium: number | null;
   source: "openfoodfacts";
 };
 
@@ -21,6 +25,13 @@ function n(nutriments: OFFNutriments, key: string): number {
   const v = nutriments[key];
   const num = typeof v === "string" ? parseFloat(v) : v;
   return Number.isFinite(num) ? (num as number) : 0;
+}
+
+function nn(nutriments: OFFNutriments, key: string): number | null {
+  const v = nutriments[key];
+  if (v == null || v === "") return null;
+  const num = typeof v === "string" ? parseFloat(v) : v;
+  return Number.isFinite(num) ? (num as number) : null;
 }
 
 export async function lookupBarcode(
@@ -68,7 +79,15 @@ export async function lookupBarcode(
     protein: n(nutriments, "proteins_100g"),
     carbs: n(nutriments, "carbohydrates_100g"),
     fat: n(nutriments, "fat_100g"),
-    fiber: nutriments["fiber_100g"] != null ? n(nutriments, "fiber_100g") : null,
+    fiber: nn(nutriments, "fiber_100g"),
+    sugar: nn(nutriments, "sugars_100g"),
+    saturatedFat: nn(nutriments, "saturated-fat_100g"),
+    salt: nn(nutriments, "salt_100g"),
+    // OFF reports sodium in grams; store as mg
+    sodium: (() => {
+      const s = nn(nutriments, "sodium_100g");
+      return s == null ? null : Math.round(s * 1000);
+    })(),
     source: "openfoodfacts",
   };
 }

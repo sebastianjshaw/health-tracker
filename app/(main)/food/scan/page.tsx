@@ -29,18 +29,22 @@ function ScanInner() {
   const [result, setResult] = React.useState<LookupResult | null>(null);
   const [manualCode, setManualCode] = React.useState("");
   const [qty, setQty] = React.useState("1");
+  const [servingSize, setServingSize] = React.useState("100");
+  const [servingUnit, setServingUnit] = React.useState("g");
   const [pending, start] = useTransition();
 
   const lookup = React.useCallback(async (code: string) => {
     setStatus("looking");
     try {
       const res = await fetch(`/api/barcode/${encodeURIComponent(code)}`);
-      if (res.ok) {
-        setResult((await res.json()) as LookupResult);
-      } else if (res.status === 404) {
-        setResult({ found: false, barcode: code });
-      } else {
-        setResult({ found: false, barcode: code });
+      const data: LookupResult = res.ok
+        ? ((await res.json()) as LookupResult)
+        : { found: false, barcode: code };
+      setResult(data);
+      if (data.found) {
+        setServingSize(String(data.product.servingSize));
+        setServingUnit(data.product.servingUnit);
+        setQty("1");
       }
     } catch {
       setResult({ found: false, barcode: code });
@@ -56,9 +60,35 @@ function ScanInner() {
     if (!result || !result.found) return;
     const product = result.product;
     const inLibraryId = result.inLibraryId;
+    const quantity = Number(qty) || 1;
+
     start(async () => {
-      const foodId = inLibraryId ?? (await upsertScannedFood(product));
-      await addLogEntry(date, meal, foodId, Number(qty) || 1);
+      let foodId: number;
+      if (inLibraryId) {
+        // already in library — keep its stored nutrition/serving
+        foodId = inLibraryId;
+      } else {
+        // rescale per-100 nutrition to the chosen portion size
+        const newServing = Number(servingSize) || product.servingSize;
+        const factor = product.servingSize > 0 ? newServing / product.servingSize : 1;
+        const sc = (n: number | null | undefined) =>
+          n == null ? null : Math.round(n * factor * 10) / 10;
+        foodId = await upsertScannedFood({
+          ...product,
+          servingSize: newServing,
+          servingUnit: servingUnit || product.servingUnit,
+          kcal: sc(product.kcal) ?? 0,
+          protein: sc(product.protein) ?? 0,
+          carbs: sc(product.carbs) ?? 0,
+          fat: sc(product.fat) ?? 0,
+          fiber: sc(product.fiber),
+          sugar: sc(product.sugar),
+          saturatedFat: sc(product.saturatedFat),
+          salt: sc(product.salt),
+          sodium: sc(product.sodium),
+        });
+      }
+      await addLogEntry(date, meal, foodId, quantity);
       backToDay();
     });
   }
@@ -117,7 +147,31 @@ function ScanInner() {
               <p className="mt-1 text-xs text-accent">Already in your library</p>
             )}
           </div>
-          <Field label={`Quantity (× ${result.product.servingSize}${result.product.servingUnit})`}>
+
+          {!result.inLibraryId && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Serving / portion size">
+                <Input
+                  type="number"
+                  step="any"
+                  inputMode="decimal"
+                  value={servingSize}
+                  onChange={(e) => setServingSize(e.target.value)}
+                />
+              </Field>
+              <Field label="Unit">
+                <Input value={servingUnit} onChange={(e) => setServingUnit(e.target.value)} />
+              </Field>
+            </div>
+          )}
+
+          <Field
+            label={`Quantity (× ${
+              result.inLibraryId
+                ? `${result.product.servingSize}${result.product.servingUnit}`
+                : `${servingSize || result.product.servingSize}${servingUnit}`
+            })`}
+          >
             <Input
               type="number"
               step="any"

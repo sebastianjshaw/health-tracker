@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/cn";
+import { DateNav } from "@/components/DateNav";
 import { CardioForm } from "./CardioForm";
 import { CardioList } from "./CardioList";
 import { LiftTracker } from "./LiftTracker";
@@ -10,10 +11,12 @@ import type { CardioSession } from "@/db/schema";
 import type { LiftHistoryEntry, NextLiftWorkout } from "@/lib/activity-data";
 
 export function ActivityView({
+  date,
   cardio,
   nextWorkout,
   liftHistory,
 }: {
+  date: string;
   cardio: CardioSession[];
   nextWorkout: NextLiftWorkout;
   liftHistory: LiftHistoryEntry[];
@@ -22,6 +25,8 @@ export function ActivityView({
 
   return (
     <div className="space-y-4">
+      <DateNav date={date} basePath="/activity" />
+
       <div className="flex rounded-xl bg-muted p-1">
         {(["lift", "cardio"] as const).map((t) => (
           <button
@@ -47,6 +52,7 @@ export function ActivityView({
               .map((e) => e.targetWeightKg)
               .join(",")}`}
             next={nextWorkout}
+            date={date}
           />
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">History</h3>
@@ -55,7 +61,7 @@ export function ActivityView({
         </>
       ) : (
         <>
-          <CardioForm />
+          <CardioForm date={date} />
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">Recent</h3>
             <CardioList sessions={cardio} />

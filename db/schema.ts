@@ -23,6 +23,13 @@ export const foods = sqliteTable("foods", {
   carbs: real("carbs").notNull().default(0),
   fat: real("fat").notNull().default(0),
   fiber: real("fiber"),
+  // extended per-serving nutrition (optional; mostly from barcode import)
+  sugar: real("sugar"),
+  saturatedFat: real("saturated_fat"),
+  salt: real("salt"),
+  sodium: real("sodium"),
+  // arbitrary extra nutrients (vitamins/minerals): JSON [{label,value,unit}]
+  extras: text("extras"),
   // 'manual' | 'openfoodfacts' | 'ai'
   source: text("source").notNull().default("manual"),
   createdAt: createdAt(),
@@ -116,6 +123,21 @@ export const liftSets = sqliteTable("lift_sets", {
   repsDone: integer("reps_done"), // null until logged
 });
 
+/** Blood / lab biomarker readings — one row per marker per dated test. */
+export const bloodMarkers = sqliteTable("blood_markers", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // YYYY-MM-DD of the test
+  marker: text("marker").notNull(), // e.g. "Total cholesterol", "HbA1c"
+  value: real("value").notNull(),
+  unit: text("unit").notNull().default(""),
+  refLow: real("ref_low"),
+  refHigh: real("ref_high"),
+  category: text("category"), // e.g. "Lipids", "Liver", "Thyroid"
+  clinic: text("clinic"),
+  notes: text("notes"),
+  createdAt: createdAt(),
+});
+
 /** Single-row-per-key store for app settings (targets, lift weights, etc.). */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
@@ -129,3 +151,4 @@ export type BodyMetric = typeof bodyMetrics.$inferSelect;
 export type CardioSession = typeof cardioSessions.$inferSelect;
 export type LiftSession = typeof liftSessions.$inferSelect;
 export type LiftSet = typeof liftSets.$inferSelect;
+export type BloodMarker = typeof bloodMarkers.$inferSelect;

@@ -24,22 +24,55 @@ export function BarcodeScanner({
     (async () => {
       try {
         const { BrowserMultiFormatReader } = await import("@zxing/browser");
-        const reader = new BrowserMultiFormatReader();
-        controls = await reader.decodeFromVideoDevice(
-          undefined,
-          videoRef.current ?? undefined,
-          (result, _err, ctrl) => {
-            if (result && !detectedRef.current && !cancelled) {
-              detectedRef.current = true;
-              ctrl.stop();
-              onDetected(result.getText());
+        const { DecodeHintType, BarcodeFormat } = await import("@zxing/library");
+
+        // Only the 1D formats found on food packaging — faster, fewer misreads.
+        const hints = new Map();
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+          BarcodeFormat.EAN_13,
+          BarcodeFormat.EAN_8,
+          BarcodeFormat.UPC_A,
+          BarcodeFormat.UPC_E,
+          BarcodeFormat.CODE_128,
+          BarcodeFormat.ITF,
+        ]);
+        hints.set(DecodeHintType.TRY_HARDER, true);
+
+        const reader = new BrowserMultiFormatReader(hints, {
+          delayBetweenScanAttempts: 120,
+        });
+
+        const onResult = (
+          result: { getText: () => string } | undefined,
+          _err: unknown,
+          ctrl: Controls,
+        ) => {
+          if (result && !detectedRef.current && !cancelled) {
+            detectedRef.current = true;
+            ctrl.stop();
+            try {
+              navigator.vibrate?.(60);
+            } catch {
+              /* no haptics */
             }
-          },
+            onDetected(result.getText());
+          }
+        };
+
+        // Prefer the rear camera. `ideal` won't fail on devices without one.
+        controls = await reader.decodeFromConstraints(
+          { video: { facingMode: { ideal: "environment" } } },
+          videoRef.current ?? undefined,
+          onResult,
         );
+
         if (cancelled) controls.stop();
       } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
         setError(
-          e instanceof Error ? e.message : "Camera unavailable — enter the barcode below.",
+          /permission|denied|notallowed/i.test(msg)
+            ? "Camera permission denied — enter the barcode below."
+            : "Camera unavailable — enter the barcode below.",
         );
       }
     })();
@@ -58,6 +91,7 @@ export function BarcodeScanner({
           className="h-full w-full object-cover"
           muted
           playsInline
+          autoPlay
         />
         {!error && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

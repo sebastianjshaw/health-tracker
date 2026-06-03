@@ -40,6 +40,13 @@ local.db
 *.db-wal
 *.db-shm
 
+# personal health scans / PII — keep out of git
+docs/*.jpg
+docs/*.jpeg
+docs/*.png
+docs/*.pdf
+docs/*.heic
+
 # vercel
 .vercel
 

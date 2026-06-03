@@ -14,6 +14,7 @@ import {
   setLiftWeights,
   setNextWorkout,
 } from "./settings";
+import { EXERCISES } from "./constants";
 
 export type CardioInput = {
   date: string;
@@ -56,7 +57,23 @@ export type CompleteWorkoutInput = {
   entries: LiftEntry[];
 };
 
-/** Persist a finished workout and advance the StrongLifts progression. */
+/** Manually set the working weights (kg) for any exercises — they progress
+ * automatically too, but you can correct or set starting weights here. */
+export async function updateLiftWeights(
+  partial: Partial<Record<Exercise, number>>,
+): Promise<void> {
+  const weights = await getLiftWeights();
+  for (const ex of EXERCISES) {
+    const v = partial[ex];
+    if (typeof v === "number" && Number.isFinite(v) && v >= 0) {
+      weights[ex] = v;
+    }
+  }
+  await setLiftWeights(weights);
+  revalidatePath("/activity");
+}
+
+/** Persist a finished workout and advance the Seblifts progression. */
 export async function completeLiftWorkout(input: CompleteWorkoutInput): Promise<void> {
   if (!isValidISO(input.date)) return;
 

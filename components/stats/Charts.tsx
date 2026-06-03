@@ -13,8 +13,15 @@ import {
   YAxis,
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
-import { EXERCISE_LABELS, EXERCISES } from "@/lib/constants";
+import { EXERCISE_LABELS, EXERCISES, MEALS, Meal } from "@/lib/constants";
 import type { CaloriePoint, LiftPoint, WeightPoint } from "@/lib/stats-data";
+
+const MEAL_INITIAL: Record<Meal, string> = {
+  breakfast: "B",
+  lunch: "L",
+  dinner: "D",
+  snacks: "S",
+};
 
 const AXIS = "var(--muted-foreground)";
 const GRID = "var(--border)";
@@ -41,18 +48,45 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
-export function WeightChart({ data }: { data: WeightPoint[] }) {
+export function WeightChart({
+  data,
+  goalWeight,
+}: {
+  data: WeightPoint[];
+  goalWeight?: number | null;
+}) {
+  const goal = goalWeight ?? null;
+  const values = data.map((d) => d.weight).concat(goal != null ? [goal] : []);
+  const lo = values.length ? Math.floor(Math.min(...values) - 1) : 0;
+  const hi = values.length ? Math.ceil(Math.max(...values) + 1) : 1;
   return (
     <ChartCard title="Weight">
       {data.length === 0 ? (
         <EmptyState>Log your weight to see the trend.</EmptyState>
       ) : (
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -16 }}>
+          <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
-            <YAxis stroke={AXIS} fontSize={11} domain={["dataMin - 1", "dataMax + 1"]} />
-            <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => shortDate(String(label))} />
+            <YAxis
+              stroke={AXIS}
+              fontSize={11}
+              allowDecimals={false}
+              width={40}
+              domain={[lo, hi]}
+            />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              labelFormatter={(label) => shortDate(String(label))}
+            />
+            {goal != null && (
+              <ReferenceLine
+                y={goal}
+                stroke="var(--accent)"
+                strokeDasharray="5 4"
+                label={{ value: `goal ${goal}`, position: "insideTopRight", fontSize: 10, fill: "var(--muted-foreground)" }}
+              />
+            )}
             <Line
               type="monotone"
               dataKey="weight"
@@ -71,28 +105,81 @@ export function WeightChart({ data }: { data: WeightPoint[] }) {
 export function CalorieChart({
   data,
   target,
+  mealSplit,
 }: {
   data: CaloriePoint[];
   target: number;
+  mealSplit: Record<Meal, number>;
 }) {
   const hasData = data.some((d) => d.kcal > 0);
+
+  // Cumulative meal budgets: where you should be after each meal.
+  const cumulative: { meal: Meal; value: number }[] = [];
+  let acc = 0;
+  for (const m of MEALS) {
+    acc += target * ((mealSplit[m] ?? 0) / 100);
+    cumulative.push({ meal: m, value: Math.round(acc) });
+  }
+
+  // Keep the goal + ghost lines on-screen even on low-intake days.
+  const dataMax = Math.max(0, ...data.map((d) => d.kcal));
+  const yMax = Math.ceil(Math.max(dataMax, target) / 100) * 100;
+
   return (
     <ChartCard title="Calories (last 14 days)">
       {!hasData ? (
         <EmptyState>No food logged yet.</EmptyState>
       ) : (
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -16 }}>
-            <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
-            <YAxis stroke={AXIS} fontSize={11} />
-            <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => shortDate(String(label))} cursor={{ fill: "var(--muted)" }} />
-            {target > 0 && (
-              <ReferenceLine y={target} stroke="var(--muted-foreground)" strokeDasharray="4 4" />
-            )}
-            <Bar dataKey="kcal" fill="#22c55e" radius={[4, 4, 0, 0]} name="kcal" />
-          </BarChart>
-        </ResponsiveContainer>
+        <>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+              <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(label) => shortDate(String(label))}
+                cursor={{ fill: "var(--muted)" }}
+              />
+              {/* faint cumulative meal-budget lines (after breakfast / lunch / dinner) */}
+              {target > 0 &&
+                cumulative.slice(0, 3).map((c) => (
+                  <ReferenceLine
+                    key={c.meal}
+                    y={c.value}
+                    stroke="var(--muted-foreground)"
+                    strokeOpacity={0.35}
+                    strokeDasharray="2 4"
+                    label={{
+                      value: MEAL_INITIAL[c.meal],
+                      position: "left",
+                      fontSize: 9,
+                      fill: "var(--muted-foreground)",
+                    }}
+                  />
+                ))}
+              {target > 0 && (
+                <ReferenceLine
+                  y={target}
+                  stroke="var(--muted-foreground)"
+                  strokeDasharray="4 4"
+                  label={{ value: "goal", position: "left", fontSize: 9, fill: "var(--muted-foreground)" }}
+                />
+              )}
+              <Bar dataKey="kcal" fill="#22c55e" radius={[4, 4, 0, 0]} name="kcal" />
+            </BarChart>
+          </ResponsiveContainer>
+          {target > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Ghost lines = cumulative budget after{" "}
+              {cumulative
+                .slice(0, 3)
+                .map((c) => `${MEAL_INITIAL[c.meal]} ${c.value}`)
+                .join(" · ")}{" "}
+              · goal {target}
+            </p>
+          )}
+        </>
       )}
     </ChartCard>
   );

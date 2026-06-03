@@ -31,6 +31,7 @@ export function FoodManager({
 }) {
   const [showAdd, setShowAdd] = React.useState(foods.length === 0);
   const [defaultFor, setDefaultFor] = React.useState<Food | null>(null);
+  const [editFood, setEditFood] = React.useState<Food | null>(null);
   const [pending, start] = useTransition();
 
   return (
@@ -96,7 +97,12 @@ export function FoodManager({
           )}
           {foods.map((f) => (
             <div key={f.id} className="flex items-center gap-2 py-2.5">
-              <div className="min-w-0 flex-1">
+              <button
+                type="button"
+                onClick={() => setEditFood(f)}
+                className="min-w-0 flex-1 text-left"
+                aria-label={`Edit ${f.name}`}
+              >
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">{f.name}</span>
                   {f.source !== "manual" && <Badge>{f.source}</Badge>}
@@ -107,7 +113,7 @@ export function FoodManager({
                   {f.servingUnit} · P{Math.round(f.protein)} C{Math.round(f.carbs)} F
                   {Math.round(f.fat)}
                 </div>
-              </div>
+              </button>
               <Button size="sm" variant="secondary" onClick={() => setDefaultFor(f)}>
                 Default
               </Button>
@@ -133,6 +139,20 @@ export function FoodManager({
         onClose={() => setDefaultFor(null)}
         existing={recurring}
       />
+
+      <Sheet
+        open={!!editFood}
+        onClose={() => setEditFood(null)}
+        title={editFood ? `Edit ${editFood.name}` : ""}
+      >
+        {editFood && (
+          <ManualFoodForm
+            key={editFood.id}
+            food={editFood}
+            onSaved={() => setEditFood(null)}
+          />
+        )}
+      </Sheet>
     </div>
   );
 }

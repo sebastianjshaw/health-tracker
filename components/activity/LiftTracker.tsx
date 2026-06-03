@@ -2,20 +2,34 @@
 
 import * as React from "react";
 import { useTransition } from "react";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
-import { EXERCISE_LABELS, Exercise, REPS_PER_SET } from "@/lib/constants";
-import { todayISO } from "@/lib/date";
+import {
+  EXERCISE_LABELS,
+  Exercise,
+  LIFT_PROGRAM_NAME,
+  REPS_PER_SET,
+} from "@/lib/constants";
 import { trimNum } from "@/lib/format";
-import { completeLiftWorkout } from "@/lib/activity-actions";
+import { completeLiftWorkout, updateLiftWeights } from "@/lib/activity-actions";
 import type { NextLiftWorkout } from "@/lib/activity-data";
 
-export function LiftTracker({ next }: { next: NextLiftWorkout }) {
+export function LiftTracker({
+  next,
+  date,
+}: {
+  next: NextLiftWorkout;
+  date: string;
+}) {
   const [reps, setReps] = React.useState<Record<string, number[]>>(() =>
     Object.fromEntries(
       next.exercises.map((e) => [e.exercise, Array(e.sets).fill(REPS_PER_SET)]),
     ),
   );
+  const [weights, setWeights] = React.useState<Record<string, number>>(() =>
+    Object.fromEntries(next.exercises.map((e) => [e.exercise, e.targetWeightKg])),
+  );
+  const [editing, setEditing] = React.useState(false);
   const [pending, start] = useTransition();
   const [saved, setSaved] = React.useState(false);
 
@@ -28,14 +42,28 @@ export function LiftTracker({ next }: { next: NextLiftWorkout }) {
     });
   }
 
+  function adjustWeight(ex: Exercise, delta: number) {
+    setWeights((p) => ({
+      ...p,
+      [ex]: Math.max(0, Number((p[ex] + delta).toFixed(2))),
+    }));
+  }
+
+  function saveWeights() {
+    start(async () => {
+      await updateLiftWeights(weights);
+      setEditing(false);
+    });
+  }
+
   function finish() {
     start(async () => {
       await completeLiftWorkout({
-        date: todayISO(),
+        date,
         workout: next.workout,
         entries: next.exercises.map((e) => ({
           exercise: e.exercise,
-          targetWeightKg: e.targetWeightKg,
+          targetWeightKg: weights[e.exercise],
           reps: reps[e.exercise],
         })),
       });
@@ -47,52 +75,107 @@ export function LiftTracker({ next }: { next: NextLiftWorkout }) {
     <Card className="p-4">
       <div className="mb-1 flex items-center justify-between">
         <h2 className="font-semibold">Workout {next.workout}</h2>
-        <span className="text-sm text-muted-foreground">StrongLifts 5×5</span>
+        <span className="text-sm text-muted-foreground">{LIFT_PROGRAM_NAME}</span>
       </div>
-      <p className="mb-4 text-xs text-muted-foreground">
-        Tap a set to log reps. Hit all reps to progress (+2.5 kg) next time.
-      </p>
+      <div className="mb-4 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {editing
+            ? "Set your working weights (± 2.5 kg)."
+            : "Tap a set to log reps. Hit all reps to progress next time."}
+        </p>
+        <button
+          onClick={() => setEditing((v) => !v)}
+          className="text-xs font-medium text-accent"
+        >
+          {editing ? "Done" : "Adjust weights"}
+        </button>
+      </div>
 
       <div className="space-y-4">
         {next.exercises.map((e) => (
           <div key={e.exercise}>
-            <div className="mb-1.5 flex items-baseline justify-between">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
               <span className="font-medium">{EXERCISE_LABELS[e.exercise]}</span>
-              <span className="text-sm text-muted-foreground">
-                {trimNum(e.targetWeightKg)} kg × {e.sets}×{REPS_PER_SET}
-              </span>
+              {editing ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => adjustWeight(e.exercise, -2.5)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                    aria-label="Decrease weight"
+                  >
+                    −
+                  </button>
+                  <Input
+                    type="number"
+                    step="any"
+                    inputMode="decimal"
+                    value={weights[e.exercise]}
+                    onChange={(ev) =>
+                      setWeights((p) => ({
+                        ...p,
+                        [e.exercise]: parseFloat(ev.target.value) || 0,
+                      }))
+                    }
+                    className="h-9 w-20 text-center"
+                  />
+                  <button
+                    onClick={() => adjustWeight(e.exercise, 2.5)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground"
+                    aria-label="Increase weight"
+                  >
+                    +
+                  </button>
+                </div>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  {trimNum(weights[e.exercise])} kg × {e.sets}×{REPS_PER_SET}
+                </span>
+              )}
             </div>
-            <div className="flex flex-wrap gap-2">
-              {reps[e.exercise].map((r, i) => (
-                <button
-                  key={i}
-                  onClick={() => cycle(e.exercise, i)}
-                  className={cn(
-                    "flex h-11 w-11 items-center justify-center rounded-full border text-base font-semibold transition",
-                    r === REPS_PER_SET
-                      ? "border-accent bg-accent text-accent-foreground"
-                      : r === 0
-                        ? "border-border bg-muted text-muted-foreground"
-                        : "border-warn text-warn",
-                  )}
-                  style={r > 0 && r < REPS_PER_SET ? { borderColor: "var(--warn)" } : undefined}
-                  aria-label={`${EXERCISE_LABELS[e.exercise]} set ${i + 1}: ${r} reps`}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
+
+            {!editing && (
+              <div className="flex flex-wrap gap-2">
+                {reps[e.exercise].map((r, i) => (
+                  <button
+                    key={i}
+                    onClick={() => cycle(e.exercise, i)}
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-full border text-base font-semibold transition",
+                      r === REPS_PER_SET
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : r === 0
+                          ? "border-border bg-muted text-muted-foreground"
+                          : "text-warn",
+                    )}
+                    style={
+                      r > 0 && r < REPS_PER_SET ? { borderColor: "var(--warn)" } : undefined
+                    }
+                    aria-label={`${EXERCISE_LABELS[e.exercise]} set ${i + 1}: ${r} reps`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
 
-      <Button className="mt-5 w-full" onClick={finish} disabled={pending}>
-        {pending ? "Saving…" : saved ? "Saved ✓" : "Finish workout"}
-      </Button>
-      {saved && (
-        <p className="mt-2 text-center text-sm text-accent">
-          Logged. Targets updated for next time.
-        </p>
+      {editing ? (
+        <Button className="mt-5 w-full" onClick={saveWeights} disabled={pending}>
+          {pending ? "Saving…" : "Save weights"}
+        </Button>
+      ) : (
+        <>
+          <Button className="mt-5 w-full" onClick={finish} disabled={pending}>
+            {pending ? "Saving…" : saved ? "Saved ✓" : "Finish workout"}
+          </Button>
+          {saved && (
+            <p className="mt-2 text-center text-sm text-accent">
+              Logged. Targets updated for next time.
+            </p>
+          )}
+        </>
       )}
     </Card>
   );

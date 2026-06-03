@@ -4,9 +4,12 @@ import { db } from "@/db";
 import { settings } from "@/db/schema";
 import {
   DEFAULT_LIFT_WEIGHTS,
+  DEFAULT_MEAL_SPLIT,
   DEFAULT_TARGETS,
   EXERCISES,
   Exercise,
+  MEALS,
+  Meal,
 } from "./constants";
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
@@ -67,4 +70,27 @@ export async function getNextWorkout(): Promise<"A" | "B"> {
 
 export async function setNextWorkout(w: "A" | "B"): Promise<void> {
   await setSetting("nextWorkout", w);
+}
+
+export async function getGoalWeight(): Promise<number | null> {
+  return getSetting<number | null>("goalWeight", null);
+}
+
+export async function setGoalWeight(kg: number | null): Promise<void> {
+  await setSetting("goalWeight", kg);
+}
+
+export type MealSplit = Record<Meal, number>;
+
+export async function getMealSplit(): Promise<MealSplit> {
+  const stored = await getSetting<Partial<MealSplit>>("mealSplit", {});
+  const out = { ...DEFAULT_MEAL_SPLIT };
+  for (const m of MEALS) {
+    if (typeof stored[m] === "number") out[m] = stored[m] as number;
+  }
+  return out;
+}
+
+export async function setMealSplit(split: MealSplit): Promise<void> {
+  await setSetting("mealSplit", split);
 }

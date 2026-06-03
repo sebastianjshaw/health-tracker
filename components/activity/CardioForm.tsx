@@ -4,7 +4,6 @@ import * as React from "react";
 import { useTransition } from "react";
 import { Button, Card, Field, Input, Select } from "@/components/ui";
 import { CARDIO_TYPES, CardioType } from "@/lib/constants";
-import { todayISO } from "@/lib/date";
 import { logCardio } from "@/lib/activity-actions";
 
 const TYPE_LABELS: Record<CardioType, string> = {
@@ -21,7 +20,7 @@ function num(v: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function CardioForm() {
+export function CardioForm({ date }: { date: string }) {
   const formRef = React.useRef<HTMLFormElement>(null);
   const [type, setType] = React.useState<CardioType>("run");
   const [pending, start] = useTransition();
@@ -31,7 +30,7 @@ export function CardioForm() {
     const fd = new FormData(e.currentTarget);
     start(async () => {
       await logCardio({
-        date: todayISO(),
+        date,
         type,
         durationMin: num(String(fd.get("duration") ?? "")),
         distanceKm: num(String(fd.get("distance") ?? "")),

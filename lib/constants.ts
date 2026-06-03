@@ -61,3 +61,14 @@ export const DEFAULT_TARGETS = {
   kcal: 2200,
   protein: 150,
 };
+
+// Branding for the lifting program (kept generic to avoid trademark issues).
+export const LIFT_PROGRAM_NAME = "Seblifts 5×5";
+
+// Default share of the daily calorie goal per meal (percent, sums to 100).
+export const DEFAULT_MEAL_SPLIT: Record<Meal, number> = {
+  breakfast: 25,
+  lunch: 30,
+  dinner: 35,
+  snacks: 10,
+};

@@ -17,6 +17,25 @@ function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
 }
 
+function nullableNum(v: FormDataEntryValue | null): number | null {
+  const s = String(v ?? "").trim();
+  if (s === "") return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Optional extended nutrition fields shared by create/update. */
+function extendedFields(fd: FormData) {
+  return {
+    fiber: nullableNum(fd.get("fiber")),
+    sugar: nullableNum(fd.get("sugar")),
+    saturatedFat: nullableNum(fd.get("saturatedFat")),
+    salt: nullableNum(fd.get("salt")),
+    sodium: nullableNum(fd.get("sodium")),
+    extras: str(fd.get("extras")) || null,
+  };
+}
+
 export async function createFood(
   _prev: FoodFormState,
   formData: FormData,
@@ -37,7 +56,7 @@ export async function createFood(
     protein: num(formData.get("protein")),
     carbs: num(formData.get("carbs")),
     fat: num(formData.get("fat")),
-    fiber: formData.get("fiber") ? num(formData.get("fiber")) : null,
+    ...extendedFields(formData),
     source: str(formData.get("source")) || "manual",
   });
 
@@ -67,7 +86,7 @@ export async function updateFood(
       protein: num(formData.get("protein")),
       carbs: num(formData.get("carbs")),
       fat: num(formData.get("fat")),
-      fiber: formData.get("fiber") ? num(formData.get("fiber")) : null,
+      ...extendedFields(formData),
     })
     .where(eq(foods.id, id));
 
@@ -125,6 +144,11 @@ export type ScannedFoodInput = {
   carbs: number;
   fat: number;
   fiber: number | null;
+  sugar?: number | null;
+  saturatedFat?: number | null;
+  salt?: number | null;
+  sodium?: number | null;
+  extras?: string | null;
   source: string;
 };
 
@@ -153,6 +177,11 @@ export async function upsertScannedFood(input: ScannedFoodInput): Promise<number
       carbs: input.carbs,
       fat: input.fat,
       fiber: input.fiber,
+      sugar: input.sugar ?? null,
+      saturatedFat: input.saturatedFat ?? null,
+      salt: input.salt ?? null,
+      sodium: input.sodium ?? null,
+      extras: input.extras ?? null,
       source: input.source || "openfoodfacts",
     })
     .returning();
