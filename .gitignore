@@ -40,12 +40,8 @@ local.db
 *.db-wal
 *.db-shm
 
-# personal health scans / PII — keep out of git
-docs/*.jpg
-docs/*.jpeg
-docs/*.png
-docs/*.pdf
-docs/*.heic
+# personal health scans / PII / private docs — keep the whole folder out of git
+docs/
 
 # vercel
 .vercel
