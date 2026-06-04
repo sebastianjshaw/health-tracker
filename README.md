@@ -56,8 +56,9 @@ Barcode scanning needs HTTPS, so deploy rather than serving over plain HTTP on y
 brew install tursodatabase/tap/turso
 turso auth signup            # or: turso auth login
 turso db create health-tracker
-turso db show health-tracker --url      # -> DATABASE_URL 
-turso db tokens create health-tracker   # -> 
+turso db show health-tracker --url      # -> DATABASE_URL
+turso db tokens create health-tracker   # -> DATABASE_AUTH_TOKEN
+```
 
 **2. Push the schema to Turso**
 

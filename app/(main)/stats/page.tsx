@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import { CalorieChart, LiftChart, WeightChart } from "@/components/stats/Charts";
+import { CalorieChart, LiftChart, WeightChart } from "@/components/stats/charts-lazy";
 import { BodyForm } from "@/components/stats/BodyForm";
 import { BodyHistory } from "@/components/stats/BodyHistory";
 import { GoalsEditor } from "@/components/stats/GoalsEditor";

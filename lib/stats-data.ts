@@ -143,9 +143,16 @@ export async function getLiftProgression(): Promise<LiftPoint[]> {
     )
     .all();
 
+  const bySession = new Map<number, typeof sets>();
+  for (const st of sets) {
+    const arr = bySession.get(st.sessionId);
+    if (arr) arr.push(st);
+    else bySession.set(st.sessionId, [st]);
+  }
+
   return sessions.map((s) => {
     const point: LiftPoint = { date: s.date };
-    for (const st of sets.filter((x) => x.sessionId === s.id)) {
+    for (const st of bySession.get(s.id) ?? []) {
       const ex = st.exercise as Exercise;
       point[ex] = Math.max(point[ex] ?? 0, st.targetWeightKg);
     }

@@ -9,6 +9,10 @@ export async function proxy(request: NextRequest) {
   const valid = await isValidToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (!valid && !isLogin) {
+    // API routes should get a real 401, not an HTML login redirect.
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = pathname === "/" ? "" : `?next=${encodeURIComponent(pathname)}`;

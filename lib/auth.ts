@@ -2,9 +2,9 @@ import "server-only";
 import { cookies } from "next/headers";
 import {
   SESSION_COOKIE,
-  computeToken,
+  SESSION_TTL_SECONDS,
+  createToken,
   isValidToken,
-  sessionSecret,
 } from "./session";
 
 export async function isAuthenticated(): Promise<boolean> {
@@ -14,12 +14,12 @@ export async function isAuthenticated(): Promise<boolean> {
 
 export async function createSession(): Promise<void> {
   const store = await cookies();
-  store.set(SESSION_COOKIE, await computeToken(sessionSecret()), {
+  store.set(SESSION_COOKIE, await createToken(), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 365,
+    maxAge: SESSION_TTL_SECONDS,
   });
 }
 
