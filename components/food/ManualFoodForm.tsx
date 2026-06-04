@@ -180,16 +180,14 @@ export function ManualFoodForm({
                   className="space-y-2 rounded-xl border border-border p-2"
                 >
                   <div className="flex items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Input
-                        placeholder="Nutrient name (e.g. Vitamin C)"
-                        value={ex.label}
-                        onChange={(e) =>
-                          setExtras((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
-                        }
-                        className="w-full"
-                      />
-                    </div>
+                    <Input
+                      placeholder="Nutrient name (e.g. Vitamin C)"
+                      value={ex.label}
+                      onChange={(e) =>
+                        setExtras((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                      }
+                      className="min-w-0 flex-1"
+                    />
                     <button
                       type="button"
                       onClick={() => setExtras((p) => p.filter((_, j) => j !== i))}
@@ -200,27 +198,23 @@ export function ManualFoodForm({
                     </button>
                   </div>
                   <div className="flex gap-2">
-                    <div className="min-w-0 flex-1">
-                      <Input
-                        placeholder="amount"
-                        inputMode="decimal"
-                        value={ex.value}
-                        onChange={(e) =>
-                          setExtras((p) => p.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
-                        }
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="w-24 shrink-0">
-                      <Input
-                        placeholder="unit"
-                        value={ex.unit}
-                        onChange={(e) =>
-                          setExtras((p) => p.map((x, j) => (j === i ? { ...x, unit: e.target.value } : x)))
-                        }
-                        className="w-full"
-                      />
-                    </div>
+                    <Input
+                      placeholder="amount"
+                      inputMode="decimal"
+                      value={ex.value}
+                      onChange={(e) =>
+                        setExtras((p) => p.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
+                      }
+                      className="min-w-0 flex-1"
+                    />
+                    <Input
+                      placeholder="unit"
+                      value={ex.unit}
+                      onChange={(e) =>
+                        setExtras((p) => p.map((x, j) => (j === i ? { ...x, unit: e.target.value } : x)))
+                      }
+                      className="w-24 shrink-0"
+                    />
                   </div>
                 </div>
               ))}

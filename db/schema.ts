@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 const createdAt = () =>
   integer("created_at", { mode: "timestamp" })
@@ -68,14 +68,14 @@ export const foodLog = sqliteTable("food_log", {
   // set when this row was materialised from a recurring template
   recurringId: integer("recurring_id"),
   createdAt: createdAt(),
-});
+}, (t) => [index("food_log_date_idx").on(t.date)]);
 
 /** Records that a recurring default was removed from one specific day. */
 export const recurringRemovals = sqliteTable("recurring_removals", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   date: text("date").notNull(),
   recurringId: integer("recurring_id").notNull(),
-});
+}, (t) => [index("recurring_removals_date_idx").on(t.date)]);
 
 export const bodyMetrics = sqliteTable("body_metrics", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -88,7 +88,7 @@ export const bodyMetrics = sqliteTable("body_metrics", {
   restingHr: integer("resting_hr"),
   notes: text("notes"),
   createdAt: createdAt(),
-});
+}, (t) => [index("body_metrics_date_idx").on(t.date)]);
 
 export const cardioSessions = sqliteTable("cardio_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -101,7 +101,7 @@ export const cardioSessions = sqliteTable("cardio_sessions", {
   kcal: real("kcal"),
   notes: text("notes"),
   createdAt: createdAt(),
-});
+}, (t) => [index("cardio_sessions_date_idx").on(t.date)]);
 
 export const liftSessions = sqliteTable("lift_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -121,7 +121,7 @@ export const liftSets = sqliteTable("lift_sets", {
   targetWeightKg: real("target_weight_kg").notNull(),
   setNumber: integer("set_number").notNull(),
   repsDone: integer("reps_done"), // null until logged
-});
+}, (t) => [index("lift_sets_session_idx").on(t.sessionId)]);
 
 /** Blood / lab biomarker readings — one row per marker per dated test. */
 export const bloodMarkers = sqliteTable("blood_markers", {
@@ -136,7 +136,7 @@ export const bloodMarkers = sqliteTable("blood_markers", {
   clinic: text("clinic"),
   notes: text("notes"),
   createdAt: createdAt(),
-});
+}, (t) => [index("blood_markers_date_idx").on(t.date)]);
 
 /** Single-row-per-key store for app settings (targets, lift weights, etc.). */
 export const settings = sqliteTable("settings", {

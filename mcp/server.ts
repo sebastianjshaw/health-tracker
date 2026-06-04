@@ -22,6 +22,9 @@ import {
   recurringRemovals,
   settings,
 } from "../db/schema";
+// Shared, framework-free helpers — single source of truth with the web app.
+import { schedulesFor, todayISO } from "../lib/date";
+import { totals as macroTotals } from "../lib/nutrition";
 
 // ---- db ----
 const url = process.env.DATABASE_URL ?? "file:local.db";
@@ -68,19 +71,6 @@ async function ensureLibraryFood(opts: {
   return row.id;
 }
 
-// ---- date helpers (local time) ----
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-function isWeekend(date: string): boolean {
-  const [y, m, d] = date.split("-").map(Number);
-  const day = new Date(y, m - 1, d).getDay();
-  return day === 0 || day === 6;
-}
-function schedulesFor(date: string): string[] {
-  return isWeekend(date) ? ["everyday", "weekend"] : ["everyday", "weekday"];
-}
 const ISO = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD");
 const MEAL = z.enum(["breakfast", "lunch", "dinner", "snacks"]);
 
@@ -156,15 +146,7 @@ server.tool(
       })),
     ];
 
-    const totals = entries.reduce(
-      (a, e) => ({
-        kcal: a.kcal + e.kcal * e.quantity,
-        protein: a.protein + e.protein * e.quantity,
-        carbs: a.carbs + e.carbs * e.quantity,
-        fat: a.fat + e.fat * e.quantity,
-      }),
-      { kcal: 0, protein: 0, carbs: 0, fat: 0 },
-    );
+    const totals = macroTotals(entries);
 
     return text(
       JSON.stringify(

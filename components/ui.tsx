@@ -120,11 +120,15 @@ export function Field({
   children: React.ReactNode;
   className?: string;
 }) {
+  // Wrapping the control in the <label> gives an implicit, accessible
+  // association without needing a generated id on every input.
   return (
-    <div className={className}>
-      <Label>{label}</Label>
+    <label className={cn("block", className)}>
+      <span className="mb-1 block text-sm font-medium text-muted-foreground">
+        {label}
+      </span>
       {children}
-    </div>
+    </label>
   );
 }
 
