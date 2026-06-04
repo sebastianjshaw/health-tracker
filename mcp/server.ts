@@ -11,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { asc, desc, eq, inArray, isNotNull, like } from "drizzle-orm";
+import { asc, desc, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   bloodMarkers,
@@ -29,6 +29,44 @@ const authToken = process.env.DATABASE_AUTH_TOKEN;
 const isRemote = url.startsWith("libsql://") || url.startsWith("http");
 const client = createClient(isRemote ? { url, authToken } : { url });
 const db = drizzle(client);
+
+/**
+ * Ensure a food exists in the library (case-insensitive by name) and return its
+ * id. Used so that ad-hoc foods logged via the MCP server still show up in the
+ * Food library, not just the daily log.
+ */
+async function ensureLibraryFood(opts: {
+  name: string;
+  kcal: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  source: string;
+  servingSize?: number;
+  servingUnit?: string;
+}): Promise<number> {
+  const name = opts.name.trim();
+  const existing = await db
+    .select({ id: foods.id })
+    .from(foods)
+    .where(sql`lower(${foods.name}) = ${name.toLowerCase()}`)
+    .get();
+  if (existing) return existing.id;
+  const [row] = await db
+    .insert(foods)
+    .values({
+      name,
+      servingSize: opts.servingSize ?? 1,
+      servingUnit: opts.servingUnit ?? "serving",
+      kcal: opts.kcal,
+      protein: opts.protein,
+      carbs: opts.carbs,
+      fat: opts.fat,
+      source: opts.source,
+    })
+    .returning({ id: foods.id });
+  return row.id;
+}
 
 // ---- date helpers (local time) ----
 function todayISO(): string {
@@ -194,10 +232,19 @@ server.tool(
   },
   async ({ date, meal, name, kcal, protein, carbs, fat }) => {
     const d = date ?? todayISO();
+    // Also make sure the food exists in the library so it's reusable later.
+    const foodId = await ensureLibraryFood({
+      name,
+      kcal,
+      protein: protein ?? 0,
+      carbs: carbs ?? 0,
+      fat: fat ?? 0,
+      source: "mcp",
+    });
     await db.insert(foodLog).values({
       date: d,
       meal,
-      foodId: null,
+      foodId,
       name,
       quantity: 1, // nutrition values are absolute totals, so the multiplier is always 1
       kcal,
