@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { settings } from "@/db/schema";
 import {
-  DEFAULT_HEIGHT_CM,
   DEFAULT_LIFT_WEIGHTS,
   DEFAULT_MEAL_SPLIT,
   DEFAULT_TARGETS,
@@ -111,7 +110,7 @@ const EMPTY_PROFILE: Profile = {
   name: "",
   dob: "",
   sex: "",
-  heightCm: DEFAULT_HEIGHT_CM,
+  heightCm: null,
   medications: "",
   conditions: "",
 };

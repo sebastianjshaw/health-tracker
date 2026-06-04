@@ -74,9 +74,6 @@ export const DEFAULT_TARGETS = {
   protein: 150,
 };
 
-// Fixed for this single user — used for BMI. Not exposed in the profile form.
-export const DEFAULT_HEIGHT_CM = 180;
-
 // Branding for the lifting program (kept generic to avoid trademark issues).
 export const LIFT_PROGRAM_NAME = "Seblifts 5×5";
 

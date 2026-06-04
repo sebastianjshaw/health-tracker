@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useTransition } from "react";
 import { Button, Card, Field, Input, Select, Textarea } from "@/components/ui";
+import { nullableNum } from "@/lib/format";
 import { saveProfile } from "@/lib/profile-actions";
 import type { Profile, Sex } from "@/lib/settings";
 
@@ -55,6 +56,14 @@ export function ProfileEditor({ profile }: { profile: Profile }) {
               </Select>
             </Field>
           </div>
+          <Field label="Height (cm)">
+            <Input
+              type="number"
+              inputMode="numeric"
+              value={p.heightCm ?? ""}
+              onChange={(e) => set({ heightCm: nullableNum(e.target.value) })}
+            />
+          </Field>
           <Field label="Current medications">
             <Textarea
               rows={2}
