@@ -47,7 +47,7 @@ export function BottomNav() {
   }
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 print:hidden">
       <div
         className="mx-auto flex max-w-2xl items-stretch justify-around"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}

@@ -46,10 +46,16 @@ export type CaloriePoint = { date: string; kcal: number; protein: number };
  */
 export async function getCalorieSeries(days = 14): Promise<CaloriePoint[]> {
   const today = todayISO();
-  const start = addDays(today, -(days - 1));
-  const dates = Array.from({ length: days }, (_, i) =>
-    addDays(today, -(days - 1 - i)),
-  );
+  return calorieSeriesRange(addDays(today, -(days - 1)), today);
+}
+
+/** Daily consumed totals merged for an inclusive [start, end] date range. */
+export async function calorieSeriesRange(
+  start: string,
+  end: string,
+): Promise<CaloriePoint[]> {
+  const dates: string[] = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
 
   const [logged, recurring, removals] = await Promise.all([
     db
@@ -60,7 +66,7 @@ export async function getCalorieSeries(days = 14): Promise<CaloriePoint[]> {
         protein: foodLog.protein,
       })
       .from(foodLog)
-      .where(and(gte(foodLog.date, start), lte(foodLog.date, today)))
+      .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
       .all(),
     db
       .select({
@@ -79,7 +85,7 @@ export async function getCalorieSeries(days = 14): Promise<CaloriePoint[]> {
         recurringId: recurringRemovals.recurringId,
       })
       .from(recurringRemovals)
-      .where(and(gte(recurringRemovals.date, start), lte(recurringRemovals.date, today)))
+      .where(and(gte(recurringRemovals.date, start), lte(recurringRemovals.date, end)))
       .all(),
   ]);
 

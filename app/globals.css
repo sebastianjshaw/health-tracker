@@ -84,3 +84,40 @@ textarea,
 button {
   font-size: 16px;
 }
+
+/* The doctor report renders as a light "document" regardless of theme, so it
+   prints cleanly. Overrides the design tokens within its subtree. */
+.report-light {
+  --background: #ffffff;
+  --foreground: #15181d;
+  --card: #ffffff;
+  --card-foreground: #15181d;
+  --muted: #eef0f3;
+  --muted-foreground: #5b6470;
+  --border: #d7dbe0;
+  --input: #ffffff;
+  --accent: #16a34a;
+  --accent-foreground: #ffffff;
+  --danger: #b91c1c;
+  --warn: #b45309;
+  --protein: #2563eb;
+  --carbs: #b45309;
+  --fat: #db2777;
+  background: #ffffff;
+  color: #15181d;
+}
+
+@media print {
+  body {
+    padding-bottom: 0;
+  }
+  @page {
+    margin: 14mm;
+  }
+  /* print exact colors (H/L flags, chart strokes) */
+  .report-light {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    box-shadow: none;
+  }
+}

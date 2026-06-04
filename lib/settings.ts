@@ -94,3 +94,32 @@ export async function getMealSplit(): Promise<MealSplit> {
 export async function setMealSplit(split: MealSplit): Promise<void> {
   await setSetting("mealSplit", split);
 }
+
+export type Sex = "male" | "female" | "other" | "";
+
+export type Profile = {
+  name: string;
+  dob: string; // YYYY-MM-DD
+  sex: Sex;
+  heightCm: number | null;
+  medications: string;
+  conditions: string;
+};
+
+const EMPTY_PROFILE: Profile = {
+  name: "",
+  dob: "",
+  sex: "",
+  heightCm: null,
+  medications: "",
+  conditions: "",
+};
+
+export async function getProfile(): Promise<Profile> {
+  const stored = await getSetting<Partial<Profile>>("profile", {});
+  return { ...EMPTY_PROFILE, ...stored };
+}
+
+export async function setProfile(profile: Profile): Promise<void> {
+  await setSetting("profile", profile);
+}

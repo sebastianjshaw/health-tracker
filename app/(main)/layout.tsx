@@ -15,7 +15,7 @@ export default async function MainLayout({
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur print:hidden">
         <div className="mx-auto flex h-12 max-w-2xl items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span className="text-accent">♥</span> Health
