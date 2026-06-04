@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
@@ -15,6 +14,7 @@ import {
   setNextWorkout,
 } from "./settings";
 import { EXERCISES } from "./constants";
+import { revalidatePaths } from "./revalidate";
 
 export type CardioInput = {
   date: string;
@@ -37,12 +37,12 @@ export async function logCardio(input: CardioInput): Promise<void> {
     kcal: input.kcal ?? null,
     notes: input.notes ?? null,
   });
-  revalidatePath("/activity");
+  revalidatePaths("/activity");
 }
 
 export async function deleteCardio(id: number): Promise<void> {
   await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
-  revalidatePath("/activity");
+  revalidatePaths("/activity");
 }
 
 export type LiftEntry = {
@@ -70,7 +70,7 @@ export async function updateLiftWeights(
     }
   }
   await setLiftWeights(weights);
-  revalidatePath("/activity");
+  revalidatePaths("/activity");
 }
 
 /** Persist a finished workout and advance the Seblifts progression. */
@@ -113,5 +113,5 @@ export async function completeLiftWorkout(input: CompleteWorkoutInput): Promise<
   await setLiftFails(fails);
   await setNextWorkout(input.workout === "A" ? "B" : "A");
 
-  revalidatePath("/activity");
+  revalidatePaths("/activity", "/stats");
 }

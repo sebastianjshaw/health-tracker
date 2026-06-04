@@ -1,10 +1,10 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bodyMetrics } from "@/db/schema";
 import { isValidISO } from "./date";
+import { revalidatePaths } from "./revalidate";
 import { MealSplit, setGoalWeight, setMealSplit, setSetting } from "./settings";
 
 export type BodyInput = {
@@ -30,12 +30,12 @@ export async function logBody(input: BodyInput): Promise<void> {
     restingHr: input.restingHr ?? null,
     notes: input.notes ?? null,
   });
-  revalidatePath("/stats");
+  revalidatePaths("/stats");
 }
 
 export async function deleteBody(id: number): Promise<void> {
   await db.delete(bodyMetrics).where(eq(bodyMetrics.id, id));
-  revalidatePath("/stats");
+  revalidatePaths("/stats");
 }
 
 export async function saveGoals(input: {
@@ -54,6 +54,5 @@ export async function saveGoals(input: {
       : null,
   );
   await setMealSplit(input.mealSplit);
-  revalidatePath("/stats");
-  revalidatePath("/");
+  revalidatePaths("/stats", "/");
 }

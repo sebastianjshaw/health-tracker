@@ -5,6 +5,7 @@ import { useTransition } from "react";
 import { Button, Card, Field, Input, Select } from "@/components/ui";
 import { CARDIO_TYPES, CardioType } from "@/lib/constants";
 import { logCardio } from "@/lib/activity-actions";
+import { nullableNum } from "@/lib/format";
 
 const TYPE_LABELS: Record<CardioType, string> = {
   run: "Run",
@@ -14,11 +15,6 @@ const TYPE_LABELS: Record<CardioType, string> = {
   swim: "Swim",
   other: "Other",
 };
-
-function num(v: string): number | null {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : null;
-}
 
 export function CardioForm({ date }: { date: string }) {
   const formRef = React.useRef<HTMLFormElement>(null);
@@ -32,10 +28,10 @@ export function CardioForm({ date }: { date: string }) {
       await logCardio({
         date,
         type,
-        durationMin: num(String(fd.get("duration") ?? "")),
-        distanceKm: num(String(fd.get("distance") ?? "")),
-        avgHr: num(String(fd.get("avgHr") ?? "")),
-        kcal: num(String(fd.get("kcal") ?? "")),
+        durationMin: nullableNum(fd.get("duration")),
+        distanceKm: nullableNum(fd.get("distance")),
+        avgHr: nullableNum(fd.get("avgHr")),
+        kcal: nullableNum(fd.get("kcal")),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
       formRef.current?.reset();

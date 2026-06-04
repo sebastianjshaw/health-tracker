@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePaths } from "./revalidate";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bloodMarkers } from "@/db/schema";
@@ -29,7 +29,7 @@ export async function addBloodMarker(
     category: input.category ?? null,
     clinic: input.clinic ?? null,
   });
-  revalidatePath("/stats");
+  revalidatePaths("/stats");
 }
 
 /** Bulk-add a full panel for one dated test (used for importing clinic results). */
@@ -53,10 +53,10 @@ export async function addBloodPanel(input: {
         clinic: input.clinic ?? null,
       })),
   );
-  revalidatePath("/stats");
+  revalidatePaths("/stats");
 }
 
 export async function deleteBloodMarker(id: number): Promise<void> {
   await db.delete(bloodMarkers).where(eq(bloodMarkers.id, id));
-  revalidatePath("/stats");
+  revalidatePaths("/stats");
 }

@@ -1,8 +1,7 @@
 "use client";
 
-import { useTransition } from "react";
 import { Card, EmptyState } from "@/components/ui";
-import { TrashIcon } from "@/components/icons";
+import { DeleteButton } from "@/components/DeleteButton";
 import { prettyDate, relativeLabel } from "@/lib/date";
 import { trimNum } from "@/lib/format";
 import { deleteCardio } from "@/lib/activity-actions";
@@ -18,8 +17,6 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export function CardioList({ sessions }: { sessions: CardioSession[] }) {
-  const [pending, start] = useTransition();
-
   if (sessions.length === 0) {
     return <EmptyState>No cardio logged yet.</EmptyState>;
   }
@@ -43,14 +40,7 @@ export function CardioList({ sessions }: { sessions: CardioSession[] }) {
                 {s.notes ? ` · ${s.notes}` : ""}
               </div>
             </div>
-            <button
-              onClick={() => start(async () => deleteCardio(s.id))}
-              disabled={pending}
-              className="p-1.5 text-muted-foreground hover:text-danger"
-              aria-label="Delete session"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
+            <DeleteButton onDelete={() => deleteCardio(s.id)} label="Delete session" />
           </div>
         );
       })}

@@ -5,11 +5,7 @@ import { useTransition } from "react";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { todayISO } from "@/lib/date";
 import { logBody } from "@/lib/body-actions";
-
-function num(v: FormDataEntryValue | null): number | null {
-  const n = parseFloat(String(v ?? ""));
-  return Number.isFinite(n) ? n : null;
-}
+import { nullableNum } from "@/lib/format";
 
 export function BodyForm() {
   const formRef = React.useRef<HTMLFormElement>(null);
@@ -20,22 +16,22 @@ export function BodyForm() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     if (
-      num(fd.get("weightKg")) == null &&
-      num(fd.get("bodyFatPct")) == null &&
-      num(fd.get("waistCm")) == null &&
-      num(fd.get("restingHr")) == null
+      nullableNum(fd.get("weightKg")) == null &&
+      nullableNum(fd.get("bodyFatPct")) == null &&
+      nullableNum(fd.get("waistCm")) == null &&
+      nullableNum(fd.get("restingHr")) == null
     ) {
       return;
     }
     start(async () => {
       await logBody({
         date: todayISO(),
-        weightKg: num(fd.get("weightKg")),
-        bodyFatPct: num(fd.get("bodyFatPct")),
-        waistCm: num(fd.get("waistCm")),
-        chestCm: num(fd.get("chestCm")),
-        hipsCm: num(fd.get("hipsCm")),
-        restingHr: num(fd.get("restingHr")),
+        weightKg: nullableNum(fd.get("weightKg")),
+        bodyFatPct: nullableNum(fd.get("bodyFatPct")),
+        waistCm: nullableNum(fd.get("waistCm")),
+        chestCm: nullableNum(fd.get("chestCm")),
+        hipsCm: nullableNum(fd.get("hipsCm")),
+        restingHr: nullableNum(fd.get("restingHr")),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
       formRef.current?.reset();

@@ -1,27 +1,16 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { foods, recurringFoods } from "@/db/schema";
 import { MEALS, Meal, SCHEDULES, Schedule } from "@/lib/constants";
+import { num, nullableNum } from "@/lib/format";
+import { revalidatePaths } from "@/lib/revalidate";
 
 export type FoodFormState = { error: string | null; ok?: boolean };
 
-function num(v: FormDataEntryValue | null, fallback = 0): number {
-  const n = parseFloat(String(v ?? ""));
-  return Number.isFinite(n) ? n : fallback;
-}
-
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
-}
-
-function nullableNum(v: FormDataEntryValue | null): number | null {
-  const s = String(v ?? "").trim();
-  if (s === "") return null;
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : null;
 }
 
 /** Optional extended nutrition fields shared by create/update. */
@@ -60,8 +49,7 @@ export async function createFood(
     source: str(formData.get("source")) || "manual",
   });
 
-  revalidatePath("/food");
-  revalidatePath("/");
+  revalidatePaths("/", "/food", "/stats");
   return { error: null, ok: true };
 }
 
@@ -90,15 +78,13 @@ export async function updateFood(
     })
     .where(eq(foods.id, id));
 
-  revalidatePath("/food");
-  revalidatePath("/");
+  revalidatePaths("/", "/food", "/stats");
   return { error: null, ok: true };
 }
 
 export async function deleteFood(id: number): Promise<void> {
   await db.delete(foods).where(eq(foods.id, id));
-  revalidatePath("/food");
-  revalidatePath("/");
+  revalidatePaths("/", "/food", "/stats");
 }
 
 export async function addRecurring(
@@ -123,14 +109,12 @@ export async function addRecurring(
   if (existing) return;
 
   await db.insert(recurringFoods).values({ foodId, meal, schedule, quantity });
-  revalidatePath("/food");
-  revalidatePath("/");
+  revalidatePaths("/", "/food", "/stats");
 }
 
 export async function removeRecurringById(id: number): Promise<void> {
   await db.delete(recurringFoods).where(eq(recurringFoods.id, id));
-  revalidatePath("/food");
-  revalidatePath("/");
+  revalidatePaths("/", "/food", "/stats");
 }
 
 export type ScannedFoodInput = {
@@ -186,7 +170,6 @@ export async function upsertScannedFood(input: ScannedFoodInput): Promise<number
     })
     .returning();
 
-  revalidatePath("/food");
-  revalidatePath("/");
+  revalidatePaths("/", "/food", "/stats");
   return row.id;
 }

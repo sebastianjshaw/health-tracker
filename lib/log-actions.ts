@@ -1,11 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { foodLog, foods, recurringRemovals } from "@/db/schema";
 import { Meal } from "./constants";
 import { isValidISO } from "./date";
+import { revalidatePaths } from "./revalidate";
 
 /** Add a library food to a day's meal, snapshotting its nutrition. */
 export async function addLogEntry(
@@ -33,7 +33,7 @@ export async function addLogEntry(
     source: food.source,
   });
 
-  revalidatePath("/");
+  revalidatePaths("/", "/stats");
 }
 
 export async function setLogQuantity(logId: number, quantity: number): Promise<void> {
@@ -42,12 +42,12 @@ export async function setLogQuantity(logId: number, quantity: number): Promise<v
   } else {
     await db.update(foodLog).set({ quantity }).where(eq(foodLog.id, logId));
   }
-  revalidatePath("/");
+  revalidatePaths("/", "/stats");
 }
 
 export async function deleteLogEntry(logId: number): Promise<void> {
   await db.delete(foodLog).where(eq(foodLog.id, logId));
-  revalidatePath("/");
+  revalidatePaths("/", "/stats");
 }
 
 /** Hide a recurring default from one specific day (template is unchanged). */
@@ -69,5 +69,5 @@ export async function removeRecurringFromDay(
   if (!existing) {
     await db.insert(recurringRemovals).values({ date, recurringId });
   }
-  revalidatePath("/");
+  revalidatePaths("/", "/stats");
 }

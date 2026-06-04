@@ -3,9 +3,9 @@
 import * as React from "react";
 import { useTransition } from "react";
 import { Button, Card, Field, Input } from "@/components/ui";
-import { TrashIcon } from "@/components/icons";
+import { DeleteButton } from "@/components/DeleteButton";
 import { prettyDate, todayISO } from "@/lib/date";
-import { trimNum } from "@/lib/format";
+import { nullableNum, trimNum } from "@/lib/format";
 import { addBloodMarker, deleteBloodMarker } from "@/lib/blood-actions";
 import type { BloodMarker } from "@/db/schema";
 import type { BloodPanel } from "@/lib/blood-data";
@@ -24,11 +24,6 @@ const STATUS_CLASS: Record<string, string> = {
   unknown: "",
 };
 
-function num(v: string): number | null {
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
   const [open, setOpen] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
@@ -38,7 +33,7 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const marker = String(fd.get("marker") ?? "").trim();
-    const value = num(String(fd.get("value") ?? ""));
+    const value = nullableNum(fd.get("value"));
     if (!marker || value == null) return;
     start(async () => {
       await addBloodMarker({
@@ -48,8 +43,8 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
         marker,
         value,
         unit: String(fd.get("unit") ?? "").trim() || null,
-        refLow: num(String(fd.get("refLow") ?? "")),
-        refHigh: num(String(fd.get("refHigh") ?? "")),
+        refLow: nullableNum(fd.get("refLow")),
+        refHigh: nullableNum(fd.get("refHigh")),
       });
       formRef.current?.reset();
     });
@@ -133,14 +128,10 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
                     {status === "high" && " ↑"}
                     {status === "low" && " ↓"}
                   </div>
-                  <button
-                    onClick={() => start(async () => deleteBloodMarker(m.id))}
-                    disabled={pending}
-                    className="p-1.5 text-muted-foreground hover:text-danger"
-                    aria-label={`Delete ${m.marker}`}
-                  >
-                    <TrashIcon className="h-4 w-4" />
-                  </button>
+                  <DeleteButton
+                    onDelete={() => deleteBloodMarker(m.id)}
+                    label={`Delete ${m.marker}`}
+                  />
                 </div>
               );
             })}

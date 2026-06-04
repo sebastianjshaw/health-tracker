@@ -1,16 +1,13 @@
 "use client";
 
-import { useTransition } from "react";
 import { Card, EmptyState } from "@/components/ui";
-import { TrashIcon } from "@/components/icons";
+import { DeleteButton } from "@/components/DeleteButton";
 import { prettyDate, relativeLabel } from "@/lib/date";
 import { trimNum } from "@/lib/format";
 import { deleteBody } from "@/lib/body-actions";
 import type { BodyMetric } from "@/db/schema";
 
 export function BodyHistory({ metrics }: { metrics: BodyMetric[] }) {
-  const [pending, start] = useTransition();
-
   if (metrics.length === 0) {
     return <EmptyState>No measurements yet.</EmptyState>;
   }
@@ -34,14 +31,7 @@ export function BodyHistory({ metrics }: { metrics: BodyMetric[] }) {
                 {m.notes ? ` · ${m.notes}` : ""}
               </div>
             </div>
-            <button
-              onClick={() => start(async () => deleteBody(m.id))}
-              disabled={pending}
-              className="p-1.5 text-muted-foreground hover:text-danger"
-              aria-label="Delete measurement"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
+            <DeleteButton onDelete={() => deleteBody(m.id)} label="Delete measurement" />
           </div>
         );
       })}

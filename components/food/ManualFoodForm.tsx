@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useActionState } from "react";
 import { Button, Field, Input } from "@/components/ui";
-import { PlusIcon, TrashIcon } from "@/components/icons";
+import { NutrientList, type Extra } from "./NutrientList";
 import {
   createFood,
   updateFood,
@@ -12,8 +12,6 @@ import {
 import type { Food } from "@/db/schema";
 
 const initialState: FoodFormState = { error: null };
-
-type Extra = { label: string; value: string; unit: string };
 
 function parseExtras(json: string | null | undefined): Extra[] {
   if (!json) return [];
@@ -169,64 +167,7 @@ export function ManualFoodForm({
             </Field>
           </div>
 
-          <div>
-            <span className="mb-1 block text-sm font-medium text-muted-foreground">
-              Other nutrients (vitamins, minerals…)
-            </span>
-            <div className="space-y-2">
-              {extras.map((ex, i) => (
-                <div
-                  key={i}
-                  className="space-y-2 rounded-xl border border-border p-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <Input
-                      placeholder="Nutrient name (e.g. Vitamin C)"
-                      value={ex.label}
-                      onChange={(e) =>
-                        setExtras((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
-                      }
-                      className="min-w-0 flex-1"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setExtras((p) => p.filter((_, j) => j !== i))}
-                      className="shrink-0 p-1.5 text-muted-foreground hover:text-danger"
-                      aria-label="Remove nutrient"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="amount"
-                      inputMode="decimal"
-                      value={ex.value}
-                      onChange={(e) =>
-                        setExtras((p) => p.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
-                      }
-                      className="min-w-0 flex-1"
-                    />
-                    <Input
-                      placeholder="unit"
-                      value={ex.unit}
-                      onChange={(e) =>
-                        setExtras((p) => p.map((x, j) => (j === i ? { ...x, unit: e.target.value } : x)))
-                      }
-                      className="w-24 shrink-0"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setExtras((p) => [...p, { label: "", value: "", unit: "" }])}
-              className="mt-2 flex items-center gap-1 text-sm text-accent"
-            >
-              <PlusIcon className="h-4 w-4" /> Add nutrient
-            </button>
-          </div>
+          <NutrientList value={extras} onChange={setExtras} />
         </div>
       )}
 
