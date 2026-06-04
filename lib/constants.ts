@@ -8,6 +8,18 @@ export const MEAL_LABELS: Record<Meal, string> = {
   snacks: "Snacks",
 };
 
+/**
+ * Pick the most likely meal from the time of day (local):
+ * 05:00–10:30 breakfast, 11:30–14:00 lunch, 18:00–21:00 dinner, otherwise snacks.
+ */
+export function mealForTime(d: Date = new Date()): Meal {
+  const mins = d.getHours() * 60 + d.getMinutes();
+  if (mins >= 300 && mins <= 630) return "breakfast"; // 05:00–10:30
+  if (mins >= 690 && mins <= 840) return "lunch"; // 11:30–14:00
+  if (mins >= 1080 && mins <= 1260) return "dinner"; // 18:00–21:00
+  return "snacks";
+}
+
 export const SCHEDULES = ["everyday", "weekday", "weekend"] as const;
 export type Schedule = (typeof SCHEDULES)[number];
 

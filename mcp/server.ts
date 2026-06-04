@@ -11,7 +11,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { and, asc, desc, eq, inArray, isNotNull, like } from "drizzle-orm";
+import { asc, desc, eq, inArray, isNotNull, like } from "drizzle-orm";
 import { z } from "zod";
 import {
   bloodMarkers,
@@ -95,6 +95,7 @@ server.tool(
       ...recurring
         .filter((r) => !removed.has(r.id))
         .map((r) => ({
+          id: null as number | null, // recurring defaults aren't deletable by entry id
           meal: r.meal,
           name: r.name,
           quantity: r.quantity,
@@ -105,6 +106,7 @@ server.tool(
           source: "recurring",
         })),
       ...logged.map((r) => ({
+        id: r.id, // pass to delete_food_entry to remove this entry
         meal: r.meal,
         name: r.name,
         quantity: r.quantity,
@@ -180,7 +182,7 @@ server.tool(
 
 server.tool(
   "log_food",
-  "Add a food entry to a day's meal with absolute nutrition totals for the portion eaten.",
+  "Add a free-text food entry to a day's meal. kcal/protein/carbs/fat are the ABSOLUTE TOTALS for the whole portion eaten — already account for the amount, do NOT pass per-unit values or a multiplier.",
   {
     date: ISO.optional(),
     meal: MEAL,
@@ -189,16 +191,15 @@ server.tool(
     protein: z.number().optional(),
     carbs: z.number().optional(),
     fat: z.number().optional(),
-    quantity: z.number().optional(),
   },
-  async ({ date, meal, name, kcal, protein, carbs, fat, quantity }) => {
+  async ({ date, meal, name, kcal, protein, carbs, fat }) => {
     const d = date ?? todayISO();
     await db.insert(foodLog).values({
       date: d,
       meal,
       foodId: null,
       name,
-      quantity: quantity ?? 1,
+      quantity: 1, // nutrition values are absolute totals, so the multiplier is always 1
       kcal,
       protein: protein ?? 0,
       carbs: carbs ?? 0,
@@ -207,7 +208,19 @@ server.tool(
       servingUnit: "serving",
       source: "mcp",
     });
-    return text(`Logged "${name}" to ${meal} on ${d}.`);
+    return text(`Logged "${name}" to ${meal} on ${d} (${Math.round(kcal)} kcal).`);
+  },
+);
+
+server.tool(
+  "delete_food_entry",
+  "Delete a logged food entry by its id (from get_day). Only removes logged entries, not recurring defaults.",
+  { id: z.number() },
+  async ({ id }) => {
+    const row = await db.select().from(foodLog).where(eq(foodLog.id, id)).get();
+    if (!row) return text(`No food entry with id ${id}.`);
+    await db.delete(foodLog).where(eq(foodLog.id, id));
+    return text(`Deleted "${row.name}" from ${row.meal} on ${row.date}.`);
   },
 );
 

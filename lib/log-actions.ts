@@ -36,42 +36,6 @@ export async function addLogEntry(
   revalidatePath("/");
 }
 
-export type QuickEntry = {
-  name: string;
-  quantity: number;
-  kcal: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-  servingSize?: number;
-  servingUnit?: string;
-  source?: string;
-};
-
-/** Add an ad-hoc entry not tied to the library (e.g. from AI parsing). */
-export async function addQuickEntry(
-  date: string,
-  meal: Meal,
-  entry: QuickEntry,
-): Promise<void> {
-  if (!isValidISO(date)) return;
-  await db.insert(foodLog).values({
-    date,
-    meal,
-    foodId: null,
-    name: entry.name,
-    quantity: entry.quantity || 1,
-    kcal: entry.kcal || 0,
-    protein: entry.protein || 0,
-    carbs: entry.carbs || 0,
-    fat: entry.fat || 0,
-    servingSize: entry.servingSize ?? 1,
-    servingUnit: entry.servingUnit ?? "serving",
-    source: entry.source ?? "manual",
-  });
-  revalidatePath("/");
-}
-
 export async function setLogQuantity(logId: number, quantity: number): Promise<void> {
   if (quantity <= 0) {
     await db.delete(foodLog).where(eq(foodLog.id, logId));

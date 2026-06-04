@@ -12,7 +12,6 @@
     "db:seed": "tsx db/seed.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.100.1",
     "@libsql/client": "^0.17.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@zxing/browser": "^0.2.0",

@@ -25,8 +25,16 @@ export function BarcodeScanner({
       try {
         const { BrowserMultiFormatReader } = await import("@zxing/browser");
         const reader = new BrowserMultiFormatReader();
-        controls = await reader.decodeFromVideoDevice(
-          undefined,
+        // Force the rear ("environment") camera. Passing an undefined deviceId lets
+        // the browser default to the front camera, which is usually fixed-focus and
+        // mirrored — barcodes never come into focus, so nothing decodes. The rear
+        // camera autofocuses and gives a clean, non-mirrored image. `ideal` (not
+        // `exact`) so devices without a rear camera still fall back gracefully.
+        const constraints: MediaStreamConstraints = {
+          video: { facingMode: { ideal: "environment" } },
+        };
+        controls = await reader.decodeFromConstraints(
+          constraints,
           videoRef.current ?? undefined,
           (result, _err, ctrl) => {
             if (result && !detectedRef.current && !cancelled) {

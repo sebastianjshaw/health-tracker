@@ -29,13 +29,6 @@ export const FoodIcon = (p: IconProps) => (
   </svg>
 );
 
-export const SparkIcon = (p: IconProps) => (
-  <svg {...base} {...p}>
-    <path d="M12 3v4M12 17v4M5 12H1M23 12h-4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
 export const ActivityIcon = (p: IconProps) => (
   <svg {...base} {...p}>
     <path d="M3 12h4l2-6 4 12 2-6h4" />
