@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { foodLog, foods, recurringRemovals } from "@/db/schema";
+import { requireAuth } from "./auth";
 import { Meal } from "./constants";
 import { isValidISO } from "./date";
 import { revalidatePaths } from "./revalidate";
@@ -14,6 +15,7 @@ export async function addLogEntry(
   foodId: number,
   quantity = 1,
 ): Promise<void> {
+  await requireAuth();
   if (!isValidISO(date)) return;
   const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
   if (!food) return;
@@ -37,6 +39,7 @@ export async function addLogEntry(
 }
 
 export async function setLogQuantity(logId: number, quantity: number): Promise<void> {
+  await requireAuth();
   if (quantity <= 0) {
     await db.delete(foodLog).where(eq(foodLog.id, logId));
   } else {
@@ -46,6 +49,7 @@ export async function setLogQuantity(logId: number, quantity: number): Promise<v
 }
 
 export async function deleteLogEntry(logId: number): Promise<void> {
+  await requireAuth();
   await db.delete(foodLog).where(eq(foodLog.id, logId));
   revalidatePaths("/", "/stats");
 }
@@ -55,6 +59,7 @@ export async function removeRecurringFromDay(
   date: string,
   recurringId: number,
 ): Promise<void> {
+  await requireAuth();
   if (!isValidISO(date)) return;
   const existing = await db
     .select()

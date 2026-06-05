@@ -3,6 +3,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { foods, recurringFoods } from "@/db/schema";
+import { requireAuth } from "@/lib/auth";
 import { MEALS, Meal, SCHEDULES, Schedule } from "@/lib/constants";
 import { num, nullableNum } from "@/lib/format";
 import { revalidatePaths } from "@/lib/revalidate";
@@ -29,6 +30,7 @@ export async function createFood(
   _prev: FoodFormState,
   formData: FormData,
 ): Promise<FoodFormState> {
+  await requireAuth();
   const name = str(formData.get("name"));
   if (!name) return { error: "Name is required" };
 
@@ -57,6 +59,7 @@ export async function updateFood(
   _prev: FoodFormState,
   formData: FormData,
 ): Promise<FoodFormState> {
+  await requireAuth();
   const id = num(formData.get("id"));
   const name = str(formData.get("name"));
   if (!id) return { error: "Missing id" };
@@ -83,6 +86,7 @@ export async function updateFood(
 }
 
 export async function deleteFood(id: number): Promise<void> {
+  await requireAuth();
   await db.delete(foods).where(eq(foods.id, id));
   revalidatePaths("/", "/food", "/stats");
 }
@@ -93,6 +97,7 @@ export async function addRecurring(
   schedule: Schedule,
   quantity = 1,
 ): Promise<void> {
+  await requireAuth();
   if (!MEALS.includes(meal) || !SCHEDULES.includes(schedule)) return;
 
   const existing = await db
@@ -113,6 +118,7 @@ export async function addRecurring(
 }
 
 export async function removeRecurringById(id: number): Promise<void> {
+  await requireAuth();
   await db.delete(recurringFoods).where(eq(recurringFoods.id, id));
   revalidatePaths("/", "/food", "/stats");
 }
@@ -139,6 +145,7 @@ export type ScannedFoodInput = {
 /** Save a scanned/looked-up product to the library, reusing an existing row
  * with the same barcode. Returns the food id. */
 export async function upsertScannedFood(input: ScannedFoodInput): Promise<number> {
+  await requireAuth();
   if (input.barcode) {
     const existing = await db
       .select()

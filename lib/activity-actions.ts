@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
+import { requireAuth } from "./auth";
 import { CardioType, Exercise } from "./constants";
 import { isValidISO } from "./date";
 import { exerciseSucceeded, nextWeight } from "./lifts";
@@ -27,6 +28,7 @@ export type CardioInput = {
 };
 
 export async function logCardio(input: CardioInput): Promise<void> {
+  await requireAuth();
   if (!isValidISO(input.date)) return;
   await db.insert(cardioSessions).values({
     date: input.date,
@@ -41,6 +43,7 @@ export async function logCardio(input: CardioInput): Promise<void> {
 }
 
 export async function deleteCardio(id: number): Promise<void> {
+  await requireAuth();
   await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
   revalidatePaths("/activity");
 }
@@ -62,6 +65,7 @@ export type CompleteWorkoutInput = {
 export async function updateLiftWeights(
   partial: Partial<Record<Exercise, number>>,
 ): Promise<void> {
+  await requireAuth();
   const weights = await getLiftWeights();
   for (const ex of EXERCISES) {
     const v = partial[ex];
@@ -75,6 +79,7 @@ export async function updateLiftWeights(
 
 /** Persist a finished workout and advance the Seblifts progression. */
 export async function completeLiftWorkout(input: CompleteWorkoutInput): Promise<void> {
+  await requireAuth();
   if (!isValidISO(input.date)) return;
 
   const session = await db

@@ -3,6 +3,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bodyMetrics } from "@/db/schema";
+import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
 import { revalidatePaths } from "./revalidate";
 import { MealSplit, setGoalWeight, setMealSplit, setSetting } from "./settings";
@@ -19,6 +20,7 @@ export type BodyInput = {
 };
 
 export async function logBody(input: BodyInput): Promise<void> {
+  await requireAuth();
   if (!isValidISO(input.date)) return;
   await db.insert(bodyMetrics).values({
     date: input.date,
@@ -34,6 +36,7 @@ export async function logBody(input: BodyInput): Promise<void> {
 }
 
 export async function deleteBody(id: number): Promise<void> {
+  await requireAuth();
   await db.delete(bodyMetrics).where(eq(bodyMetrics.id, id));
   revalidatePaths("/stats");
 }
@@ -44,6 +47,7 @@ export async function saveGoals(input: {
   goalWeight: number | null;
   mealSplit: MealSplit;
 }): Promise<void> {
+  await requireAuth();
   await setSetting("targets", {
     kcal: Math.max(0, Math.round(input.kcal)),
     protein: Math.max(0, Math.round(input.protein)),

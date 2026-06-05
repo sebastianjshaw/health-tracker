@@ -1,7 +1,7 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { checkPassword, createSession } from "@/lib/auth";
+import { checkPassword, createSession, safeRedirectPath } from "@/lib/auth";
 
 export type LoginState = { error: string | null };
 
@@ -17,5 +17,5 @@ export async function login(
   }
 
   await createSession();
-  redirect(next.startsWith("/") ? next : "/");
+  redirect(safeRedirectPath(next));
 }

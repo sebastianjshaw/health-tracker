@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -10,6 +11,20 @@ import {
 export async function isAuthenticated(): Promise<boolean> {
   const store = await cookies();
   return isValidToken(store.get(SESSION_COOKIE)?.value);
+}
+
+/** Guard for server actions — redirects to login when the session is missing or invalid. */
+export async function requireAuth(): Promise<void> {
+  if (!(await isAuthenticated())) redirect("/login");
+}
+
+/** Accept only same-app relative paths (blocks open redirects like //evil.com). */
+export function safeRedirectPath(path: string, fallback = "/"): string {
+  if (!path.startsWith("/") || path.startsWith("//") || path.includes("\\")) {
+    return fallback;
+  }
+  if (path.includes("@")) return fallback;
+  return path;
 }
 
 export async function createSession(): Promise<void> {

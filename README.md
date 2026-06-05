@@ -4,15 +4,15 @@ A personal, mobile-first food / activity / body-stats tracker. Single-user, free
 
 ## Features
 
-- **Food logging** four ways:
+- **Food logging** three ways:
   1. **Recurring defaults** — mark foods as "daily (Mon–Fri)", "weekend", or "every day" per meal; they appear automatically and can be removed per day without deleting the template.
-  2. **Talk to Claude** — describe what you ate in plain English and it's parsed into structured entries (needs an Anthropic API key).
-  3. **Manual entry** — add products to your library with per-serving nutrition.
-  4. **Barcode scanning** — camera scan → OpenFoodFacts lookup → one-tap add.
+  2. **Manual entry** — add products to your library with per-serving nutrition.
+  3. **Barcode scanning** — camera scan → OpenFoodFacts lookup → one-tap add.
 - **Today view** — meals (breakfast/lunch/dinner/snacks), per-entry quantity steppers, day totals vs. calorie/protein goals.
 - **Activity** — cardio sessions, and a **StrongLifts 5×5** tracker with automatic weight progression (+2.5 kg) and deload after 3 failed sessions.
 - **Body & vitals** — weight, body fat, measurements, resting HR, with trend charts.
 - **Stats** — weight, calories, and lift-progression charts; editable daily goals.
+- **MCP server** — optional [Claude Desktop integration](mcp/README.md) for logging food and vitals via chat.
 - Installable as a PWA (add to home screen).
 
 ## Tech stack
@@ -20,7 +20,6 @@ A personal, mobile-first food / activity / body-stats tracker. Single-user, free
 - Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS v4
 - Drizzle ORM + libSQL (local SQLite file in dev → Turso in prod)
-- Anthropic API (structured outputs) for natural-language food parsing
 - OpenFoodFacts API for barcodes (free, no key)
 - Recharts for charts
 
@@ -44,7 +43,6 @@ Login with whatever you set as `APP_PASSWORD` in `.env.local` (the example uses 
 | `DATABASE_AUTH_TOKEN` | prod only | Turso auth token |
 | `APP_PASSWORD` | yes | Single-user login password |
 | `SESSION_SECRET` | yes | Long random string; signs the session cookie |
-| `ANTHROPIC_API_KEY` | optional | Enables the "Ask AI" food parser ([console](https://console.anthropic.com/)) |
 
 ## Deploy (free: Vercel + Turso)
 
@@ -77,7 +75,6 @@ vercel env add DATABASE_URL production
 vercel env add DATABASE_AUTH_TOKEN production
 vercel env add APP_PASSWORD production
 vercel env add SESSION_SECRET production
-vercel env add ANTHROPIC_API_KEY production   # optional
 vercel --prod
 ```
 

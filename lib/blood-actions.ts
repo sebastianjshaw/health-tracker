@@ -4,6 +4,7 @@ import { revalidatePaths } from "./revalidate";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bloodMarkers } from "@/db/schema";
+import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
 
 export type MarkerInput = {
@@ -18,6 +19,7 @@ export type MarkerInput = {
 export async function addBloodMarker(
   input: MarkerInput & { date: string; clinic?: string | null },
 ): Promise<void> {
+  await requireAuth();
   if (!isValidISO(input.date) || !input.marker.trim()) return;
   await db.insert(bloodMarkers).values({
     date: input.date,
@@ -38,6 +40,7 @@ export async function addBloodPanel(input: {
   clinic?: string | null;
   markers: MarkerInput[];
 }): Promise<void> {
+  await requireAuth();
   if (!isValidISO(input.date) || input.markers.length === 0) return;
   await db.insert(bloodMarkers).values(
     input.markers
@@ -57,6 +60,7 @@ export async function addBloodPanel(input: {
 }
 
 export async function deleteBloodMarker(id: number): Promise<void> {
+  await requireAuth();
   await db.delete(bloodMarkers).where(eq(bloodMarkers.id, id));
   revalidatePaths("/stats");
 }
