@@ -6,8 +6,13 @@ import { bodyMetrics } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
+import { MEALS } from "./constants";
 import { revalidatePaths } from "./revalidate";
 import { MealSplit, setGoalWeight, setMealSplit, setSetting } from "./settings";
+
+function mealSplitSum(split: MealSplit): number {
+  return MEALS.reduce((s, m) => s + (split[m] || 0), 0);
+}
 
 export type BodyInput = {
   date: string;
@@ -90,6 +95,9 @@ export async function saveGoals(input: {
   mealSplit: MealSplit;
 }): Promise<ActionResult> {
   await requireAuth();
+  if (mealSplitSum(input.mealSplit) !== 100) {
+    return actionFail("Meal split must sum to 100%");
+  }
   await setSetting("targets", {
     kcal: Math.max(0, Math.round(input.kcal)),
     protein: Math.max(0, Math.round(input.protein)),

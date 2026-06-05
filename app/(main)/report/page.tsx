@@ -1,5 +1,5 @@
 import { ReportControls } from "@/components/report/ReportControls";
-import { WeightChart } from "@/components/stats/Charts";
+import { WeightChart } from "@/components/stats/charts-lazy";
 import { markerStatus } from "@/lib/blood-data";
 import { addDays, isValidISO, prettyDate, todayISO } from "@/lib/date";
 import { trimNum } from "@/lib/format";

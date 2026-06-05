@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bodyMetrics,

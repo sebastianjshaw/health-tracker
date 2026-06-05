@@ -22,22 +22,31 @@ export function GoalsEditor({
   const [gw, setGw] = React.useState(goalWeight != null ? String(goalWeight) : "");
   const [split, setSplit] = React.useState<Record<Meal, number>>(mealSplit);
   const [saved, setSaved] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const splitSum = MEALS.reduce((s, m) => s + (split[m] || 0), 0);
+  const splitValid = splitSum === 100;
 
   function touch() {
     setSaved(false);
+    setError(null);
   }
 
   function save() {
+    if (!splitValid) return;
     start(async () => {
-      await saveGoals({
+      setError(null);
+      const result = await saveGoals({
         kcal: Number(k) || 0,
         protein: Number(p) || 0,
         goalWeight: gw.trim() === "" ? null : Number(gw),
         mealSplit: split,
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setSaved(true);
     });
   }
@@ -62,7 +71,7 @@ export function GoalsEditor({
           <label className="text-sm font-medium text-muted-foreground">
             Meal calorie split (%)
           </label>
-          <span className={`text-xs ${splitSum === 100 ? "text-muted-foreground" : "text-warn"}`}>
+          <span className={`text-xs ${splitValid ? "text-muted-foreground" : "text-warn"}`}>
             sums to {splitSum}%
           </span>
         </div>
@@ -86,11 +95,15 @@ export function GoalsEditor({
             </div>
           ))}
         </div>
+        {!splitValid && (
+          <p className="mt-1 text-xs text-warn">Percentages must add up to 100%.</p>
+        )}
       </div>
 
-      <Button className="mt-4 w-full" onClick={save} disabled={pending}>
+      <Button className="mt-4 w-full" onClick={save} disabled={pending || !splitValid}>
         {pending ? "Saving…" : saved ? "Saved ✓" : "Save goals"}
       </Button>
+      {error && <p className="mt-2 text-sm text-danger">{error}</p>}
     </Card>
   );
 }

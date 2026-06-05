@@ -5,11 +5,12 @@ export const SESSION_COOKIE = "ht_session";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 export function sessionSecret(): string {
-  return (
-    process.env.SESSION_SECRET ||
-    process.env.APP_PASSWORD ||
-    "insecure-dev-secret"
-  );
+  const secret = process.env.SESSION_SECRET?.trim();
+  if (secret) return secret;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("SESSION_SECRET must be set in production");
+  }
+  return "insecure-dev-secret";
 }
 
 async function hmacHex(secret: string, data: string): Promise<string> {
