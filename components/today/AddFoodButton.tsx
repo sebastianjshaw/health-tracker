@@ -22,6 +22,7 @@ export function AddFoodButton({
 }) {
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const term = q.trim().toLowerCase();
@@ -33,7 +34,12 @@ export function AddFoodButton({
 
   function add(foodId: number) {
     start(async () => {
-      await addLogEntry(date, meal, foodId, 1);
+      setError(null);
+      const result = await addLogEntry(date, meal, foodId, 1);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setOpen(false);
       setQ("");
     });
@@ -98,6 +104,7 @@ export function AddFoodButton({
             </Button>
           </Link>
         </div>
+        {error && <p className="mt-2 text-sm text-danger">{error}</p>}
       </Sheet>
     </>
   );

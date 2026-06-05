@@ -10,7 +10,7 @@ export function DeleteButton({
   label,
   confirm,
 }: {
-  onDelete: () => Promise<void> | void;
+  onDelete: () => Promise<unknown> | void;
   label: string;
   confirm?: string;
 }) {

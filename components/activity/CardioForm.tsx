@@ -20,12 +20,14 @@ export function CardioForm({ date }: { date: string }) {
   const formRef = React.useRef<HTMLFormElement>(null);
   const [type, setType] = React.useState<CardioType>("run");
   const [pending, start] = useTransition();
+  const [error, setError] = React.useState<string | null>(null);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     start(async () => {
-      await logCardio({
+      setError(null);
+      const result = await logCardio({
         date,
         type,
         durationMin: nullableNum(fd.get("duration")),
@@ -34,6 +36,10 @@ export function CardioForm({ date }: { date: string }) {
         kcal: nullableNum(fd.get("kcal")),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       formRef.current?.reset();
       setType("run");
     });
@@ -72,6 +78,7 @@ export function CardioForm({ date }: { date: string }) {
         <Button type="submit" className="w-full" disabled={pending}>
           {pending ? "Saving…" : "Save session"}
         </Button>
+        {error && <p className="text-sm text-danger">{error}</p>}
       </form>
     </Card>
   );

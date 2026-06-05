@@ -11,6 +11,7 @@ export function BodyForm() {
   const formRef = React.useRef<HTMLFormElement>(null);
   const [more, setMore] = React.useState(false);
   const [pending, start] = useTransition();
+  const [error, setError] = React.useState<string | null>(null);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -24,7 +25,8 @@ export function BodyForm() {
       return;
     }
     start(async () => {
-      await logBody({
+      setError(null);
+      const result = await logBody({
         date: todayISO(),
         weightKg: nullableNum(fd.get("weightKg")),
         bodyFatPct: nullableNum(fd.get("bodyFatPct")),
@@ -34,6 +36,10 @@ export function BodyForm() {
         restingHr: nullableNum(fd.get("restingHr")),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       formRef.current?.reset();
       setMore(false);
     });
@@ -80,6 +86,7 @@ export function BodyForm() {
             {pending ? "Saving…" : "Save"}
           </Button>
         </div>
+        {error && <p className="text-sm text-danger">{error}</p>}
       </form>
     </Card>
   );

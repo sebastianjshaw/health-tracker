@@ -31,6 +31,7 @@ function ScanInner() {
   const [qty, setQty] = React.useState("1");
   const [servingSize, setServingSize] = React.useState("100");
   const [servingUnit, setServingUnit] = React.useState("g");
+  const [addError, setAddError] = React.useState<string | null>(null);
   const [pending, start] = useTransition();
 
   const lookup = React.useCallback(async (code: string) => {
@@ -63,12 +64,11 @@ function ScanInner() {
     const quantity = Number(qty) || 1;
 
     start(async () => {
+      setAddError(null);
       let foodId: number;
       if (inLibraryId) {
-        // already in library — keep its stored nutrition/serving
         foodId = inLibraryId;
       } else {
-        // rescale per-100 nutrition to the chosen portion size
         const newServing = Number(servingSize) || product.servingSize;
         const factor = product.servingSize > 0 ? newServing / product.servingSize : 1;
         const sc = (n: number | null | undefined) =>
@@ -88,7 +88,11 @@ function ScanInner() {
           sodium: sc(product.sodium),
         });
       }
-      await addLogEntry(date, meal, foodId, quantity);
+      const logResult = await addLogEntry(date, meal, foodId, quantity);
+      if (!logResult.ok) {
+        setAddError(logResult.error);
+        return;
+      }
       backToDay();
     });
   }
@@ -188,6 +192,7 @@ function ScanInner() {
               {pending ? "Adding…" : `Add to ${MEAL_LABELS[meal]}`}
             </Button>
           </div>
+          {addError && <p className="text-sm text-danger">{addError}</p>}
         </Card>
       )}
 

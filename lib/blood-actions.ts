@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePaths } from "./revalidate";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bloodMarkers } from "@/db/schema";
+import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
+import { revalidatePaths } from "./revalidate";
 
 export type MarkerInput = {
   marker: string;
@@ -18,9 +19,10 @@ export type MarkerInput = {
 
 export async function addBloodMarker(
   input: MarkerInput & { date: string; clinic?: string | null },
-): Promise<void> {
+): Promise<ActionResult> {
   await requireAuth();
-  if (!isValidISO(input.date) || !input.marker.trim()) return;
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
+  if (!input.marker.trim()) return actionFail("Marker name is required");
   await db.insert(bloodMarkers).values({
     date: input.date,
     marker: input.marker.trim(),
@@ -32,6 +34,7 @@ export async function addBloodMarker(
     clinic: input.clinic ?? null,
   });
   revalidatePaths("/stats");
+  return actionOk();
 }
 
 /** Bulk-add a full panel for one dated test (used for importing clinic results). */
@@ -39,28 +42,30 @@ export async function addBloodPanel(input: {
   date: string;
   clinic?: string | null;
   markers: MarkerInput[];
-}): Promise<void> {
+}): Promise<ActionResult> {
   await requireAuth();
-  if (!isValidISO(input.date) || input.markers.length === 0) return;
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
+  const markers = input.markers.filter((m) => m.marker.trim() !== "");
+  if (markers.length === 0) return actionFail("Add at least one marker");
   await db.insert(bloodMarkers).values(
-    input.markers
-      .filter((m) => m.marker.trim() !== "")
-      .map((m) => ({
-        date: input.date,
-        marker: m.marker.trim(),
-        value: m.value,
-        unit: m.unit ?? "",
-        refLow: m.refLow ?? null,
-        refHigh: m.refHigh ?? null,
-        category: m.category ?? null,
-        clinic: input.clinic ?? null,
-      })),
+    markers.map((m) => ({
+      date: input.date,
+      marker: m.marker.trim(),
+      value: m.value,
+      unit: m.unit ?? "",
+      refLow: m.refLow ?? null,
+      refHigh: m.refHigh ?? null,
+      category: m.category ?? null,
+      clinic: input.clinic ?? null,
+    })),
   );
   revalidatePaths("/stats");
+  return actionOk();
 }
 
-export async function deleteBloodMarker(id: number): Promise<void> {
+export async function deleteBloodMarker(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(bloodMarkers).where(eq(bloodMarkers.id, id));
   revalidatePaths("/stats");
+  return actionOk();
 }

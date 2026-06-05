@@ -23,7 +23,10 @@ export function addDays(date: string, delta: number): string {
 }
 
 export function isValidISO(date: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(parseISO(date).getTime());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
+  const parsed = parseISO(date);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return toISODate(parsed) === date;
 }
 
 /** true for Saturday/Sunday. */

@@ -32,8 +32,12 @@ export function LiftTracker({
   const [editing, setEditing] = React.useState(false);
   const [pending, start] = useTransition();
   const [saved, setSaved] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const finished = saved;
 
   function cycle(ex: Exercise, i: number) {
+    if (finished) return;
     setSaved(false);
     setReps((prev) => {
       const arr = [...prev[ex]];
@@ -57,8 +61,10 @@ export function LiftTracker({
   }
 
   function finish() {
+    if (finished || pending) return;
     start(async () => {
-      await completeLiftWorkout({
+      setError(null);
+      const result = await completeLiftWorkout({
         date,
         workout: next.workout,
         entries: next.exercises.map((e) => ({
@@ -67,6 +73,10 @@ export function LiftTracker({
           reps: reps[e.exercise],
         })),
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setSaved(true);
     });
   }
@@ -81,14 +91,18 @@ export function LiftTracker({
         <p className="text-xs text-muted-foreground">
           {editing
             ? "Set your working weights (± 2.5 kg)."
-            : "Tap a set to log reps. Hit all reps to progress next time."}
+            : finished
+              ? "Workout saved for today."
+              : "Tap a set to log reps. Hit all reps to progress next time."}
         </p>
-        <button
-          onClick={() => setEditing((v) => !v)}
-          className="text-xs font-medium text-accent"
-        >
-          {editing ? "Done" : "Adjust weights"}
-        </button>
+        {!finished && (
+          <button
+            onClick={() => setEditing((v) => !v)}
+            className="text-xs font-medium text-accent"
+          >
+            {editing ? "Done" : "Adjust weights"}
+          </button>
+        )}
       </div>
 
       <div className="space-y-4">
@@ -138,6 +152,8 @@ export function LiftTracker({
                 {reps[e.exercise].map((r, i) => (
                   <button
                     key={i}
+                    type="button"
+                    disabled={finished || pending}
                     onClick={() => cycle(e.exercise, i)}
                     className={cn(
                       "flex h-11 w-11 items-center justify-center rounded-full border text-base font-semibold transition",
@@ -146,6 +162,7 @@ export function LiftTracker({
                         : r === 0
                           ? "border-border bg-muted text-muted-foreground"
                           : "text-warn",
+                      (finished || pending) && "pointer-events-none opacity-60",
                     )}
                     style={
                       r > 0 && r < REPS_PER_SET ? { borderColor: "var(--warn)" } : undefined
@@ -167,14 +184,19 @@ export function LiftTracker({
         </Button>
       ) : (
         <>
-          <Button className="mt-5 w-full" onClick={finish} disabled={pending}>
-            {pending ? "Saving…" : saved ? "Saved ✓" : "Finish workout"}
+          <Button
+            className="mt-5 w-full"
+            onClick={finish}
+            disabled={finished || pending}
+          >
+            {pending ? "Saving…" : finished ? "Saved ✓" : "Finish workout"}
           </Button>
-          {saved && (
+          {finished && (
             <p className="mt-2 text-center text-sm text-accent">
               Logged. Targets updated for next time.
             </p>
           )}
+          {error && <p className="mt-2 text-center text-sm text-danger">{error}</p>}
         </>
       )}
     </Card>

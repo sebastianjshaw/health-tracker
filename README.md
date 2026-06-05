@@ -92,6 +92,8 @@ Then open the deployment on your phone and "Add to Home Screen".
 | --- | --- |
 | `npm run dev` | Dev server |
 | `npm run build` / `start` | Production build / serve |
+| `npm run lint` | ESLint |
+| `npm run test` | Unit tests (lifts, nutrition, dates, session) |
 | `npm run db:push` | Apply schema to the database |
 | `npm run db:studio` | Drizzle Studio (browse data) |
 | `npm run db:seed` | Insert sample data |

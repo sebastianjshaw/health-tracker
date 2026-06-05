@@ -3,8 +3,9 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
+import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
-import { CardioType, Exercise } from "./constants";
+import { CardioType, Exercise, EXERCISES } from "./constants";
 import { isValidISO } from "./date";
 import { exerciseSucceeded, nextWeight } from "./lifts";
 import {
@@ -14,7 +15,6 @@ import {
   setLiftWeights,
   setNextWorkout,
 } from "./settings";
-import { EXERCISES } from "./constants";
 import { revalidatePaths } from "./revalidate";
 
 export type CardioInput = {
@@ -27,9 +27,9 @@ export type CardioInput = {
   notes?: string | null;
 };
 
-export async function logCardio(input: CardioInput): Promise<void> {
+export async function logCardio(input: CardioInput): Promise<ActionResult> {
   await requireAuth();
-  if (!isValidISO(input.date)) return;
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
   await db.insert(cardioSessions).values({
     date: input.date,
     type: input.type,
@@ -40,12 +40,14 @@ export async function logCardio(input: CardioInput): Promise<void> {
     notes: input.notes ?? null,
   });
   revalidatePaths("/activity");
+  return actionOk();
 }
 
-export async function deleteCardio(id: number): Promise<void> {
+export async function deleteCardio(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
   revalidatePaths("/activity");
+  return actionOk();
 }
 
 export type LiftEntry = {
@@ -64,7 +66,7 @@ export type CompleteWorkoutInput = {
  * automatically too, but you can correct or set starting weights here. */
 export async function updateLiftWeights(
   partial: Partial<Record<Exercise, number>>,
-): Promise<void> {
+): Promise<ActionResult> {
   await requireAuth();
   const weights = await getLiftWeights();
   for (const ex of EXERCISES) {
@@ -75,12 +77,16 @@ export async function updateLiftWeights(
   }
   await setLiftWeights(weights);
   revalidatePaths("/activity");
+  return actionOk();
 }
 
 /** Persist a finished workout and advance the Seblifts progression. */
-export async function completeLiftWorkout(input: CompleteWorkoutInput): Promise<void> {
+export async function completeLiftWorkout(
+  input: CompleteWorkoutInput,
+): Promise<ActionResult> {
   await requireAuth();
-  if (!isValidISO(input.date)) return;
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
+  if (input.entries.length === 0) return actionFail("No exercises logged");
 
   const session = await db
     .insert(liftSessions)
@@ -99,7 +105,6 @@ export async function completeLiftWorkout(input: CompleteWorkoutInput): Promise<
   );
   if (setRows.length > 0) await db.insert(liftSets).values(setRows);
 
-  // Advance progression for each exercise trained.
   const weights = await getLiftWeights();
   const fails = await getLiftFails();
 
@@ -119,4 +124,5 @@ export async function completeLiftWorkout(input: CompleteWorkoutInput): Promise<
   await setNextWorkout(input.workout === "A" ? "B" : "A");
 
   revalidatePaths("/activity", "/stats");
+  return actionOk();
 }

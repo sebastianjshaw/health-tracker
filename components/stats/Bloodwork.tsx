@@ -28,6 +28,7 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
   const [open, setOpen] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
   const [pending, start] = useTransition();
+  const [error, setError] = React.useState<string | null>(null);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -36,7 +37,8 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
     const value = nullableNum(fd.get("value"));
     if (!marker || value == null) return;
     start(async () => {
-      await addBloodMarker({
+      setError(null);
+      const result = await addBloodMarker({
         date: String(fd.get("date") || todayISO()),
         clinic: String(fd.get("clinic") ?? "").trim() || null,
         category: String(fd.get("category") ?? "").trim() || null,
@@ -46,6 +48,10 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
         refLow: nullableNum(fd.get("refLow")),
         refHigh: nullableNum(fd.get("refHigh")),
       });
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       formRef.current?.reset();
     });
   }
@@ -95,6 +101,7 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? "Saving…" : "Add result"}
             </Button>
+            {error && <p className="text-sm text-danger">{error}</p>}
           </form>
         )}
       </Card>
