@@ -1,9 +1,9 @@
 import "server-only";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { foodLog, foods, recurringFoods, recurringRemovals } from "@/db/schema";
+import { foodLog, foods, recurringFoods } from "@/db/schema";
 import { Meal, Schedule } from "./constants";
-import { schedulesFor } from "./date";
+import { materializeRecurringForDates } from "./recurring-materialize";
 
 export type DayEntry = {
   key: string;
@@ -74,43 +74,17 @@ export async function getRecurring(): Promise<RecurringWithFood[]> {
   return rows as RecurringWithFood[];
 }
 
-/** Merged entries for a day: logged rows + applicable recurring defaults − removals. */
+/** Food entries for a day (recurring defaults materialised into food_log with snapshots). */
 export async function getDayEntries(date: string): Promise<DayEntry[]> {
-  const schedules = schedulesFor(date);
+  await materializeRecurringForDates(db, [date]);
 
-  const [logged, removalRows, recurringRows] = await Promise.all([
-    db.select().from(foodLog).where(eq(foodLog.date, date)).all(),
-    db
-      .select()
-      .from(recurringRemovals)
-      .where(eq(recurringRemovals.date, date))
-      .all(),
-    db
-      .select({
-        id: recurringFoods.id,
-        foodId: recurringFoods.foodId,
-        meal: recurringFoods.meal,
-        quantity: recurringFoods.quantity,
-        name: foods.name,
-        kcal: foods.kcal,
-        protein: foods.protein,
-        carbs: foods.carbs,
-        fat: foods.fat,
-        servingSize: foods.servingSize,
-        servingUnit: foods.servingUnit,
-      })
-      .from(recurringFoods)
-      .innerJoin(foods, eq(recurringFoods.foodId, foods.id))
-      .where(inArray(recurringFoods.schedule, schedules))
-      .all(),
-  ]);
+  const logged = await db.select().from(foodLog).where(eq(foodLog.date, date)).all();
 
-  const removed = new Set(removalRows.map((r) => r.recurringId));
-
-  const loggedEntries: DayEntry[] = logged.map((r) => ({
+  return logged.map((r) => ({
     key: `log-${r.id}`,
-    kind: "logged",
+    kind: r.recurringId != null ? ("recurring" as const) : ("logged" as const),
     logId: r.id,
+    recurringId: r.recurringId ?? undefined,
     foodId: r.foodId,
     meal: r.meal as Meal,
     name: r.name,
@@ -123,27 +97,6 @@ export async function getDayEntries(date: string): Promise<DayEntry[]> {
     servingUnit: r.servingUnit,
     source: r.source,
   }));
-
-  const recurringEntries: DayEntry[] = recurringRows
-    .filter((r) => !removed.has(r.id))
-    .map((r) => ({
-      key: `rec-${r.id}`,
-      kind: "recurring",
-      recurringId: r.id,
-      foodId: r.foodId,
-      meal: r.meal as Meal,
-      name: r.name,
-      quantity: r.quantity,
-      kcal: r.kcal,
-      protein: r.protein,
-      carbs: r.carbs,
-      fat: r.fat,
-      servingSize: r.servingSize,
-      servingUnit: r.servingUnit,
-      source: "recurring",
-    }));
-
-  return [...recurringEntries, ...loggedEntries];
 }
 
 export async function isRecurring(foodId: number, meal: Meal, schedule: Schedule) {

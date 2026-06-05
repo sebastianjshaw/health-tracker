@@ -11,62 +11,58 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { asc, desc, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
+import { asc, and, desc, eq, isNotNull, like, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   bloodMarkers,
   bodyMetrics,
   foodLog,
   foods,
-  recurringFoods,
-  recurringRemovals,
   settings,
 } from "../db/schema";
-// Shared, framework-free helpers — single source of truth with the web app.
-import { schedulesFor, todayISO } from "../lib/date";
+import { todayISO } from "../lib/date";
+import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
 import { totals as macroTotals } from "../lib/nutrition";
+import {
+  hideRecurringOnDate,
+  materializeRecurringForDates,
+  type AppDb,
+} from "../lib/recurring-materialize";
 
 // ---- db ----
 const url = process.env.DATABASE_URL ?? "file:local.db";
 const authToken = process.env.DATABASE_AUTH_TOKEN;
 const isRemote = url.startsWith("libsql://") || url.startsWith("http");
 const client = createClient(isRemote ? { url, authToken } : { url });
-const db = drizzle(client);
+const db = drizzle(client) as AppDb;
 
-/**
- * Ensure a food exists in the library (case-insensitive by name) and return its
- * id. Used so that ad-hoc foods logged via the MCP server still show up in the
- * Food library, not just the daily log.
- */
-async function ensureLibraryFood(opts: {
+/** Ensure an MCP-logged food exists in the library (one serving = the portion eaten). */
+async function ensureMcpLibraryFood(opts: {
   name: string;
   kcal: number;
   protein: number;
   carbs: number;
   fat: number;
-  source: string;
-  servingSize?: number;
-  servingUnit?: string;
 }): Promise<number> {
   const name = opts.name.trim();
+  const serving = portionAsSingleServing({
+    kcal: opts.kcal,
+    protein: opts.protein,
+    carbs: opts.carbs,
+    fat: opts.fat,
+  });
   const existing = await db
-    .select({ id: foods.id })
+    .select()
     .from(foods)
-    .where(sql`lower(${foods.name}) = ${name.toLowerCase()}`)
+    .where(and(sql`lower(${foods.name}) = ${name.toLowerCase()}`, eq(foods.source, "mcp")))
     .get();
-  if (existing) return existing.id;
+  if (existing) {
+    await db.update(foods).set(serving).where(eq(foods.id, existing.id));
+    return existing.id;
+  }
   const [row] = await db
     .insert(foods)
-    .values({
-      name,
-      servingSize: opts.servingSize ?? 1,
-      servingUnit: opts.servingUnit ?? "serving",
-      kcal: opts.kcal,
-      protein: opts.protein,
-      carbs: opts.carbs,
-      fat: opts.fat,
-      source: opts.source,
-    })
+    .values({ name, ...serving, source: "mcp" })
     .returning({ id: foods.id });
   return row.id;
 }
@@ -96,55 +92,21 @@ server.tool(
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
+    await materializeRecurringForDates(db, [d]);
     const logged = await db.select().from(foodLog).where(eq(foodLog.date, d)).all();
-    const removals = await db
-      .select()
-      .from(recurringRemovals)
-      .where(eq(recurringRemovals.date, d))
-      .all();
-    const removed = new Set(removals.map((r) => r.recurringId));
-    const recurring = await db
-      .select({
-        id: recurringFoods.id,
-        meal: recurringFoods.meal,
-        quantity: recurringFoods.quantity,
-        name: foods.name,
-        kcal: foods.kcal,
-        protein: foods.protein,
-        carbs: foods.carbs,
-        fat: foods.fat,
-      })
-      .from(recurringFoods)
-      .innerJoin(foods, eq(recurringFoods.foodId, foods.id))
-      .where(inArray(recurringFoods.schedule, schedulesFor(d)))
-      .all();
 
-    const entries = [
-      ...recurring
-        .filter((r) => !removed.has(r.id))
-        .map((r) => ({
-          id: null as number | null, // recurring defaults aren't deletable by entry id
-          meal: r.meal,
-          name: r.name,
-          quantity: r.quantity,
-          kcal: r.kcal,
-          protein: r.protein,
-          carbs: r.carbs,
-          fat: r.fat,
-          source: "recurring",
-        })),
-      ...logged.map((r) => ({
-        id: r.id, // pass to delete_food_entry to remove this entry
-        meal: r.meal,
-        name: r.name,
-        quantity: r.quantity,
-        kcal: r.kcal,
-        protein: r.protein,
-        carbs: r.carbs,
-        fat: r.fat,
-        source: r.source,
-      })),
-    ];
+    const entries = logged.map((r) => ({
+      id: r.id,
+      meal: r.meal,
+      name: r.name,
+      quantity: r.quantity,
+      kcal: r.kcal,
+      protein: r.protein,
+      carbs: r.carbs,
+      fat: r.fat,
+      source: r.source,
+      recurring: r.recurringId != null,
+    }));
 
     const totals = macroTotals(entries);
 
@@ -214,41 +176,32 @@ server.tool(
   },
   async ({ date, meal, name, kcal, protein, carbs, fat }) => {
     const d = date ?? todayISO();
-    // Also make sure the food exists in the library so it's reusable later.
-    const foodId = await ensureLibraryFood({
-      name,
+    const totals = {
       kcal,
       protein: protein ?? 0,
       carbs: carbs ?? 0,
       fat: fat ?? 0,
-      source: "mcp",
-    });
-    await db.insert(foodLog).values({
-      date: d,
-      meal,
-      foodId,
-      name,
-      quantity: 1, // nutrition values are absolute totals, so the multiplier is always 1
-      kcal,
-      protein: protein ?? 0,
-      carbs: carbs ?? 0,
-      fat: fat ?? 0,
-      servingSize: 1,
-      servingUnit: "serving",
-      source: "mcp",
-    });
+    };
+    const foodId = await ensureMcpLibraryFood({ name, ...totals });
+    const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
+    if (!food) return text(`Failed to save "${name}".`);
+    await db.insert(foodLog).values(foodLogSnapshot(food, { date: d, meal, quantity: 1 }));
     return text(`Logged "${name}" to ${meal} on ${d} (${Math.round(kcal)} kcal).`);
   },
 );
 
 server.tool(
   "delete_food_entry",
-  "Delete a logged food entry by its id (from get_day). Only removes logged entries, not recurring defaults.",
+  "Delete a food entry by its id (from get_day). Recurring defaults are hidden for that day.",
   { id: z.number() },
   async ({ id }) => {
     const row = await db.select().from(foodLog).where(eq(foodLog.id, id)).get();
     if (!row) return text(`No food entry with id ${id}.`);
-    await db.delete(foodLog).where(eq(foodLog.id, id));
+    if (row.recurringId != null) {
+      await hideRecurringOnDate(db, row.date, row.recurringId);
+    } else {
+      await db.delete(foodLog).where(eq(foodLog.id, id));
+    }
     return text(`Deleted "${row.name}" from ${row.meal} on ${row.date}.`);
   },
 );
@@ -261,20 +214,9 @@ server.tool(
     const d = date ?? todayISO();
     const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
     if (!food) return text(`No food with id ${foodId}.`);
-    await db.insert(foodLog).values({
-      date: d,
-      meal,
-      foodId: food.id,
-      name: food.name,
-      quantity: quantity ?? 1,
-      kcal: food.kcal,
-      protein: food.protein,
-      carbs: food.carbs,
-      fat: food.fat,
-      servingSize: food.servingSize,
-      servingUnit: food.servingUnit,
-      source: food.source,
-    });
+    await db
+      .insert(foodLog)
+      .values(foodLogSnapshot(food, { date: d, meal, quantity: quantity ?? 1 }));
     return text(`Added ${quantity ?? 1}× ${food.name} to ${meal} on ${d}.`);
   },
 );

@@ -4,14 +4,12 @@ import { db } from "@/db";
 import {
   bodyMetrics,
   foodLog,
-  foods,
   liftSessions,
   liftSets,
-  recurringFoods,
-  recurringRemovals,
 } from "@/db/schema";
-import { Exercise, Meal, Schedule } from "./constants";
-import { addDays, schedulesFor, todayISO } from "./date";
+import { Exercise, Meal } from "./constants";
+import { addDays, todayISO } from "./date";
+import { materializeRecurringRange } from "./recurring-materialize";
 
 export async function getBodyMetrics() {
   return db
@@ -63,39 +61,19 @@ export async function calorieSeriesRange(
   const dates: string[] = [];
   for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
 
-  const [logged, recurring, removals] = await Promise.all([
-    db
-      .select({
-        date: foodLog.date,
-        meal: foodLog.meal,
-        quantity: foodLog.quantity,
-        kcal: foodLog.kcal,
-        protein: foodLog.protein,
-      })
-      .from(foodLog)
-      .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
-      .all(),
-    db
-      .select({
-        id: recurringFoods.id,
-        meal: recurringFoods.meal,
-        schedule: recurringFoods.schedule,
-        quantity: recurringFoods.quantity,
-        kcal: foods.kcal,
-        protein: foods.protein,
-      })
-      .from(recurringFoods)
-      .innerJoin(foods, eq(recurringFoods.foodId, foods.id))
-      .all(),
-    db
-      .select({
-        date: recurringRemovals.date,
-        recurringId: recurringRemovals.recurringId,
-      })
-      .from(recurringRemovals)
-      .where(and(gte(recurringRemovals.date, start), lte(recurringRemovals.date, end)))
-      .all(),
-  ]);
+  await materializeRecurringRange(db, start, end);
+
+  const logged = await db
+    .select({
+      date: foodLog.date,
+      meal: foodLog.meal,
+      quantity: foodLog.quantity,
+      kcal: foodLog.kcal,
+      protein: foodLog.protein,
+    })
+    .from(foodLog)
+    .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
+    .all();
 
   const loggedByDate = new Map<string, { kcal: number; protein: number }>();
   const mealsByDate = new Map<string, Set<Meal>>();
@@ -109,39 +87,13 @@ export async function calorieSeriesRange(
     mealsByDate.set(r.date, ms);
   }
 
-  const removedByDate = new Map<string, Set<number>>();
-  for (const r of removals) {
-    const set = removedByDate.get(r.date) ?? new Set<number>();
-    set.add(r.recurringId);
-    removedByDate.set(r.date, set);
-  }
-
   return dates.map((date) => {
-    let kcal = 0;
-    let protein = 0;
-    const meals = new Set<Meal>(mealsByDate.get(date) ?? []);
-
     const l = loggedByDate.get(date);
-    if (l) {
-      kcal += l.kcal;
-      protein += l.protein;
-    }
-
-    const schedules = schedulesFor(date);
-    const removed = removedByDate.get(date);
-    for (const rec of recurring) {
-      if (!schedules.includes(rec.schedule as Schedule)) continue;
-      if (removed?.has(rec.id)) continue;
-      kcal += rec.kcal * rec.quantity;
-      protein += rec.protein * rec.quantity;
-      meals.add(rec.meal as Meal);
-    }
-
     return {
       date,
-      kcal: Math.round(kcal),
-      protein: Math.round(protein),
-      meals: [...meals],
+      kcal: Math.round(l?.kcal ?? 0),
+      protein: Math.round(l?.protein ?? 0),
+      meals: [...(mealsByDate.get(date) ?? [])],
     };
   });
 }

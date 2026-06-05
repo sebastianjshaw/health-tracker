@@ -1,11 +1,13 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { foodLog, foods, recurringRemovals } from "@/db/schema";
+import { foodLog, foods } from "@/db/schema";
 import { requireAuth } from "./auth";
 import { Meal } from "./constants";
 import { isValidISO } from "./date";
+import { foodLogSnapshot } from "./food-snapshot";
+import { hideRecurringOnDate } from "./recurring-materialize";
 import { revalidatePaths } from "./revalidate";
 
 /** Add a library food to a day's meal, snapshotting its nutrition. */
@@ -20,20 +22,9 @@ export async function addLogEntry(
   const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
   if (!food) return;
 
-  await db.insert(foodLog).values({
-    date,
-    meal,
-    foodId: food.id,
-    name: food.name,
-    quantity,
-    kcal: food.kcal,
-    protein: food.protein,
-    carbs: food.carbs,
-    fat: food.fat,
-    servingSize: food.servingSize,
-    servingUnit: food.servingUnit,
-    source: food.source,
-  });
+  await db.insert(foodLog).values(
+    foodLogSnapshot(food, { date, meal, quantity }),
+  );
 
   revalidatePaths("/", "/stats");
 }
@@ -61,18 +52,6 @@ export async function removeRecurringFromDay(
 ): Promise<void> {
   await requireAuth();
   if (!isValidISO(date)) return;
-  const existing = await db
-    .select()
-    .from(recurringRemovals)
-    .where(
-      and(
-        eq(recurringRemovals.date, date),
-        eq(recurringRemovals.recurringId, recurringId),
-      ),
-    )
-    .get();
-  if (!existing) {
-    await db.insert(recurringRemovals).values({ date, recurringId });
-  }
+  await hideRecurringOnDate(db, date, recurringId);
   revalidatePaths("/", "/stats");
 }
