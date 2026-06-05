@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const createdAt = () =>
   integer("created_at", { mode: "timestamp" })
@@ -68,7 +68,10 @@ export const foodLog = sqliteTable("food_log", {
   // set when this row was materialised from a recurring template
   recurringId: integer("recurring_id"),
   createdAt: createdAt(),
-}, (t) => [index("food_log_date_idx").on(t.date)]);
+}, (t) => [
+  index("food_log_date_idx").on(t.date),
+  uniqueIndex("food_log_date_recurring_uidx").on(t.date, t.recurringId),
+]);
 
 /** Records that a recurring default was removed from one specific day. */
 export const recurringRemovals = sqliteTable("recurring_removals", {

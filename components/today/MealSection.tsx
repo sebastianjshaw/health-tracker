@@ -2,7 +2,6 @@ import { Card } from "@/components/ui";
 import { MEAL_LABELS, Meal } from "@/lib/constants";
 import { totals } from "@/lib/nutrition";
 import type { DayEntry } from "@/lib/food-data";
-import type { Food } from "@/db/schema";
 import { EntryRow } from "./EntryRow";
 import { AddFoodButton } from "./AddFoodButton";
 
@@ -10,12 +9,10 @@ export function MealSection({
   meal,
   entries,
   date,
-  foods,
 }: {
   meal: Meal;
   entries: DayEntry[];
   date: string;
-  foods: Food[];
 }) {
   const t = totals(entries);
 
@@ -38,7 +35,7 @@ export function MealSection({
       </div>
 
       <div className="px-4 pb-3 pt-2">
-        <AddFoodButton date={date} meal={meal} foods={foods} />
+        <AddFoodButton date={date} meal={meal} />
       </div>
     </Card>
   );

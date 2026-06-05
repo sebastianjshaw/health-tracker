@@ -1,6 +1,6 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
@@ -87,6 +87,13 @@ export async function completeLiftWorkout(
   await requireAuth();
   if (!isValidISO(input.date)) return actionFail("Invalid date");
   if (input.entries.length === 0) return actionFail("No exercises logged");
+
+  const existing = await db
+    .select({ id: liftSessions.id })
+    .from(liftSessions)
+    .where(and(eq(liftSessions.date, input.date), eq(liftSessions.workout, input.workout)))
+    .get();
+  if (existing) return actionFail("This workout is already logged for this date");
 
   const session = await db
     .insert(liftSessions)

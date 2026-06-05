@@ -11,6 +11,14 @@ import { foodLogSnapshot } from "./food-snapshot";
 import { hideRecurringOnDate } from "./recurring-materialize";
 import { revalidatePaths } from "./revalidate";
 
+async function removeLogRow(row: typeof foodLog.$inferSelect): Promise<void> {
+  if (row.recurringId != null) {
+    await hideRecurringOnDate(db, row.date, row.recurringId);
+  } else {
+    await db.delete(foodLog).where(eq(foodLog.id, row.id));
+  }
+}
+
 /** Add a library food to a day's meal, snapshotting its nutrition. */
 export async function addLogEntry(
   date: string,
@@ -36,8 +44,11 @@ export async function setLogQuantity(
   quantity: number,
 ): Promise<ActionResult> {
   await requireAuth();
+  const row = await db.select().from(foodLog).where(eq(foodLog.id, logId)).get();
+  if (!row) return actionFail("Entry not found");
+
   if (quantity <= 0) {
-    await db.delete(foodLog).where(eq(foodLog.id, logId));
+    await removeLogRow(row);
   } else {
     await db.update(foodLog).set({ quantity }).where(eq(foodLog.id, logId));
   }
@@ -47,7 +58,9 @@ export async function setLogQuantity(
 
 export async function deleteLogEntry(logId: number): Promise<ActionResult> {
   await requireAuth();
-  await db.delete(foodLog).where(eq(foodLog.id, logId));
+  const row = await db.select().from(foodLog).where(eq(foodLog.id, logId)).get();
+  if (!row) return actionFail("Entry not found");
+  await removeLogRow(row);
   revalidatePaths("/", "/stats");
   return actionOk();
 }

@@ -3,7 +3,7 @@ import { MacroSummary } from "@/components/MacroSummary";
 import { MealSection } from "@/components/today/MealSection";
 import { MEALS } from "@/lib/constants";
 import { isValidISO, todayISO } from "@/lib/date";
-import { getDayEntries, getFoods } from "@/lib/food-data";
+import { getDayEntries } from "@/lib/food-data";
 import { totals } from "@/lib/nutrition";
 import { getTargets } from "@/lib/settings";
 
@@ -15,11 +15,7 @@ export default async function TodayPage({
   const { d } = await searchParams;
   const date = d && isValidISO(d) ? d : todayISO();
 
-  const [entries, foods, targets] = await Promise.all([
-    getDayEntries(date),
-    getFoods(),
-    getTargets(),
-  ]);
+  const [entries, targets] = await Promise.all([getDayEntries(date), getTargets()]);
 
   const dayTotals = totals(entries);
 
@@ -34,7 +30,6 @@ export default async function TodayPage({
           meal={meal}
           entries={entries.filter((e) => e.meal === meal)}
           date={date}
-          foods={foods}
         />
       ))}
     </div>
