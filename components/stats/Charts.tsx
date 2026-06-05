@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Line,
   LineChart,
   ReferenceLine,
@@ -13,14 +14,15 @@ import {
   YAxis,
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
-import { EXERCISE_LABELS, EXERCISES, MEALS, Meal } from "@/lib/constants";
+import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
 import type { CaloriePoint, LiftPoint, WeightPoint } from "@/lib/stats-data";
 
-const MEAL_INITIAL: Record<Meal, string> = {
-  breakfast: "B",
-  lunch: "L",
-  dinner: "D",
-  snacks: "S",
+// Calorie-bar status colours.
+const CAL_COLORS = {
+  under: "#22c55e", // comfortably under the (meal-proportional) target
+  near: "#f59e0b", // within ±10% of it
+  over: "#ef4444", // more than 10% over
+  none: "var(--muted-foreground)", // no target / nothing logged
 };
 
 const AXIS = "var(--muted-foreground)";
@@ -102,6 +104,15 @@ export function WeightChart({
   );
 }
 
+function Swatch({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />
+      {label}
+    </span>
+  );
+}
+
 export function CalorieChart({
   data,
   target,
@@ -112,18 +123,20 @@ export function CalorieChart({
   mealSplit: Record<Meal, number>;
 }) {
   const hasData = data.some((d) => d.kcal > 0);
-
-  // Cumulative meal budgets: where you should be after each meal.
-  const cumulative: { meal: Meal; value: number }[] = [];
-  let acc = 0;
-  for (const m of MEALS) {
-    acc += target * ((mealSplit[m] ?? 0) / 100);
-    cumulative.push({ meal: m, value: Math.round(acc) });
-  }
-
-  // Keep the goal + ghost lines on-screen even on low-intake days.
   const dataMax = Math.max(0, ...data.map((d) => d.kcal));
   const yMax = Math.ceil(Math.max(dataMax, target) / 100) * 100;
+
+  // Proportional target: only count the meals actually logged that day, so a
+  // day with just breakfast + lunch in isn't judged against the full goal.
+  const fraction = (meals: Meal[]) =>
+    meals.reduce((s, m) => s + (mealSplit[m] ?? 0), 0) / 100;
+  const colorFor = (d: CaloriePoint) => {
+    const eff = target * fraction(d.meals);
+    if (eff <= 0) return CAL_COLORS.none;
+    if (d.kcal > eff * 1.1) return CAL_COLORS.over; // >10% over → red
+    if (d.kcal >= eff * 0.9) return CAL_COLORS.near; // within ±10% → amber
+    return CAL_COLORS.under; // comfortably under → green
+  };
 
   return (
     <ChartCard title="Calories (last 14 days)">
@@ -141,44 +154,32 @@ export function CalorieChart({
                 labelFormatter={(label) => shortDate(String(label))}
                 cursor={{ fill: "var(--muted)" }}
               />
-              {/* faint cumulative meal-budget lines (after breakfast / lunch / dinner) */}
-              {target > 0 &&
-                cumulative.slice(0, 3).map((c) => (
-                  <ReferenceLine
-                    key={c.meal}
-                    y={c.value}
-                    stroke="var(--muted-foreground)"
-                    strokeOpacity={0.35}
-                    strokeDasharray="2 4"
-                    label={{
-                      value: MEAL_INITIAL[c.meal],
-                      position: "left",
-                      fontSize: 9,
-                      fill: "var(--muted-foreground)",
-                    }}
-                  />
-                ))}
               {target > 0 && (
                 <ReferenceLine
                   y={target}
                   stroke="var(--muted-foreground)"
                   strokeDasharray="4 4"
-                  label={{ value: "goal", position: "left", fontSize: 9, fill: "var(--muted-foreground)" }}
+                  label={{
+                    value: `goal ${target}`,
+                    position: "insideTopRight",
+                    fontSize: 10,
+                    fill: "var(--muted-foreground)",
+                  }}
                 />
               )}
-              <Bar dataKey="kcal" fill="#22c55e" radius={[4, 4, 0, 0]} name="kcal" />
+              <Bar dataKey="kcal" radius={[4, 4, 0, 0]} name="kcal">
+                {data.map((d) => (
+                  <Cell key={d.date} fill={colorFor(d)} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
-          {target > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Ghost lines = cumulative budget after{" "}
-              {cumulative
-                .slice(0, 3)
-                .map((c) => `${MEAL_INITIAL[c.meal]} ${c.value}`)
-                .join(" · ")}{" "}
-              · goal {target}
-            </p>
-          )}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <Swatch color={CAL_COLORS.under} label="Under" />
+            <Swatch color={CAL_COLORS.near} label="Within ±10%" />
+            <Swatch color={CAL_COLORS.over} label="Over" />
+            <span>· judged vs the day’s logged-meal share of {target} kcal</span>
+          </div>
         </>
       )}
     </ChartCard>

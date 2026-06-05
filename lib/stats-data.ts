@@ -10,7 +10,7 @@ import {
   recurringFoods,
   recurringRemovals,
 } from "@/db/schema";
-import { Exercise, Schedule } from "./constants";
+import { Exercise, Meal, Schedule } from "./constants";
 import { addDays, schedulesFor, todayISO } from "./date";
 
 export async function getBodyMetrics() {
@@ -37,7 +37,13 @@ export async function getWeightSeries(): Promise<WeightPoint[]> {
   }));
 }
 
-export type CaloriePoint = { date: string; kcal: number; protein: number };
+export type CaloriePoint = {
+  date: string;
+  kcal: number;
+  protein: number;
+  /** Meals that have at least one entry that day (drives the proportional target). */
+  meals: Meal[];
+};
 
 /**
  * Daily consumed totals (logged + applicable recurring − removals) for the last
@@ -61,6 +67,7 @@ export async function calorieSeriesRange(
     db
       .select({
         date: foodLog.date,
+        meal: foodLog.meal,
         quantity: foodLog.quantity,
         kcal: foodLog.kcal,
         protein: foodLog.protein,
@@ -71,6 +78,7 @@ export async function calorieSeriesRange(
     db
       .select({
         id: recurringFoods.id,
+        meal: recurringFoods.meal,
         schedule: recurringFoods.schedule,
         quantity: recurringFoods.quantity,
         kcal: foods.kcal,
@@ -90,11 +98,15 @@ export async function calorieSeriesRange(
   ]);
 
   const loggedByDate = new Map<string, { kcal: number; protein: number }>();
+  const mealsByDate = new Map<string, Set<Meal>>();
   for (const r of logged) {
     const acc = loggedByDate.get(r.date) ?? { kcal: 0, protein: 0 };
     acc.kcal += r.kcal * r.quantity;
     acc.protein += r.protein * r.quantity;
     loggedByDate.set(r.date, acc);
+    const ms = mealsByDate.get(r.date) ?? new Set<Meal>();
+    ms.add(r.meal as Meal);
+    mealsByDate.set(r.date, ms);
   }
 
   const removedByDate = new Map<string, Set<number>>();
@@ -107,6 +119,7 @@ export async function calorieSeriesRange(
   return dates.map((date) => {
     let kcal = 0;
     let protein = 0;
+    const meals = new Set<Meal>(mealsByDate.get(date) ?? []);
 
     const l = loggedByDate.get(date);
     if (l) {
@@ -121,9 +134,15 @@ export async function calorieSeriesRange(
       if (removed?.has(rec.id)) continue;
       kcal += rec.kcal * rec.quantity;
       protein += rec.protein * rec.quantity;
+      meals.add(rec.meal as Meal);
     }
 
-    return { date, kcal: Math.round(kcal), protein: Math.round(protein) };
+    return {
+      date,
+      kcal: Math.round(kcal),
+      protein: Math.round(protein),
+      meals: [...meals],
+    };
   });
 }
 
