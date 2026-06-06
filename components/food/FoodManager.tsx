@@ -4,7 +4,7 @@ import * as React from "react";
 import { useTransition } from "react";
 import { Badge, Button, Card, Field, Input, Select } from "@/components/ui";
 import { Sheet } from "@/components/Sheet";
-import { PlusIcon, TrashIcon } from "@/components/icons";
+import { ChevronLeft, ChevronRight, PlusIcon, TrashIcon } from "@/components/icons";
 import { ManualFoodForm } from "./ManualFoodForm";
 import {
   addRecurring,
@@ -33,6 +33,12 @@ export function FoodManager({
   const [defaultFor, setDefaultFor] = React.useState<Food | null>(null);
   const [editFood, setEditFood] = React.useState<Food | null>(null);
   const [pending, start] = useTransition();
+
+  function handleDelete(f: Food) {
+    if (confirm(`Delete "${f.name}"?`)) {
+      start(async () => deleteFood(f.id));
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -89,50 +95,13 @@ export function FoodManager({
       </Card>
 
       {/* Library */}
-      <Card className="p-4">
-        <h2 className="font-semibold">Food library</h2>
-        <div className="mt-3 divide-y divide-border">
-          {foods.length === 0 && (
-            <p className="py-2 text-sm text-muted-foreground">No foods yet.</p>
-          )}
-          {foods.map((f) => (
-            <div key={f.id} className="flex items-center gap-2 py-2.5">
-              <button
-                type="button"
-                onClick={() => setEditFood(f)}
-                className="min-w-0 flex-1 text-left"
-                aria-label={`Edit ${f.name}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium">{f.name}</span>
-                  {f.source !== "manual" && <Badge>{f.source}</Badge>}
-                </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {f.brand ? `${f.brand} · ` : ""}
-                  {Math.round(f.kcal)} kcal / {f.servingSize}
-                  {f.servingUnit} · P{Math.round(f.protein)} C{Math.round(f.carbs)} F
-                  {Math.round(f.fat)}
-                </div>
-              </button>
-              <Button size="sm" variant="secondary" onClick={() => setDefaultFor(f)}>
-                Default
-              </Button>
-              <button
-                onClick={() => {
-                  if (confirm(`Delete "${f.name}"?`)) {
-                    start(async () => deleteFood(f.id));
-                  }
-                }}
-                disabled={pending}
-                className="p-1.5 text-muted-foreground hover:text-danger"
-                aria-label={`Delete ${f.name}`}
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <FoodLibrary
+        foods={foods}
+        pending={pending}
+        onEdit={setEditFood}
+        onSetDefault={setDefaultFor}
+        onDelete={handleDelete}
+      />
 
       <SetDefaultSheet
         food={defaultFor}
@@ -154,6 +123,193 @@ export function FoodManager({
         )}
       </Sheet>
     </div>
+  );
+}
+
+const PAGE_SIZE = 30;
+
+type SortKey = "recent" | "az";
+
+// Friendlier labels for the stored `source` values.
+const SOURCE_LABELS: Record<string, string> = {
+  manual: "Manual",
+  openfoodfacts: "Barcode",
+  ai: "AI",
+  mcp: "MCP",
+};
+const sourceLabel = (s: string) => SOURCE_LABELS[s] ?? s;
+const createdMs = (f: Food) => (f.createdAt ? new Date(f.createdAt).getTime() : 0);
+
+function FoodLibrary({
+  foods,
+  pending,
+  onEdit,
+  onSetDefault,
+  onDelete,
+}: {
+  foods: Food[];
+  pending: boolean;
+  onEdit: (f: Food) => void;
+  onSetDefault: (f: Food) => void;
+  onDelete: (f: Food) => void;
+}) {
+  const [query, setQuery] = React.useState("");
+  const [sort, setSort] = React.useState<SortKey>("recent");
+  const [source, setSource] = React.useState("all");
+  const [page, setPage] = React.useState(1);
+
+  // Source values actually present, for the filter dropdown.
+  const sources = React.useMemo(
+    () => [...new Set(foods.map((f) => f.source))].sort(),
+    [foods],
+  );
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = foods.filter((f) => {
+      if (source !== "all" && f.source !== source) return false;
+      if (!q) return true;
+      return (
+        f.name.toLowerCase().includes(q) ||
+        (f.brand ?? "").toLowerCase().includes(q)
+      );
+    });
+    list.sort(
+      sort === "az"
+        ? (a, b) => a.name.localeCompare(b.name)
+        : (a, b) => createdMs(b) - createdMs(a) || b.id - a.id,
+    );
+    return list;
+  }, [foods, query, sort, source]);
+
+  // Any change to the result set snaps back to the first page.
+  const setFilter = <T,>(setter: (v: T) => void) => (v: T) => {
+    setter(v);
+    setPage(1);
+  };
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const startIdx = (safePage - 1) * PAGE_SIZE;
+  const visible = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+  return (
+    <Card className="p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="font-semibold">Food library</h2>
+        <span className="text-xs text-muted-foreground">{foods.length} items</span>
+      </div>
+
+      {foods.length > 0 && (
+        <div className="mt-3 space-y-2">
+          <Input
+            type="search"
+            inputMode="search"
+            placeholder="Search by name or brand…"
+            value={query}
+            onChange={(e) => setFilter(setQuery)(e.target.value)}
+            aria-label="Search food library"
+          />
+          <div className="flex gap-2">
+            <Field label="Sort" className="flex-1">
+              <Select
+                value={sort}
+                onChange={(e) => setFilter(setSort)(e.target.value as SortKey)}
+              >
+                <option value="recent">Recently added</option>
+                <option value="az">Name (A–Z)</option>
+              </Select>
+            </Field>
+            {sources.length > 1 && (
+              <Field label="Source" className="flex-1">
+                <Select
+                  value={source}
+                  onChange={(e) => setFilter(setSource)(e.target.value)}
+                >
+                  <option value="all">All sources</option>
+                  {sources.map((s) => (
+                    <option key={s} value={s}>
+                      {sourceLabel(s)}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-3 divide-y divide-border">
+        {foods.length === 0 && (
+          <p className="py-2 text-sm text-muted-foreground">No foods yet.</p>
+        )}
+        {foods.length > 0 && filtered.length === 0 && (
+          <p className="py-2 text-sm text-muted-foreground">No matching foods.</p>
+        )}
+        {visible.map((f) => (
+          <div key={f.id} className="flex items-center gap-2 py-2.5">
+            <button
+              type="button"
+              onClick={() => onEdit(f)}
+              className="min-w-0 flex-1 text-left"
+              aria-label={`Edit ${f.name}`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="truncate font-medium">{f.name}</span>
+                {f.source !== "manual" && <Badge>{sourceLabel(f.source)}</Badge>}
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {f.brand ? `${f.brand} · ` : ""}
+                {Math.round(f.kcal)} kcal / {f.servingSize}
+                {f.servingUnit} · P{Math.round(f.protein)} C{Math.round(f.carbs)} F
+                {Math.round(f.fat)}
+              </div>
+            </button>
+            <Button size="sm" variant="secondary" onClick={() => onSetDefault(f)}>
+              Default
+            </Button>
+            <button
+              onClick={() => onDelete(f)}
+              disabled={pending}
+              className="p-1.5 text-muted-foreground hover:text-danger"
+              aria-label={`Delete ${f.name}`}
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {filtered.length > PAGE_SIZE && (
+        <div className="mt-3 flex items-center justify-between text-sm text-muted-foreground">
+          <span>
+            {startIdx + 1}–{Math.min(startIdx + PAGE_SIZE, filtered.length)} of{" "}
+            {filtered.length}
+          </span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              className="rounded-lg p-1.5 hover:bg-muted disabled:opacity-40"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="tabular-nums">
+              {safePage} / {pageCount}
+            </span>
+            <button
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={safePage >= pageCount}
+              className="rounded-lg p-1.5 hover:bg-muted disabled:opacity-40"
+              aria-label="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 
