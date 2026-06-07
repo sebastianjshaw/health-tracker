@@ -20,6 +20,7 @@ import {
   foods,
   settings,
 } from "../db/schema";
+import { evolutionForSource } from "../lib/constants";
 import { todayISO } from "../lib/date";
 import { inferCategory } from "../lib/food-category";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
@@ -63,7 +64,13 @@ async function ensureMcpLibraryFood(opts: {
   }
   const [row] = await db
     .insert(foods)
-    .values({ name, ...serving, source: "mcp", category: inferCategory(serving.servingUnit, name) })
+    .values({
+      name,
+      ...serving,
+      source: "mcp",
+      category: inferCategory(serving.servingUnit, name),
+      evolution: evolutionForSource("mcp"),
+    })
     .returning({ id: foods.id });
   return row.id;
 }

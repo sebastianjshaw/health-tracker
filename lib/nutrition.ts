@@ -1,3 +1,5 @@
+import { Contingency, contingencyMultiplier } from "./constants";
+
 export type Macros = { kcal: number; protein: number; carbs: number; fat: number };
 
 export type EntryLike = {
@@ -7,6 +9,9 @@ export type EntryLike = {
   carbs: number;
   fat: number;
 };
+
+/** An entry that also carries its Wardley evolution (for contingency). */
+export type EntryWithEvolution = EntryLike & { evolution?: string };
 
 const ZERO: Macros = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
 
@@ -30,6 +35,21 @@ export function entryMacros(e: EntryLike): Macros {
     carbs: e.carbs * e.quantity,
     fat: e.fat * e.quantity,
   };
+}
+
+/** Raw logged calories for one entry (no contingency). */
+export function entryKcal(e: EntryLike): number {
+  return e.kcal * e.quantity;
+}
+
+/** Contingency-adjusted calories for one entry, per the Wardley evolution. */
+export function entryAdjustedKcal(e: EntryWithEvolution, c: Contingency): number {
+  return entryKcal(e) * contingencyMultiplier(e.evolution ?? "commodity", c);
+}
+
+/** Sum of contingency-adjusted calories across entries. */
+export function adjustedCalories(entries: EntryWithEvolution[], c: Contingency): number {
+  return entries.reduce((s, e) => s + entryAdjustedKcal(e, c), 0);
 }
 
 export function round(n: number, dp = 0): number {

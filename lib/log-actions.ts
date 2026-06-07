@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { foodLog, foods } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
-import { Meal } from "./constants";
+import { EVOLUTIONS, Evolution, Meal } from "./constants";
 import { isValidISO } from "./date";
 import { foodLogSnapshot } from "./food-snapshot";
 import { hideRecurringOnDate } from "./recurring-materialize";
@@ -61,6 +61,18 @@ export async function deleteLogEntry(logId: number): Promise<ActionResult> {
   const row = await db.select().from(foodLog).where(eq(foodLog.id, logId)).get();
   if (!row) return actionFail("Entry not found");
   await removeLogRow(row);
+  revalidatePaths("/", "/stats");
+  return actionOk();
+}
+
+/** Change a single logged entry's Wardley evolution (affects its calorie uplift). */
+export async function setLogEvolution(
+  logId: number,
+  evolution: Evolution,
+): Promise<ActionResult> {
+  await requireAuth();
+  if (!EVOLUTIONS.includes(evolution)) return actionFail("Invalid classification");
+  await db.update(foodLog).set({ evolution }).where(eq(foodLog.id, logId));
   revalidatePaths("/", "/stats");
   return actionOk();
 }

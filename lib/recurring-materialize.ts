@@ -21,6 +21,7 @@ type RecurringRow = {
   servingSize: number;
   servingUnit: string;
   source: string;
+  evolution: string;
 };
 
 async function loadRecurringTemplates(db: AppDb): Promise<RecurringRow[]> {
@@ -39,6 +40,7 @@ async function loadRecurringTemplates(db: AppDb): Promise<RecurringRow[]> {
       servingSize: foods.servingSize,
       servingUnit: foods.servingUnit,
       source: foods.source,
+      evolution: foods.evolution,
     })
     .from(recurringFoods)
     .innerJoin(foods, eq(recurringFoods.foodId, foods.id))
@@ -99,6 +101,7 @@ export async function materializeRecurringForDates(db: AppDb, dates: string[]): 
             servingSize: rec.servingSize,
             servingUnit: rec.servingUnit,
             source: "recurring",
+            evolution: rec.evolution,
           },
           {
             date,

@@ -4,7 +4,15 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { foods, recurringFoods } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
-import { MEALS, Meal, SCHEDULES, Schedule } from "@/lib/constants";
+import {
+  EVOLUTIONS,
+  Evolution,
+  evolutionForSource,
+  MEALS,
+  Meal,
+  SCHEDULES,
+  Schedule,
+} from "@/lib/constants";
 import { asCategory, inferCategory } from "@/lib/food-category";
 import { num, nullableNum } from "@/lib/format";
 import { revalidatePaths } from "@/lib/revalidate";
@@ -13,6 +21,10 @@ export type FoodFormState = { error: string | null; ok?: boolean };
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
+}
+
+function asEvolution(v: string, fallback: Evolution): Evolution {
+  return EVOLUTIONS.includes(v as Evolution) ? (v as Evolution) : fallback;
 }
 
 /** Optional extended nutrition fields shared by create/update. */
@@ -39,6 +51,8 @@ export async function createFood(
   const brand = str(formData.get("brand"));
   const servingUnit = str(formData.get("servingUnit")) || "g";
   const rawCategory = str(formData.get("category"));
+  const source = str(formData.get("source")) || "manual";
+  const rawEvolution = str(formData.get("evolution"));
 
   await db.insert(foods).values({
     name,
@@ -52,7 +66,8 @@ export async function createFood(
     fat: num(formData.get("fat")),
     ...extendedFields(formData),
     category: rawCategory ? asCategory(rawCategory) : inferCategory(servingUnit, name),
-    source: str(formData.get("source")) || "manual",
+    source,
+    evolution: asEvolution(rawEvolution, evolutionForSource(source)),
   });
 
   revalidatePaths("/", "/food", "/stats");
@@ -83,6 +98,7 @@ export async function updateFood(
       fat: num(formData.get("fat")),
       ...extendedFields(formData),
       category: asCategory(str(formData.get("category"))),
+      evolution: asEvolution(str(formData.get("evolution")), "commodity"),
     })
     .where(eq(foods.id, id));
 
@@ -146,6 +162,7 @@ export type ScannedFoodInput = {
   extras?: string | null;
   source: string;
   category?: string;
+  evolution?: string;
 };
 
 /** Save a scanned/looked-up product to the library, reusing an existing row
@@ -183,6 +200,10 @@ export async function upsertScannedFood(input: ScannedFoodInput): Promise<number
       category: input.category
         ? asCategory(input.category)
         : inferCategory(input.servingUnit, input.name),
+      evolution: asEvolution(
+        input.evolution ?? "",
+        evolutionForSource(input.source || "openfoodfacts"),
+      ),
     })
     .returning();
 

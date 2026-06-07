@@ -6,12 +6,19 @@ import { HealthCalendar } from "@/components/stats/HealthCalendar";
 import { BodyForm } from "@/components/stats/BodyForm";
 import { BodyHistory } from "@/components/stats/BodyHistory";
 import { GoalsEditor } from "@/components/stats/GoalsEditor";
+import { ContingencyEditor } from "@/components/stats/ContingencyEditor";
 import { Bloodwork } from "@/components/stats/Bloodwork";
 import { ProfileEditor } from "@/components/profile/ProfileEditor";
 import { getBloodPanels } from "@/lib/blood-data";
 import { getHealthSeries } from "@/lib/day-data";
 import { addDays, todayISO } from "@/lib/date";
-import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
+import {
+  getContingency,
+  getGoalWeight,
+  getMealSplit,
+  getProfile,
+  getTargets,
+} from "@/lib/settings";
 import {
   getBodyMetrics,
   getCalorieSeries,
@@ -21,19 +28,31 @@ import {
 
 export default async function StatsPage() {
   const today = todayISO();
-  const [targets, goalWeight, mealSplit, profile, weight, calories, lifts, metrics, bloodPanels, health] =
-    await Promise.all([
-      getTargets(),
-      getGoalWeight(),
-      getMealSplit(),
-      getProfile(),
-      getWeightSeries(),
-      getCalorieSeries(14),
-      getLiftProgression(),
-      getBodyMetrics(),
-      getBloodPanels(),
-      getHealthSeries(addDays(today, -363), today),
-    ]);
+  const [
+    targets,
+    goalWeight,
+    mealSplit,
+    profile,
+    weight,
+    calories,
+    lifts,
+    metrics,
+    bloodPanels,
+    health,
+    contingency,
+  ] = await Promise.all([
+    getTargets(),
+    getGoalWeight(),
+    getMealSplit(),
+    getProfile(),
+    getWeightSeries(),
+    getCalorieSeries(14),
+    getLiftProgression(),
+    getBodyMetrics(),
+    getBloodPanels(),
+    getHealthSeries(addDays(today, -363), today),
+    getContingency(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -61,6 +80,7 @@ export default async function StatsPage() {
         goalWeight={goalWeight}
         mealSplit={mealSplit}
       />
+      <ContingencyEditor contingency={contingency} />
       <ProfileEditor profile={profile} />
 
       <div>

@@ -29,18 +29,23 @@ function MacroStat({
 export function MacroSummary({
   totals,
   targets,
+  adjustedKcal,
 }: {
   totals: Macros;
   targets: { kcal: number; protein: number };
+  /** Contingency-adjusted calories; falls back to raw logged when omitted. */
+  adjustedKcal?: number;
 }) {
-  const kcalLeft = Math.round(targets.kcal - totals.kcal);
+  const shownKcal = Math.round(adjustedKcal ?? totals.kcal);
+  const buffer = shownKcal - Math.round(totals.kcal);
+  const kcalLeft = targets.kcal - shownKcal;
 
   return (
     <Card className="p-4">
       <div className="flex items-end justify-between">
         <div>
           <div className="text-3xl font-semibold leading-none">
-            {Math.round(totals.kcal)}
+            {shownKcal}
             <span className="text-base font-normal text-muted-foreground">
               {" "}
               / {targets.kcal} kcal
@@ -50,6 +55,12 @@ export function MacroSummary({
             {kcalLeft >= 0
               ? `${kcalLeft} kcal left`
               : `${Math.abs(kcalLeft)} kcal over`}
+            {buffer > 0 && (
+              <span className="text-warn">
+                {" "}
+                · {Math.round(totals.kcal)} logged +{buffer} contingency
+              </span>
+            )}
           </div>
         </div>
         <div className="text-right text-sm text-muted-foreground">
@@ -64,7 +75,7 @@ export function MacroSummary({
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
         <div
           className="h-full rounded-full bg-accent transition-all"
-          style={{ width: `${pct(totals.kcal, targets.kcal)}%` }}
+          style={{ width: `${pct(shownKcal, targets.kcal)}%` }}
         />
       </div>
 

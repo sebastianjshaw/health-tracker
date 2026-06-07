@@ -29,6 +29,53 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   other: "Other",
 };
 
+/**
+ * "Wardley" evolution axis for a food/entry — how knowable its calories are.
+ * Drives a contingency uplift on logged calories (commodity/measured = exact;
+ * product/estimated add a buffer for under-reporting). See README / the article.
+ */
+export const EVOLUTIONS = ["commodity", "product", "measured", "estimated"] as const;
+export type Evolution = (typeof EVOLUTIONS)[number];
+
+export const EVOLUTION_LABELS: Record<Evolution, string> = {
+  commodity: "Commodity — packaged / chain (exact)",
+  product: "Product — restaurant / branded",
+  measured: "Home-cooked — weighed (exact)",
+  estimated: "Home-cooked — estimated",
+};
+
+/** Compact labels for tight UI (per-entry chips). */
+export const EVOLUTION_SHORT: Record<Evolution, string> = {
+  commodity: "Exact",
+  product: "Restaurant",
+  measured: "Measured",
+  estimated: "Estimated",
+};
+
+export type Contingency = { product: number; estimated: number };
+/** Percentages from the article: restaurants +20%, eyeballed home meals +50%. */
+export const DEFAULT_CONTINGENCY: Contingency = { product: 20, estimated: 50 };
+
+/** Auto-classify a food's default evolution from how it entered the library. */
+export function evolutionForSource(source: string): Evolution {
+  switch (source) {
+    case "openfoodfacts":
+      return "commodity";
+    case "ai":
+    case "mcp":
+      return "estimated";
+    default:
+      return "measured"; // hand-entered → assume the figures are known
+  }
+}
+
+/** Calorie multiplier for an evolution given the tunable contingencies. */
+export function contingencyMultiplier(evolution: string, c: Contingency): number {
+  if (evolution === "product") return 1 + c.product / 100;
+  if (evolution === "estimated") return 1 + c.estimated / 100;
+  return 1; // commodity, measured → exact, no uplift
+}
+
 export const HEALTH_STATUSES = ["healthy", "unwell", "injured"] as const;
 export type HealthStatus = (typeof HEALTH_STATUSES)[number];
 
