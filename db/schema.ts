@@ -95,6 +95,14 @@ export const bodyMetrics = sqliteTable("body_metrics", {
   createdAt: createdAt(),
 }, (t) => [index("body_metrics_date_idx").on(t.date)]);
 
+/** Per-day health status (healthy/unwell/injured). One row per date; only
+ * non-default ('unwell'/'injured') days are stored, so the table stays sparse. */
+export const dayHealth = sqliteTable("day_health", {
+  date: text("date").primaryKey(),
+  status: text("status").notNull().default("healthy"),
+  createdAt: createdAt(),
+});
+
 export const cardioSessions = sqliteTable("cardio_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   date: text("date").notNull(),
@@ -153,6 +161,7 @@ export type Food = typeof foods.$inferSelect;
 export type RecurringFood = typeof recurringFoods.$inferSelect;
 export type FoodLogRow = typeof foodLog.$inferSelect;
 export type BodyMetric = typeof bodyMetrics.$inferSelect;
+export type DayHealthRow = typeof dayHealth.$inferSelect;
 export type CardioSession = typeof cardioSessions.$inferSelect;
 export type LiftSession = typeof liftSessions.$inferSelect;
 export type LiftSet = typeof liftSets.$inferSelect;

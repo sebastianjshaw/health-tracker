@@ -2,12 +2,15 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui";
 import { CalorieChart, LiftChart, WeightChart } from "@/components/stats/charts-lazy";
+import { HealthCalendar } from "@/components/stats/HealthCalendar";
 import { BodyForm } from "@/components/stats/BodyForm";
 import { BodyHistory } from "@/components/stats/BodyHistory";
 import { GoalsEditor } from "@/components/stats/GoalsEditor";
 import { Bloodwork } from "@/components/stats/Bloodwork";
 import { ProfileEditor } from "@/components/profile/ProfileEditor";
 import { getBloodPanels } from "@/lib/blood-data";
+import { getHealthSeries } from "@/lib/day-data";
+import { addDays, todayISO } from "@/lib/date";
 import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
 import {
   getBodyMetrics,
@@ -17,7 +20,8 @@ import {
 } from "@/lib/stats-data";
 
 export default async function StatsPage() {
-  const [targets, goalWeight, mealSplit, profile, weight, calories, lifts, metrics, bloodPanels] =
+  const today = todayISO();
+  const [targets, goalWeight, mealSplit, profile, weight, calories, lifts, metrics, bloodPanels, health] =
     await Promise.all([
       getTargets(),
       getGoalWeight(),
@@ -28,6 +32,7 @@ export default async function StatsPage() {
       getLiftProgression(),
       getBodyMetrics(),
       getBloodPanels(),
+      getHealthSeries(addDays(today, -363), today),
     ]);
 
   return (
@@ -47,6 +52,7 @@ export default async function StatsPage() {
       <WeightChart data={weight} goalWeight={goalWeight} />
       <CalorieChart data={calories} target={targets.kcal} mealSplit={mealSplit} />
       <LiftChart data={lifts} />
+      <HealthCalendar statuses={health} />
 
       <BodyForm />
       <GoalsEditor

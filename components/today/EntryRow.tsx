@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useTransition } from "react";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui";
@@ -14,6 +15,8 @@ import type { DayEntry } from "@/lib/food-data";
 
 export function EntryRow({ entry, date }: { entry: DayEntry; date: string }) {
   const [pending, start] = useTransition();
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
 
   const kcal = Math.round(entry.kcal * entry.quantity);
   const protein = Math.round(entry.protein * entry.quantity);
@@ -30,12 +33,25 @@ export function EntryRow({ entry, date }: { entry: DayEntry; date: string }) {
     });
   }
 
-  function changeQty(delta: number) {
+  function setQty(next: number) {
     if (entry.kind !== "logged" || entry.logId == null) return;
-    const next = Number((entry.quantity + delta).toFixed(2));
+    const clean = Number(next.toFixed(2));
+    if (!Number.isFinite(clean) || clean < 0) return;
     start(async () => {
-      await setLogQuantity(entry.logId!, next);
+      await setLogQuantity(entry.logId!, clean);
     });
+  }
+
+  function startEdit() {
+    if (entry.kind !== "logged") return;
+    setDraft(trimNum(entry.quantity));
+    setEditing(true);
+  }
+
+  function commitEdit() {
+    setEditing(false);
+    const val = parseFloat(draft.replace(",", "."));
+    if (Number.isFinite(val) && val > 0 && val !== entry.quantity) setQty(val);
   }
 
   return (
@@ -54,17 +70,44 @@ export function EntryRow({ entry, date }: { entry: DayEntry; date: string }) {
       {entry.kind === "logged" && (
         <div className="flex items-center rounded-lg border border-border text-sm">
           <button
-            onClick={() => changeQty(-0.5)}
-            className="px-2 py-1 text-muted-foreground hover:text-foreground"
-            aria-label="Decrease quantity"
+            onClick={() => setQty(entry.quantity - 1)}
+            disabled={pending || entry.quantity <= 1}
+            className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+            aria-label="Decrease quantity by 1"
           >
             −
           </button>
-          <span className="w-7 text-center tabular-nums">{trimNum(entry.quantity)}</span>
+          {editing ? (
+            <input
+              type="number"
+              step="any"
+              inputMode="decimal"
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onFocus={(e) => e.target.select()}
+              onBlur={commitEdit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              className="w-12 bg-transparent text-center tabular-nums focus-visible:outline-none"
+              aria-label="Set quantity"
+            />
+          ) : (
+            <button
+              onClick={startEdit}
+              className="w-9 text-center tabular-nums hover:text-foreground"
+              aria-label={`Quantity ${trimNum(entry.quantity)} — tap to edit`}
+            >
+              {trimNum(entry.quantity)}
+            </button>
+          )}
           <button
-            onClick={() => changeQty(0.5)}
-            className="px-2 py-1 text-muted-foreground hover:text-foreground"
-            aria-label="Increase quantity"
+            onClick={() => setQty(entry.quantity + 1)}
+            disabled={pending}
+            className="px-2 py-1 text-muted-foreground hover:text-foreground disabled:opacity-40"
+            aria-label="Increase quantity by 1"
           >
             +
           </button>
