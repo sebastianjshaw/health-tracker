@@ -8,7 +8,13 @@ import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
 import { MEALS } from "./constants";
 import { revalidatePaths } from "./revalidate";
-import { MealSplit, setGoalWeight, setMealSplit, setSetting } from "./settings";
+import {
+  MealSplit,
+  setContingency,
+  setGoalWeight,
+  setMealSplit,
+  setSetting,
+} from "./settings";
 
 function mealSplitSum(split: MealSplit): number {
   return MEALS.reduce((s, m) => s + (split[m] || 0), 0);
@@ -85,6 +91,20 @@ export async function deleteBody(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(bodyMetrics).where(eq(bodyMetrics.id, id));
   revalidatePaths("/stats");
+  return actionOk();
+}
+
+export async function saveContingency(input: {
+  product: number;
+  estimated: number;
+}): Promise<ActionResult> {
+  await requireAuth();
+  const clamp = (n: number) => Math.max(0, Math.min(200, Math.round(n)));
+  if (!Number.isFinite(input.product) || !Number.isFinite(input.estimated)) {
+    return actionFail("Enter both contingency percentages");
+  }
+  await setContingency({ product: clamp(input.product), estimated: clamp(input.estimated) });
+  revalidatePaths("/stats", "/");
   return actionOk();
 }
 

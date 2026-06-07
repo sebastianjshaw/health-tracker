@@ -7,9 +7,10 @@ import {
   liftSessions,
   liftSets,
 } from "@/db/schema";
-import { Exercise, Meal } from "./constants";
+import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { addDays, todayISO } from "./date";
 import { materializeRecurringRange } from "./recurring-materialize";
+import { getContingency } from "./settings";
 
 export async function getBodyMetrics() {
   return db
@@ -62,6 +63,7 @@ export async function calorieSeriesRange(
   for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
 
   await materializeRecurringRange(db, start, end);
+  const contingency = await getContingency();
 
   const logged = await db
     .select({
@@ -70,6 +72,7 @@ export async function calorieSeriesRange(
       quantity: foodLog.quantity,
       kcal: foodLog.kcal,
       protein: foodLog.protein,
+      evolution: foodLog.evolution,
     })
     .from(foodLog)
     .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
@@ -79,7 +82,7 @@ export async function calorieSeriesRange(
   const mealsByDate = new Map<string, Set<Meal>>();
   for (const r of logged) {
     const acc = loggedByDate.get(r.date) ?? { kcal: 0, protein: 0 };
-    acc.kcal += r.kcal * r.quantity;
+    acc.kcal += r.kcal * r.quantity * contingencyMultiplier(r.evolution, contingency);
     acc.protein += r.protein * r.quantity;
     loggedByDate.set(r.date, acc);
     const ms = mealsByDate.get(r.date) ?? new Set<Meal>();

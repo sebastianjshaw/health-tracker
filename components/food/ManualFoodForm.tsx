@@ -3,7 +3,14 @@
 import * as React from "react";
 import { useActionState } from "react";
 import { Button, Field, Input, Select } from "@/components/ui";
-import { CATEGORIES, CATEGORY_LABELS } from "@/lib/constants";
+import {
+  CATEGORIES,
+  CATEGORY_LABELS,
+  EVOLUTIONS,
+  EVOLUTION_LABELS,
+  Evolution,
+  evolutionForSource,
+} from "@/lib/constants";
 import { inferCategory } from "@/lib/food-category";
 import { NutrientList, type Extra } from "./NutrientList";
 import {
@@ -99,6 +106,8 @@ export function ManualFoodForm({
   };
   const defaultCategory =
     food?.category ?? inferCategory(String(dv.servingUnit), String(dv.name));
+  const defaultEvolution: Evolution =
+    (food?.evolution as Evolution) ?? evolutionForSource(String(dv.source));
 
   const cleanExtras = extras
     .filter((e) => e.label.trim() !== "")
@@ -132,6 +141,16 @@ export function ManualFoodForm({
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>
               {CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <Field label="Calorie confidence (contingency)">
+        <Select name="evolution" defaultValue={defaultEvolution}>
+          {EVOLUTIONS.map((e) => (
+            <option key={e} value={e}>
+              {EVOLUTION_LABELS[e]}
             </option>
           ))}
         </Select>

@@ -5,23 +5,54 @@ import { useTransition } from "react";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui";
 import { TrashIcon } from "@/components/icons";
+import {
+  Contingency,
+  EVOLUTIONS,
+  EVOLUTION_LABELS,
+  EVOLUTION_SHORT,
+  Evolution,
+  contingencyMultiplier,
+} from "@/lib/constants";
 import { servingLabel, trimNum } from "@/lib/format";
 import {
   deleteLogEntry,
   removeRecurringFromDay,
+  setLogEvolution,
   setLogQuantity,
 } from "@/lib/log-actions";
 import type { DayEntry } from "@/lib/food-data";
 
-export function EntryRow({ entry, date }: { entry: DayEntry; date: string }) {
+export function EntryRow({
+  entry,
+  date,
+  contingency,
+}: {
+  entry: DayEntry;
+  date: string;
+  contingency: Contingency;
+}) {
   const [pending, start] = useTransition();
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState("");
+  const [evo, setEvo] = React.useState<Evolution>(
+    (entry.evolution as Evolution) ?? "commodity",
+  );
 
-  const kcal = Math.round(entry.kcal * entry.quantity);
+  const mult = contingencyMultiplier(evo, contingency);
+  const upliftPct = Math.round((mult - 1) * 100);
+  const kcal = Math.round(entry.kcal * entry.quantity * mult);
   const protein = Math.round(entry.protein * entry.quantity);
   const carbs = Math.round(entry.carbs * entry.quantity);
   const fat = Math.round(entry.fat * entry.quantity);
+
+  function cycleEvolution() {
+    if (entry.logId == null) return;
+    const next = EVOLUTIONS[(EVOLUTIONS.indexOf(evo) + 1) % EVOLUTIONS.length];
+    setEvo(next);
+    start(async () => {
+      await setLogEvolution(entry.logId!, next);
+    });
+  }
 
   function remove() {
     start(async () => {
@@ -60,6 +91,23 @@ export function EntryRow({ entry, date }: { entry: DayEntry; date: string }) {
         <div className="flex items-center gap-2">
           <span className="truncate font-medium">{entry.name}</span>
           {entry.kind === "recurring" && <Badge>default</Badge>}
+          {entry.logId != null && (
+            <button
+              type="button"
+              onClick={cycleEvolution}
+              disabled={pending}
+              title={`Calorie confidence: ${EVOLUTION_LABELS[evo]} — tap to change`}
+              className={cn(
+                "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                upliftPct > 0
+                  ? "bg-warn/15 text-warn"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {EVOLUTION_SHORT[evo]}
+              {upliftPct > 0 ? ` +${upliftPct}%` : ""}
+            </button>
+          )}
         </div>
         <div className="truncate text-xs text-muted-foreground">
           {servingLabel(entry.quantity, entry.servingSize, entry.servingUnit)} ·{" "}

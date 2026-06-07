@@ -12,6 +12,7 @@ export type LibraryFoodLike = PerServingMacros & {
   servingSize: number;
   servingUnit: string;
   source: string;
+  evolution: string;
 };
 
 /** Wrap absolute portion totals as one serving (MCP free-text logging). */
@@ -52,6 +53,7 @@ export function foodLogSnapshot(
     servingSize: food.servingSize,
     servingUnit: food.servingUnit,
     source: food.source,
+    evolution: food.evolution,
     recurringId: opts.recurringId ?? null,
   };
 }

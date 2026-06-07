@@ -3,6 +3,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { settings } from "@/db/schema";
 import {
+  Contingency,
+  DEFAULT_CONTINGENCY,
   DEFAULT_LIFT_WEIGHTS,
   DEFAULT_MEAL_SPLIT,
   DEFAULT_TARGETS,
@@ -30,6 +32,23 @@ export async function setSetting<T>(key: string, value: T): Promise<void> {
       target: settings.key,
       set: { value: JSON.stringify(value) },
     });
+}
+
+/** Wardley contingency percentages (restaurant / estimated home-cooked). */
+export async function getContingency(): Promise<Contingency> {
+  const stored = await getSetting<Partial<Contingency>>("contingency", {});
+  return {
+    product:
+      typeof stored.product === "number" ? stored.product : DEFAULT_CONTINGENCY.product,
+    estimated:
+      typeof stored.estimated === "number"
+        ? stored.estimated
+        : DEFAULT_CONTINGENCY.estimated,
+  };
+}
+
+export async function setContingency(c: Contingency): Promise<void> {
+  await setSetting("contingency", c);
 }
 
 export type Targets = { kcal: number; protein: number };

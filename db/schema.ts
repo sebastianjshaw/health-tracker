@@ -34,6 +34,9 @@ export const foods = sqliteTable("foods", {
   source: text("source").notNull().default("manual"),
   // 'food' | 'drink' | 'other' — for filtering the library
   category: text("category").notNull().default("food"),
+  // Wardley evolution: 'commodity' | 'product' | 'measured' | 'estimated'
+  // (default calorie-confidence classification; drives the contingency uplift)
+  evolution: text("evolution").notNull().default("commodity"),
   createdAt: createdAt(),
 });
 
@@ -67,6 +70,8 @@ export const foodLog = sqliteTable("food_log", {
   servingSize: real("serving_size").notNull().default(100),
   servingUnit: text("serving_unit").notNull().default("g"),
   source: text("source").notNull().default("manual"),
+  // Wardley evolution snapshot — drives the per-entry contingency uplift
+  evolution: text("evolution").notNull().default("commodity"),
   // set when this row was materialised from a recurring template
   recurringId: integer("recurring_id"),
   createdAt: createdAt(),

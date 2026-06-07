@@ -21,6 +21,7 @@ export type DayEntry = {
   servingSize: number;
   servingUnit: string;
   source: string;
+  evolution: string;
 };
 
 export type RecurringWithFood = {
@@ -96,6 +97,7 @@ export async function getDayEntries(date: string): Promise<DayEntry[]> {
     servingSize: r.servingSize,
     servingUnit: r.servingUnit,
     source: r.source,
+    evolution: r.evolution,
   }));
 }
 
