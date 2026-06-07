@@ -29,6 +29,15 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   other: "Other",
 };
 
+export const HEALTH_STATUSES = ["healthy", "unwell", "injured"] as const;
+export type HealthStatus = (typeof HEALTH_STATUSES)[number];
+
+export const HEALTH_STATUS_LABELS: Record<HealthStatus, string> = {
+  healthy: "Healthy",
+  unwell: "Unwell",
+  injured: "Injured",
+};
+
 export const SCHEDULES = ["everyday", "weekday", "weekend"] as const;
 export type Schedule = (typeof SCHEDULES)[number];
 
