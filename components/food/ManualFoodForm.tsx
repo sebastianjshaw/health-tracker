@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { useActionState } from "react";
-import { Button, Field, Input } from "@/components/ui";
+import { Button, Field, Input, Select } from "@/components/ui";
+import { CATEGORIES, CATEGORY_LABELS } from "@/lib/constants";
+import { inferCategory } from "@/lib/food-category";
 import { NutrientList, type Extra } from "./NutrientList";
 import {
   createFood,
@@ -95,6 +97,8 @@ export function ManualFoodForm({
     sodium: food?.sodium ?? "",
     source: food?.source ?? defaults?.source ?? "manual",
   };
+  const defaultCategory =
+    food?.category ?? inferCategory(String(dv.servingUnit), String(dv.name));
 
   const cleanExtras = extras
     .filter((e) => e.label.trim() !== "")
@@ -122,6 +126,16 @@ export function ManualFoodForm({
           <Input name="servingUnit" defaultValue={dv.servingUnit} placeholder="g, ml, serving" />
         </Field>
       </div>
+
+      <Field label="Category">
+        <Select name="category" defaultValue={defaultCategory}>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </Select>
+      </Field>
 
       <p className="text-xs text-muted-foreground">Nutrition per serving:</p>
       <div className="grid grid-cols-2 gap-3">

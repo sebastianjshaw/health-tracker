@@ -20,6 +20,15 @@ export function mealForTime(d: Date = new Date()): Meal {
   return "snacks";
 }
 
+export const CATEGORIES = ["food", "drink", "other"] as const;
+export type Category = (typeof CATEGORIES)[number];
+
+export const CATEGORY_LABELS: Record<Category, string> = {
+  food: "Food",
+  drink: "Drink",
+  other: "Other",
+};
+
 export const SCHEDULES = ["everyday", "weekday", "weekend"] as const;
 export type Schedule = (typeof SCHEDULES)[number];
 

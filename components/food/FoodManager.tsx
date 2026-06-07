@@ -12,6 +12,8 @@ import {
   removeRecurringById,
 } from "@/app/(main)/food/actions";
 import {
+  CATEGORIES,
+  CATEGORY_LABELS,
   MEALS,
   MEAL_LABELS,
   Meal,
@@ -155,6 +157,7 @@ function FoodLibrary({
 }) {
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortKey>("recent");
+  const [category, setCategory] = React.useState("all");
   const [source, setSource] = React.useState("all");
   const [page, setPage] = React.useState(1);
 
@@ -167,6 +170,7 @@ function FoodLibrary({
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = foods.filter((f) => {
+      if (category !== "all" && f.category !== category) return false;
       if (source !== "all" && f.source !== source) return false;
       if (!q) return true;
       return (
@@ -180,7 +184,7 @@ function FoodLibrary({
         : (a, b) => createdMs(b) - createdMs(a) || b.id - a.id,
     );
     return list;
-  }, [foods, query, sort, source]);
+  }, [foods, query, sort, category, source]);
 
   // Any change to the result set snaps back to the first page.
   const setFilter = <T,>(setter: (v: T) => void) => (v: T) => {
@@ -210,8 +214,8 @@ function FoodLibrary({
             onChange={(e) => setFilter(setQuery)(e.target.value)}
             aria-label="Search food library"
           />
-          <div className="flex gap-2">
-            <Field label="Sort" className="flex-1">
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Sort">
               <Select
                 value={sort}
                 onChange={(e) => setFilter(setSort)(e.target.value as SortKey)}
@@ -220,8 +224,21 @@ function FoodLibrary({
                 <option value="az">Name (A–Z)</option>
               </Select>
             </Field>
+            <Field label="Type">
+              <Select
+                value={category}
+                onChange={(e) => setFilter(setCategory)(e.target.value)}
+              >
+                <option value="all">All types</option>
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {CATEGORY_LABELS[c]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
             {sources.length > 1 && (
-              <Field label="Source" className="flex-1">
+              <Field label="Source">
                 <Select
                   value={source}
                   onChange={(e) => setFilter(setSource)(e.target.value)}

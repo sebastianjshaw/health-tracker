@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { foods, recurringFoods } from "@/db/schema";
 import { requireAuth } from "@/lib/auth";
 import { MEALS, Meal, SCHEDULES, Schedule } from "@/lib/constants";
+import { asCategory, inferCategory } from "@/lib/food-category";
 import { num, nullableNum } from "@/lib/format";
 import { revalidatePaths } from "@/lib/revalidate";
 
@@ -36,18 +37,21 @@ export async function createFood(
 
   const barcode = str(formData.get("barcode"));
   const brand = str(formData.get("brand"));
+  const servingUnit = str(formData.get("servingUnit")) || "g";
+  const rawCategory = str(formData.get("category"));
 
   await db.insert(foods).values({
     name,
     brand: brand || null,
     barcode: barcode || null,
     servingSize: num(formData.get("servingSize"), 100),
-    servingUnit: str(formData.get("servingUnit")) || "g",
+    servingUnit,
     kcal: num(formData.get("kcal")),
     protein: num(formData.get("protein")),
     carbs: num(formData.get("carbs")),
     fat: num(formData.get("fat")),
     ...extendedFields(formData),
+    category: rawCategory ? asCategory(rawCategory) : inferCategory(servingUnit, name),
     source: str(formData.get("source")) || "manual",
   });
 
@@ -78,6 +82,7 @@ export async function updateFood(
       carbs: num(formData.get("carbs")),
       fat: num(formData.get("fat")),
       ...extendedFields(formData),
+      category: asCategory(str(formData.get("category"))),
     })
     .where(eq(foods.id, id));
 
@@ -140,6 +145,7 @@ export type ScannedFoodInput = {
   sodium?: number | null;
   extras?: string | null;
   source: string;
+  category?: string;
 };
 
 /** Save a scanned/looked-up product to the library, reusing an existing row
@@ -174,6 +180,9 @@ export async function upsertScannedFood(input: ScannedFoodInput): Promise<number
       sodium: input.sodium ?? null,
       extras: input.extras ?? null,
       source: input.source || "openfoodfacts",
+      category: input.category
+        ? asCategory(input.category)
+        : inferCategory(input.servingUnit, input.name),
     })
     .returning();
 

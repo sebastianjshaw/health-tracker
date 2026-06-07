@@ -21,6 +21,7 @@ import {
   settings,
 } from "../db/schema";
 import { todayISO } from "../lib/date";
+import { inferCategory } from "../lib/food-category";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
 import { totals as macroTotals } from "../lib/nutrition";
 import {
@@ -62,7 +63,7 @@ async function ensureMcpLibraryFood(opts: {
   }
   const [row] = await db
     .insert(foods)
-    .values({ name, ...serving, source: "mcp" })
+    .values({ name, ...serving, source: "mcp", category: inferCategory(serving.servingUnit, name) })
     .returning({ id: foods.id });
   return row.id;
 }

@@ -32,6 +32,8 @@ export const foods = sqliteTable("foods", {
   extras: text("extras"),
   // 'manual' | 'openfoodfacts' | 'ai'
   source: text("source").notNull().default("manual"),
+  // 'food' | 'drink' | 'other' — for filtering the library
+  category: text("category").notNull().default("food"),
   createdAt: createdAt(),
 });
 
