@@ -14,6 +14,16 @@ import { trimNum } from "@/lib/format";
 import { completeLiftWorkout, updateLiftWeights } from "@/lib/activity-actions";
 import type { NextLiftWorkout } from "@/lib/activity-data";
 
+// Reps cycle 0 → MAX_REPS then wrap back to 0. Colour zones flag overwork:
+// 1–5 on target (green), 6–8 amber, 9–10 red.
+const MAX_REPS = 10;
+function repClass(r: number): string {
+  if (r <= 0) return "border-border bg-muted text-muted-foreground";
+  if (r <= REPS_PER_SET) return "border-accent bg-accent text-accent-foreground";
+  if (r <= 8) return "border-transparent bg-warn text-white";
+  return "border-transparent bg-danger text-white";
+}
+
 export function LiftTracker({
   next,
   date,
@@ -23,7 +33,7 @@ export function LiftTracker({
 }) {
   const [reps, setReps] = React.useState<Record<string, number[]>>(() =>
     Object.fromEntries(
-      next.exercises.map((e) => [e.exercise, Array(e.sets).fill(REPS_PER_SET)]),
+      next.exercises.map((e) => [e.exercise, Array(e.sets).fill(0)]),
     ),
   );
   const [weights, setWeights] = React.useState<Record<string, number>>(() =>
@@ -41,7 +51,7 @@ export function LiftTracker({
     setSaved(false);
     setReps((prev) => {
       const arr = [...prev[ex]];
-      arr[i] = arr[i] <= 0 ? REPS_PER_SET : arr[i] - 1;
+      arr[i] = arr[i] >= MAX_REPS ? 0 : arr[i] + 1;
       return { ...prev, [ex]: arr };
     });
   }
@@ -93,7 +103,7 @@ export function LiftTracker({
             ? "Set your working weights (± 2.5 kg)."
             : finished
               ? "Workout saved for today."
-              : "Tap a set to log reps. Hit all reps to progress next time."}
+              : "Tap each set to count reps (0→10). Green = on target; amber/red flags overwork."}
         </p>
         {!finished && (
           <button
@@ -157,16 +167,9 @@ export function LiftTracker({
                     onClick={() => cycle(e.exercise, i)}
                     className={cn(
                       "flex h-11 w-11 items-center justify-center rounded-full border text-base font-semibold transition",
-                      r === REPS_PER_SET
-                        ? "border-accent bg-accent text-accent-foreground"
-                        : r === 0
-                          ? "border-border bg-muted text-muted-foreground"
-                          : "text-warn",
+                      repClass(r),
                       (finished || pending) && "pointer-events-none opacity-60",
                     )}
-                    style={
-                      r > 0 && r < REPS_PER_SET ? { borderColor: "var(--warn)" } : undefined
-                    }
                     aria-label={`${EXERCISE_LABELS[e.exercise]} set ${i + 1}: ${r} reps`}
                   >
                     {r}
