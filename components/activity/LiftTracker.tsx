@@ -13,6 +13,7 @@ import {
 import { trimNum } from "@/lib/format";
 import { completeLiftWorkout, updateLiftWeights } from "@/lib/activity-actions";
 import type { NextLiftWorkout } from "@/lib/activity-data";
+import { RestTimer } from "./RestTimer";
 
 // Reps cycle 0 → MAX_REPS then wrap back to 0. Colour zones flag overwork:
 // 1–5 on target (green), 6–8 amber, 9–10 red.
@@ -114,6 +115,12 @@ export function LiftTracker({
           </button>
         )}
       </div>
+
+      {!editing && !finished && (
+        <div className="mb-4">
+          <RestTimer />
+        </div>
+      )}
 
       <div className="space-y-4">
         {next.exercises.map((e) => (
