@@ -11,16 +11,24 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { asc, and, desc, eq, isNotNull, like, sql } from "drizzle-orm";
+import { asc, and, desc, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   bloodMarkers,
   bodyMetrics,
+  cardioSessions,
   foodLog,
   foods,
+  liftSessions,
+  liftSets,
   settings,
 } from "../db/schema";
-import { evolutionForSource } from "../lib/constants";
+import {
+  DEFAULT_LIFT_WEIGHTS,
+  EXERCISE_LABELS,
+  Exercise,
+  evolutionForSource,
+} from "../lib/constants";
 import { todayISO } from "../lib/date";
 import { inferCategory } from "../lib/food-category";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
@@ -323,6 +331,120 @@ server.tool(
       .orderBy(desc(bloodMarkers.date), asc(bloodMarkers.category))
       .all();
     return text(JSON.stringify(rows, null, 2));
+  },
+);
+
+/** Load lift sets for a set of session ids, grouped by session. */
+async function liftSetsBySession(
+  sessionIds: number[],
+): Promise<Map<number, (typeof liftSets.$inferSelect)[]>> {
+  const bySession = new Map<number, (typeof liftSets.$inferSelect)[]>();
+  if (sessionIds.length === 0) return bySession;
+  const sets = await db
+    .select()
+    .from(liftSets)
+    .where(inArray(liftSets.sessionId, sessionIds))
+    .all();
+  for (const st of sets) {
+    const arr = bySession.get(st.sessionId);
+    if (arr) arr.push(st);
+    else bySession.set(st.sessionId, [st]);
+  }
+  return bySession;
+}
+
+server.tool(
+  "get_workouts",
+  "Recent Seblifts 5x5 strength workouts, newest first. Each session lists its exercises with the working weight (kg) and the reps logged per set (5 = hit target, 0 = not done). Defaults to the last 20 sessions.",
+  { limit: z.number().optional() },
+  async ({ limit }) => {
+    const sessions = await db
+      .select()
+      .from(liftSessions)
+      .orderBy(desc(liftSessions.date), desc(liftSessions.id))
+      .limit(limit ?? 20)
+      .all();
+    const bySession = await liftSetsBySession(sessions.map((s) => s.id));
+
+    const out = sessions.map((s) => {
+      const sets = (bySession.get(s.id) ?? []).slice().sort((a, b) => a.setNumber - b.setNumber);
+      const byExercise = new Map<string, { weightKg: number; reps: (number | null)[] }>();
+      for (const st of sets) {
+        const e = byExercise.get(st.exercise) ?? { weightKg: st.targetWeightKg, reps: [] };
+        e.weightKg = st.targetWeightKg;
+        e.reps.push(st.repsDone);
+        byExercise.set(st.exercise, e);
+      }
+      return {
+        date: s.date,
+        workout: s.workout,
+        notes: s.notes ?? undefined,
+        exercises: [...byExercise.entries()].map(([exercise, v]) => ({
+          exercise,
+          label: EXERCISE_LABELS[exercise as Exercise] ?? exercise,
+          weightKg: v.weightKg,
+          reps: v.reps,
+        })),
+      };
+    });
+    return text(JSON.stringify(out, null, 2));
+  },
+);
+
+server.tool(
+  "get_lift_progression",
+  "Per-exercise strength progression: the top working weight (kg) at each session over time (oldest first), plus the current working weights used for the next workout.",
+  {},
+  async () => {
+    const sessions = await db
+      .select()
+      .from(liftSessions)
+      .orderBy(asc(liftSessions.date), asc(liftSessions.id))
+      .all();
+    const bySession = await liftSetsBySession(sessions.map((s) => s.id));
+
+    const progression: Record<string, { date: string; weightKg: number }[]> = {};
+    for (const s of sessions) {
+      const top = new Map<string, number>();
+      for (const st of bySession.get(s.id) ?? []) {
+        top.set(st.exercise, Math.max(top.get(st.exercise) ?? 0, st.targetWeightKg));
+      }
+      for (const [exercise, weightKg] of top) {
+        (progression[exercise] ??= []).push({ date: s.date, weightKg });
+      }
+    }
+
+    const current = await getSetting("liftWeights", DEFAULT_LIFT_WEIGHTS);
+    return text(JSON.stringify({ current, progression }, null, 2));
+  },
+);
+
+server.tool(
+  "get_cardio",
+  "Recent cardio sessions (run/bike/row/walk/swim/other), newest first. Defaults to the last 30.",
+  { limit: z.number().optional() },
+  async ({ limit }) => {
+    const rows = await db
+      .select()
+      .from(cardioSessions)
+      .orderBy(desc(cardioSessions.date), desc(cardioSessions.id))
+      .limit(limit ?? 30)
+      .all();
+    return text(
+      JSON.stringify(
+        rows.map((r) => ({
+          date: r.date,
+          type: r.type,
+          durationMin: r.durationMin,
+          distanceKm: r.distanceKm,
+          avgHr: r.avgHr,
+          kcal: r.kcal,
+          notes: r.notes ?? undefined,
+        })),
+        null,
+        2,
+      ),
+    );
   },
 );
 
