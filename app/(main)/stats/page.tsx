@@ -12,6 +12,7 @@ import { ProfileEditor } from "@/components/profile/ProfileEditor";
 import { getBloodPanels } from "@/lib/blood-data";
 import { getHealthSeries } from "@/lib/day-data";
 import { addDays, todayISO } from "@/lib/date";
+import { ageFrom, suggestedCalorieTarget } from "@/lib/health";
 import {
   getContingency,
   getGoalWeight,
@@ -54,6 +55,15 @@ export default async function StatsPage() {
     getContingency(),
   ]);
 
+  const currentWeight = weight.length ? weight[weight.length - 1].weight : null;
+  const suggestedKcal = suggestedCalorieTarget({
+    currentWeightKg: currentWeight,
+    heightCm: profile.heightCm,
+    age: profile.dob ? ageFrom(profile.dob) : null,
+    sex: profile.sex,
+    goalWeightKg: goalWeight,
+  });
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -71,7 +81,7 @@ export default async function StatsPage() {
       <WeightChart data={weight} goalWeight={goalWeight} />
       <CalorieChart data={calories} target={targets.kcal} mealSplit={mealSplit} />
       <LiftChart data={lifts} />
-      <HealthCalendar statuses={health} />
+      <HealthCalendar statuses={health} end={today} />
 
       <BodyForm />
       <GoalsEditor
@@ -79,6 +89,7 @@ export default async function StatsPage() {
         protein={targets.protein}
         goalWeight={goalWeight}
         mealSplit={mealSplit}
+        suggestedKcal={suggestedKcal}
       />
       <ContingencyEditor contingency={contingency} />
       <ProfileEditor profile={profile} />

@@ -7,6 +7,7 @@ import { Contingency } from "@/lib/constants";
 import { saveContingency } from "@/lib/body-actions";
 
 export function ContingencyEditor({ contingency }: { contingency: Contingency }) {
+  const [open, setOpen] = React.useState(false);
   const [product, setProduct] = React.useState(String(contingency.product));
   const [estimated, setEstimated] = React.useState(String(contingency.estimated));
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -25,8 +26,21 @@ export function ContingencyEditor({ contingency }: { contingency: Contingency })
 
   return (
     <Card className="p-4">
-      <h2 className="font-semibold">Calorie contingency</h2>
-      <p className="mt-0.5 text-sm text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={open}
+      >
+        <span className="font-semibold">Calorie contingency</span>
+        <span className="text-sm text-muted-foreground">
+          {open ? "–" : `+${contingency.product}% / +${contingency.estimated}%`}
+        </span>
+      </button>
+
+      {!open ? null : (
+        <>
+      <p className="mt-3 text-sm text-muted-foreground">
         Buffer added to logged calories by confidence — packaged/measured items stay
         exact, restaurant and eyeballed home meals get an uplift for under-reporting.
       </p>
@@ -52,6 +66,8 @@ export function ContingencyEditor({ contingency }: { contingency: Contingency })
       <Button className="mt-3 w-full" onClick={save} disabled={pending}>
         {pending ? "Saving…" : "Save contingency"}
       </Button>
+        </>
+      )}
     </Card>
   );
 }

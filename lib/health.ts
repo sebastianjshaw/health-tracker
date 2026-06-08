@@ -15,6 +15,47 @@ export function bmiClass(b: number | null): string {
   return "Obese (class III)";
 }
 
+/** Mifflin-St Jeor basal metabolic rate (kcal/day). Null if inputs missing. */
+export function bmr(
+  weightKg: number | null,
+  heightCm: number | null,
+  age: number | null,
+  sex: string,
+): number | null {
+  if (!weightKg || !heightCm || age == null) return null;
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
+  // sex adjustment; "other"/unset uses the midpoint of the male/female terms.
+  const adj = sex === "male" ? 5 : sex === "female" ? -161 : -78;
+  return base + adj;
+}
+
+// Sedentary-to-light default; a healthy ~0.5 kg/week loss ≈ 550 kcal/day deficit.
+const ACTIVITY_FACTOR = 1.4;
+const HEALTHY_DEFICIT = 550;
+
+/**
+ * Suggested daily calorie target: maintenance (TDEE) at the *current* weight,
+ * minus a healthy weight-loss deficit while still above goal weight (so it
+ * naturally eases off as weight drops). Floored at a safe minimum. Null if the
+ * profile lacks the inputs needed to compute it.
+ */
+export function suggestedCalorieTarget(opts: {
+  currentWeightKg: number | null;
+  heightCm: number | null;
+  age: number | null;
+  sex: string;
+  goalWeightKg: number | null;
+}): number | null {
+  const b = bmr(opts.currentWeightKg, opts.heightCm, opts.age, opts.sex);
+  if (b == null) return null;
+  const tdee = b * ACTIVITY_FACTOR;
+  const losing =
+    opts.goalWeightKg != null && (opts.currentWeightKg ?? 0) > opts.goalWeightKg;
+  const raw = losing ? tdee - HEALTHY_DEFICIT : tdee;
+  const floor = opts.sex === "female" ? 1200 : 1500;
+  return Math.round(Math.max(floor, raw) / 50) * 50;
+}
+
 /** Whole-years age from a YYYY-MM-DD date of birth. */
 export function ageFrom(dob: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return null;

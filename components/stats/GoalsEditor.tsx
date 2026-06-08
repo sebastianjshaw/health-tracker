@@ -11,11 +11,14 @@ export function GoalsEditor({
   protein,
   goalWeight,
   mealSplit,
+  suggestedKcal,
 }: {
   kcal: number;
   protein: number;
   goalWeight: number | null;
   mealSplit: Record<Meal, number>;
+  /** Calculated target from current weight + goal; null if profile incomplete. */
+  suggestedKcal?: number | null;
 }) {
   const [k, setK] = React.useState(String(kcal));
   const [p, setP] = React.useState(String(protein));
@@ -65,6 +68,30 @@ export function GoalsEditor({
           <Input type="number" step="any" inputMode="decimal" placeholder="kg" value={gw} onChange={(e) => { setGw(e.target.value); touch(); }} />
         </Field>
       </div>
+
+      {suggestedKcal != null ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Suggested ≈{" "}
+          <span className="font-medium text-foreground">{suggestedKcal}</span> kcal/day
+          from your current weight &amp; goal.{" "}
+          {String(suggestedKcal) !== k && (
+            <button
+              type="button"
+              onClick={() => {
+                setK(String(suggestedKcal));
+                touch();
+              }}
+              className="font-medium text-accent"
+            >
+              Use this
+            </button>
+          )}
+        </p>
+      ) : (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Add height, DOB &amp; sex in your profile to get a suggested calorie target.
+        </p>
+      )}
 
       <div className="mt-3">
         <div className="mb-1 flex items-center justify-between">
