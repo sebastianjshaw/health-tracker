@@ -13,6 +13,7 @@ import {
   SCHEDULES,
   Schedule,
 } from "@/lib/constants";
+import { todayISO } from "@/lib/date";
 import { asCategory, inferCategory } from "@/lib/food-category";
 import { num, nullableNum } from "@/lib/format";
 import { revalidatePaths } from "@/lib/revalidate";
@@ -134,7 +135,9 @@ export async function addRecurring(
     .get();
   if (existing) return;
 
-  await db.insert(recurringFoods).values({ foodId, meal, schedule, quantity });
+  await db
+    .insert(recurringFoods)
+    .values({ foodId, meal, schedule, quantity, startDate: todayISO() });
   revalidatePaths("/", "/food", "/stats");
 }
 

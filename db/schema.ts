@@ -51,6 +51,9 @@ export const recurringFoods = sqliteTable("recurring_foods", {
   // 'weekday' (Mon-Fri) | 'weekend' (Sat-Sun) | 'everyday'
   schedule: text("schedule").notNull(),
   quantity: real("quantity").notNull().default(1),
+  // the default only applies from this date onward; existing rows backfilled to
+  // 2026-06-02, new ones to the day they were added.
+  startDate: text("start_date").notNull().default("2026-06-02"),
   createdAt: createdAt(),
 });
 

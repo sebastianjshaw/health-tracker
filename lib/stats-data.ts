@@ -3,6 +3,7 @@ import { and, asc, desc, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bodyMetrics,
+  cardioSessions,
   foodLog,
   liftSessions,
   liftSets,
@@ -99,6 +100,19 @@ export async function calorieSeriesRange(
       meals: [...(mealsByDate.get(date) ?? [])],
     };
   });
+}
+
+export type DistancePoint = { date: string; km: number };
+
+/** All cardio sessions that recorded a distance, oldest first. */
+export async function getCardioDistances(): Promise<DistancePoint[]> {
+  const rows = await db
+    .select({ date: cardioSessions.date, km: cardioSessions.distanceKm })
+    .from(cardioSessions)
+    .where(isNotNull(cardioSessions.distanceKm))
+    .orderBy(asc(cardioSessions.date))
+    .all();
+  return rows.map((r) => ({ date: r.date, km: r.km as number }));
 }
 
 export type LiftPoint = { date: string } & Partial<Record<Exercise, number>>;

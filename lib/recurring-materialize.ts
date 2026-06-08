@@ -26,6 +26,7 @@ type RecurringRow = {
   servingUnit: string;
   source: string;
   evolution: string;
+  startDate: string;
 };
 
 async function loadRecurringTemplates(db: AppDb): Promise<RecurringRow[]> {
@@ -45,6 +46,7 @@ async function loadRecurringTemplates(db: AppDb): Promise<RecurringRow[]> {
       servingUnit: foods.servingUnit,
       source: foods.source,
       evolution: foods.evolution,
+      startDate: recurringFoods.startDate,
     })
     .from(recurringFoods)
     .innerJoin(foods, eq(recurringFoods.foodId, foods.id))
@@ -89,6 +91,7 @@ export async function materializeRecurringForDates(db: AppDb, dates: string[]): 
     const removed = removedByDate.get(date);
 
     for (const rec of templates) {
+      if (date < rec.startDate) continue; // default not active yet on this day
       if (!schedules.includes(rec.schedule as Schedule)) continue;
       if (removed?.has(rec.id)) continue;
       if (materialized.has(`${date}:${rec.id}`)) continue;

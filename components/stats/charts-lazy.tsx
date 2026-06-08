@@ -24,3 +24,8 @@ export const LiftChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.LiftChart })),
   { ssr: false, loading: ChartSkeleton },
 );
+
+export const DistanceChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.DistanceChart })),
+  { ssr: false, loading: ChartSkeleton },
+);

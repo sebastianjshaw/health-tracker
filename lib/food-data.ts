@@ -30,6 +30,7 @@ export type RecurringWithFood = {
   meal: Meal;
   schedule: Schedule;
   quantity: number;
+  startDate: string;
   name: string;
   brand: string | null;
   kcal: number;
@@ -60,6 +61,7 @@ export async function getRecurring(): Promise<RecurringWithFood[]> {
       meal: recurringFoods.meal,
       schedule: recurringFoods.schedule,
       quantity: recurringFoods.quantity,
+      startDate: recurringFoods.startDate,
       name: foods.name,
       brand: foods.brand,
       kcal: foods.kcal,

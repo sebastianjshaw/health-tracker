@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import {
   Bar,
   BarChart,
@@ -14,8 +15,12 @@ import {
   YAxis,
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
-import type { CaloriePoint, LiftPoint, WeightPoint } from "@/lib/stats-data";
+import { addDays } from "@/lib/date";
+import type { CaloriePoint, DistancePoint, LiftPoint, WeightPoint } from "@/lib/stats-data";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Calorie-bar status colours.
 const CAL_COLORS = {
@@ -229,6 +234,157 @@ export function LiftChart({ data }: { data: LiftPoint[] }) {
               </span>
             ))}
           </div>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+// ---- Distance ----
+
+const MARATHON_KM = 42.195;
+// Reference distances, smallest → largest, for a friendly "equivalent" callout.
+const ROUTES = [
+  { label: "a parkrun", km: 5 },
+  { label: "a 10K", km: 10 },
+  { label: "a half-marathon", km: 21.1 },
+  { label: "Gothenburg → Borås", km: 65 },
+  { label: "Gothenburg → Jönköping", km: 150 },
+  { label: "Gothenburg → Örebro", km: 285 },
+  { label: "Gothenburg → Stockholm", km: 470 },
+  { label: "Stockholm → Malmö", km: 615 },
+  { label: "the length of Sweden", km: 1572 },
+];
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Friendly equivalent for a total distance, e.g. "1.5 marathons · about Gothenburg → Örebro". */
+function distanceEquivalent(km: number): string | null {
+  if (km <= 0) return null;
+  const marathons = round1(km / MARATHON_KM);
+  const mStr = marathons === 1 ? "1 marathon" : `${marathons} marathons`;
+  // Closest reference by multiplicative distance.
+  const route = ROUTES.reduce((best, r) =>
+    Math.abs(Math.log(km / r.km)) < Math.abs(Math.log(km / best.km)) ? r : best,
+  );
+  const ratio = km / route.km;
+  const rStr =
+    ratio >= 0.9 && ratio <= 1.1 ? `about ${route.label}` : `${round1(ratio)}× ${route.label}`;
+  return `${mStr} · ${rStr}`;
+}
+
+type Period = "day" | "week" | "month" | "year";
+const PERIODS: { key: Period; label: string }[] = [
+  { key: "day", label: "Day" },
+  { key: "week", label: "Week" },
+  { key: "month", label: "Month" },
+  { key: "year", label: "Year" },
+];
+const PERIOD_COUNT: Record<Period, number> = { day: 14, week: 12, month: 12, year: 5 };
+
+function mondayOf(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return addDays(iso, -((d.getDay() + 6) % 7));
+}
+function bucketKey(period: Period, date: string): string {
+  if (period === "day") return date;
+  if (period === "week") return mondayOf(date);
+  if (period === "month") return date.slice(0, 7);
+  return date.slice(0, 4);
+}
+function bucketLabel(period: Period, key: string): string {
+  if (period === "day" || period === "week") {
+    const [, m, d] = key.split("-");
+    return `${d}/${m}`;
+  }
+  if (period === "month") {
+    const [y, m] = key.split("-");
+    return `${MONTHS[Number(m) - 1]} ${y.slice(2)}`;
+  }
+  return key;
+}
+/** Ordered bucket keys for the window ending at `end` (oldest → newest). */
+function bucketKeysEnding(period: Period, end: string): string[] {
+  const n = PERIOD_COUNT[period];
+  const keys: string[] = [];
+  if (period === "day") {
+    for (let i = n - 1; i >= 0; i--) keys.push(addDays(end, -i));
+  } else if (period === "week") {
+    const m = mondayOf(end);
+    for (let i = n - 1; i >= 0; i--) keys.push(addDays(m, -i * 7));
+  } else if (period === "month") {
+    const [y, mo] = end.split("-").map(Number);
+    for (let i = n - 1; i >= 0; i--) {
+      const d = new Date(y, mo - 1 - i, 1);
+      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+    }
+  } else {
+    const y = Number(end.slice(0, 4));
+    for (let i = n - 1; i >= 0; i--) keys.push(String(y - i));
+  }
+  return keys;
+}
+
+export function DistanceChart({ data, end }: { data: DistancePoint[]; end: string }) {
+  const [period, setPeriod] = React.useState<Period>("month");
+
+  const { chart, total } = React.useMemo(() => {
+    const keys = bucketKeysEnding(period, end);
+    const sums = new Map<string, number>(keys.map((k) => [k, 0]));
+    for (const p of data) {
+      const k = bucketKey(period, p.date);
+      if (sums.has(k)) sums.set(k, (sums.get(k) ?? 0) + p.km);
+    }
+    return {
+      chart: keys.map((k) => ({ label: bucketLabel(period, k), km: round1(sums.get(k) ?? 0) })),
+      total: keys.reduce((s, k) => s + (sums.get(k) ?? 0), 0),
+    };
+  }, [data, end, period]);
+
+  const windowLabel = period === "day" ? "14 days" : `${PERIOD_COUNT[period]} ${period}s`;
+  const equiv = distanceEquivalent(total);
+
+  return (
+    <ChartCard title="Distance">
+      <div className="mb-3 flex gap-1.5">
+        {PERIODS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => setPeriod(p.key)}
+            className={cn(
+              "rounded-lg px-2.5 py-1 text-sm",
+              period === p.key
+                ? "bg-accent text-accent-foreground"
+                : "border border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {data.length === 0 ? (
+        <EmptyState>Log a cardio session with a distance to see this.</EmptyState>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+              <YAxis stroke={AXIS} fontSize={11} width={40} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                cursor={{ fill: "var(--muted)" }}
+                formatter={(v) => [`${v} km`, "Distance"]}
+              />
+              <Bar dataKey="km" radius={[4, 4, 0, 0]} fill="#2563eb" name="km" />
+            </BarChart>
+          </ResponsiveContainer>
+          <p className="mt-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">{round1(total)} km</span> over the last{" "}
+            {windowLabel}
+            {equiv && <> · {equiv}</>}
+          </p>
         </>
       )}
     </ChartCard>

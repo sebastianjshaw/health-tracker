@@ -80,7 +80,8 @@ export function FoodManager({
               <div className="min-w-0">
                 <div className="truncate font-medium">{r.name}</div>
                 <div className="text-xs text-muted-foreground">
-                  {MEAL_LABELS[r.meal]} · {SCHEDULE_LABELS[r.schedule]}
+                  {MEAL_LABELS[r.meal]} · {SCHEDULE_LABELS[r.schedule]} · from{" "}
+                  {r.startDate}
                 </div>
               </div>
               <button
