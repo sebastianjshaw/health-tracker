@@ -8,6 +8,6 @@ import { revalidatePaths } from "./revalidate";
 export async function saveProfile(profile: Profile): Promise<ActionResult> {
   await requireAuth();
   await setProfile(profile);
-  revalidatePaths("/report", "/stats");
+  revalidatePaths("/report", "/profile");
   return actionOk();
 }

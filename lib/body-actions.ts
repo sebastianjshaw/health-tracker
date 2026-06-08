@@ -104,7 +104,7 @@ export async function saveContingency(input: {
     return actionFail("Enter both contingency percentages");
   }
   await setContingency({ product: clamp(input.product), estimated: clamp(input.estimated) });
-  revalidatePaths("/stats", "/");
+  revalidatePaths("/settings", "/stats", "/");
   return actionOk();
 }
 
@@ -128,6 +128,6 @@ export async function saveGoals(input: {
       : null,
   );
   await setMealSplit(input.mealSplit);
-  revalidatePaths("/stats", "/");
+  revalidatePaths("/profile", "/stats", "/");
   return actionOk();
 }

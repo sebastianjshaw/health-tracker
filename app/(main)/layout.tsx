@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { isAuthenticated } from "@/lib/auth";
-import { logout } from "@/lib/auth-actions";
+import { AccountMenu } from "@/components/AccountMenu";
 import { BottomNav } from "@/components/BottomNav";
+import { getProfile } from "@/lib/settings";
 
 export default async function MainLayout({
   children,
@@ -13,6 +14,8 @@ export default async function MainLayout({
     redirect("/login");
   }
 
+  const profile = await getProfile();
+
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur print:hidden">
@@ -20,14 +23,7 @@ export default async function MainLayout({
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <span className="text-accent">♥</span> Health
           </Link>
-          <form action={logout}>
-            <button
-              type="submit"
-              className="text-sm text-muted-foreground hover:text-foreground"
-            >
-              Sign out
-            </button>
-          </form>
+          <AccountMenu name={profile.name} />
         </div>
       </header>
 
