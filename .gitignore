@@ -43,6 +43,14 @@ local.db
 # personal health scans / PII / private docs — keep the whole folder out of git
 docs/
 
+# OAuth / API credentials & tokens (Google Health, etc.) — never commit
+credentials.json
+client_secret*.json
+*-credentials.json
+token.json
+*.token.json
+service-account*.json
+
 # vercel
 .vercel
 
