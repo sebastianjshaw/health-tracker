@@ -9,7 +9,6 @@ import type { Profile, Sex } from "@/lib/settings";
 
 export function ProfileEditor({ profile }: { profile: Profile }) {
   const [p, setP] = React.useState<Profile>(profile);
-  const [open, setOpen] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [pending, start] = useTransition();
 
@@ -27,15 +26,8 @@ export function ProfileEditor({ profile }: { profile: Profile }) {
 
   return (
     <Card className="p-4">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between font-semibold"
-      >
-        <span>Profile (for doctor report)</span>
-        <span className="text-muted-foreground">{open ? "–" : "+"}</span>
-      </button>
-      {open && (
-        <div className="mt-4 space-y-3">
+      <h2 className="font-semibold">Profile (for doctor report)</h2>
+      <div className="mt-4 space-y-3">
           <Field label="Name">
             <Input value={p.name} onChange={(e) => set({ name: e.target.value })} />
           </Field>
@@ -84,7 +76,6 @@ export function ProfileEditor({ profile }: { profile: Profile }) {
             {pending ? "Saving…" : saved ? "Saved ✓" : "Save profile"}
           </Button>
         </div>
-      )}
     </Card>
   );
 }
