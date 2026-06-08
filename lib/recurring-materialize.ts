@@ -1,11 +1,15 @@
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
-import { db as appDb } from "@/db";
-import { foodLog, foods, recurringFoods, recurringRemovals } from "@/db/schema";
+import type { LibSQLDatabase } from "drizzle-orm/libsql";
+import * as schema from "../db/schema";
+import { foodLog, foods, recurringFoods, recurringRemovals } from "../db/schema";
 import { Schedule } from "./constants";
 import { addDays, schedulesFor } from "./date";
 import { foodLogSnapshot } from "./food-snapshot";
 
-export type AppDb = typeof appDb;
+/** The app's libSQL/drizzle database. Defined structurally (not `typeof db`)
+ * so this module never imports the server-only db client — that keeps it
+ * loadable by the standalone MCP process, which passes in its own client. */
+export type AppDb = LibSQLDatabase<typeof schema>;
 
 type RecurringRow = {
   id: number;
