@@ -124,6 +124,22 @@ export function StatsView({
 
   const distTotal = r1(fDistances.reduce((s, d) => s + d.km, 0));
 
+  // Days flagged unwell ("ill") within the selected range; injured shown alongside.
+  let illDays = 0;
+  let injuredDays = 0;
+  for (const [date, status] of Object.entries(health)) {
+    if (date > today || (cutoff != null && date < cutoff)) continue;
+    if (status === "unwell") illDays += 1;
+    else if (status === "injured") injuredDays += 1;
+  }
+  const illTone: Tone = illDays === 0 ? "good" : "even";
+  const illSub =
+    injuredDays > 0
+      ? `+${injuredDays} injured`
+      : illDays === 0
+        ? "none logged"
+        : `day${illDays === 1 ? "" : "s"} unwell`;
+
   const signed = (n: number, unit: string) => `${n > 0 ? "+" : ""}${n} ${unit}`;
 
   return (
@@ -180,6 +196,7 @@ export function StatsView({
           sub="total"
           tone={distTotal > 0 ? "good" : "none"}
         />
+        <Metric label="Days ill" value={`${illDays}`} sub={illSub} tone={illTone} />
       </Card>
 
       <Section title="Body">
