@@ -2,7 +2,7 @@ import "server-only";
 import { db } from "@/db";
 import { cardioSessions, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
-import { addDays, todayISO } from "@/lib/date";
+import { todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
   getAccessToken,
@@ -64,17 +64,14 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   if (!token) throw new Error("Google Health is not connected.");
 
   const today = todayISO();
-  const start = (await getCursor()) ?? addDays(today, -14);
-  const startISO = `${start}T00:00:00Z`;
-  const endISO = `${addDays(today, 1)}T00:00:00Z`;
+  // First sync (no cursor) imports full history; then we go incremental.
+  const start = (await getCursor()) ?? "2015-01-01";
   const summary: SyncSummary = { from: start, to: today, exercise: 0, sleep: 0, restingHr: 0 };
 
   // ---- Exercise → cardioSessions ----
-  const exPoints = await listDataPoints(
-    token,
-    DATA_TYPES.exercise,
-    `exercise.interval.start_time >= "${startISO}" AND exercise.interval.start_time < "${endISO}"`,
-  );
+  // exercise is a session type — it rejects time filters, so fetch all and
+  // window client-side by start date.
+  const exPoints = await listDataPoints(token, DATA_TYPES.exercise);
   for (const dp of exPoints) {
     const ex = dp.exercise as
       | {
@@ -90,7 +87,7 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
       | undefined;
     const date = dateOf(ex?.interval?.startTime);
     const externalId = typeof dp.name === "string" ? dp.name : null;
-    if (!ex || !date || !externalId) continue;
+    if (!ex || !date || !externalId || date < start) continue;
     const m = ex.metricsSummary ?? {};
     await db
       .insert(cardioSessions)
@@ -118,12 +115,8 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     summary.exercise++;
   }
 
-  // ---- Sleep → sleepSessions ----
-  const sleepPoints = await listDataPoints(
-    token,
-    DATA_TYPES.sleep,
-    `sleep.interval.start_time >= "${startISO}" AND sleep.interval.start_time < "${endISO}"`,
-  );
+  // ---- Sleep → sleepSessions ---- (session type: fetch all, window client-side)
+  const sleepPoints = await listDataPoints(token, DATA_TYPES.sleep);
   for (const dp of sleepPoints) {
     const sl = dp.sleep as
       | {
@@ -137,7 +130,7 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     // wake date = end of the interval
     const date = dateOf(sl?.interval?.endTime) ?? dateOf(sl?.interval?.startTime);
     const externalId = typeof dp.name === "string" ? dp.name : null;
-    if (!sl || !date || !externalId) continue;
+    if (!sl || !date || !externalId || date < start) continue;
     const stages = new Map<string, number>();
     for (const s of sl.summary?.stagesSummary ?? []) {
       if (s.type) stages.set(s.type.toUpperCase(), num(s.minutes) ?? 0);
@@ -174,18 +167,24 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   }
 
   // ---- Daily resting heart rate → heartRateDaily ----
+  // Daily summary type supports a server-side date filter.
   const hrPoints = await listDataPoints(
     token,
     DATA_TYPES.restingHr,
-    `daily_resting_heart_rate.date >= "${start}" AND daily_resting_heart_rate.date <= "${today}"`,
+    `daily_resting_heart_rate.date >= "${start}"`,
   );
   for (const dp of hrPoints) {
     const rhr = dp.dailyRestingHeartRate as
-      | { date?: string; beatsPerMinute?: string | number; value?: number }
+      | { date?: { year?: number; month?: number; day?: number }; beatsPerMinute?: string | number }
       | undefined;
-    const date = (typeof rhr?.date === "string" ? rhr.date : null) ?? dateOf(dp.name);
-    const bpm = num(rhr?.beatsPerMinute) ?? num(rhr?.value);
-    const externalId = typeof dp.name === "string" ? dp.name : date ? `gh-rhr-${date}` : null;
+    const d = rhr?.date;
+    const date =
+      d?.year && d?.month && d?.day
+        ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`
+        : null;
+    const bpm = num(rhr?.beatsPerMinute);
+    const externalId =
+      (typeof dp.name === "string" ? dp.name : null) ?? (date ? `gh-rhr-${date}` : null);
     if (!date || bpm == null || !externalId) continue;
     await db
       .insert(heartRateDaily)

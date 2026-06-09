@@ -130,21 +130,25 @@ export async function getAccessToken(): Promise<string | null> {
 
 export type DataPoint = Record<string, unknown>;
 
+const MAX_PAGES = 200; // safety bound (200k points)
+
 /**
- * List all data points of a type within [startISO, endISO), following pages.
- * `dataType` is the kebab-case endpoint id; `filterField` is the snake_case
- * prefix used in the time filter (e.g. "exercise.interval.start_time").
+ * List data points of a type, following pages. Pass `filter` only for daily
+ * summary types that support it (e.g. `daily_resting_heart_rate.date >= "…"`);
+ * interval/session types (exercise, sleep) reject member filters, so fetch
+ * unfiltered and window them client-side.
  */
 export async function listDataPoints(
   accessToken: string,
   dataType: string,
-  filter: string,
+  filter?: string,
 ): Promise<DataPoint[]> {
   const out: DataPoint[] = [];
   let pageToken: string | undefined;
+  let pages = 0;
   do {
     const url = new URL(`${API_BASE}/${dataType}/dataPoints`);
-    url.searchParams.set("filter", filter);
+    if (filter) url.searchParams.set("filter", filter);
     url.searchParams.set("pageSize", "1000");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 
@@ -176,6 +180,6 @@ export async function listDataPoints(
     const data = (await res.json()) as { dataPoints?: DataPoint[]; nextPageToken?: string };
     if (data.dataPoints) out.push(...data.dataPoints);
     pageToken = data.nextPageToken || undefined;
-  } while (pageToken);
+  } while (pageToken && ++pages < MAX_PAGES);
   return out;
 }
