@@ -13,6 +13,8 @@ import {
   MEALS,
   Meal,
 } from "./constants";
+import { todayISO } from "./date";
+import type { TargetEntry } from "./targets";
 
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const row = await db.select().from(settings).where(eq(settings.key, key)).get();
@@ -53,8 +55,38 @@ export async function setContingency(c: Contingency): Promise<void> {
 
 export type Targets = { kcal: number; protein: number };
 
+/** Current (latest) target — used by all "now" displays. */
 export async function getTargets(): Promise<Targets> {
   return getSetting<Targets>("targets", DEFAULT_TARGETS);
+}
+
+/**
+ * Dated history of calorie/protein targets, ascending by `from`. Seeds from the
+ * legacy single "targets" value with a far-past `from` so existing days keep
+ * the current target (no retroactive re-judging).
+ */
+export async function getTargetHistory(): Promise<TargetEntry[]> {
+  const stored = await getSetting<TargetEntry[] | null>("targetHistory", null);
+  if (stored && stored.length) {
+    return [...stored].sort((a, b) => a.from.localeCompare(b.from));
+  }
+  const current = await getTargets();
+  return [{ from: "2000-01-01", kcal: current.kcal, protein: current.protein }];
+}
+
+/** Record a target change effective today (updates today's entry if one
+ * exists), and mirror the latest into "targets" for current-state readers. */
+export async function setTargets(kcal: number, protein: number): Promise<void> {
+  const k = Math.max(0, Math.round(kcal));
+  const p = Math.max(0, Math.round(protein));
+  const today = todayISO();
+  const history = await getTargetHistory();
+  const lastIsToday = history.length > 0 && history[history.length - 1].from === today;
+  const next = lastIsToday
+    ? [...history.slice(0, -1), { from: today, kcal: k, protein: p }]
+    : [...history, { from: today, kcal: k, protein: p }];
+  await setSetting("targetHistory", next);
+  await setSetting<Targets>("targets", { kcal: k, protein: p });
 }
 
 export async function getLiftWeights(): Promise<Record<Exercise, number>> {

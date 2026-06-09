@@ -127,7 +127,11 @@ export function GoalsEditor({
         )}
       </div>
 
-      <Button className="mt-4 w-full" onClick={save} disabled={pending || !splitValid}>
+      <p className="mt-3 text-xs text-muted-foreground">
+        New calorie/protein targets apply from today onward — past days keep the
+        target that was set then.
+      </p>
+      <Button className="mt-3 w-full" onClick={save} disabled={pending || !splitValid}>
         {pending ? "Saving…" : saved ? "Saved ✓" : "Save goals"}
       </Button>
       {error && <p className="mt-2 text-sm text-danger">{error}</p>}

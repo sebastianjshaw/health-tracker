@@ -150,7 +150,8 @@ export function CalorieChart({
   const fraction = (meals: Meal[]) =>
     meals.reduce((s, m) => s + (mealSplit[m] ?? 0), 0) / 100;
   const colorFor = (d: CaloriePoint) => {
-    const eff = target * fraction(d.meals);
+    // Judge each day against the target that was in effect that day.
+    const eff = (d.targetKcal ?? target) * fraction(d.meals);
     if (eff <= 0) return CAL_COLORS.none;
     if (d.kcal > eff * 1.1) return CAL_COLORS.over; // >10% over → red
     if (d.kcal > eff) return CAL_COLORS.near; // up to 10% over → amber

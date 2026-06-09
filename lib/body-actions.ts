@@ -13,7 +13,7 @@ import {
   setContingency,
   setGoalWeight,
   setMealSplit,
-  setSetting,
+  setTargets,
 } from "./settings";
 
 function mealSplitSum(split: MealSplit): number {
@@ -119,10 +119,7 @@ export async function saveGoals(input: {
   if (mealSplitSum(input.mealSplit) !== 100) {
     return actionFail("Meal split must sum to 100%");
   }
-  await setSetting("targets", {
-    kcal: Math.max(0, Math.round(input.kcal)),
-    protein: Math.max(0, Math.round(input.protein)),
-  });
+  await setTargets(input.kcal, input.protein);
   await setGoalWeight(
     input.goalWeight != null && Number.isFinite(input.goalWeight)
       ? input.goalWeight
