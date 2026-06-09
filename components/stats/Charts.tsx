@@ -153,8 +153,8 @@ export function CalorieChart({
     const eff = target * fraction(d.meals);
     if (eff <= 0) return CAL_COLORS.none;
     if (d.kcal > eff * 1.1) return CAL_COLORS.over; // >10% over → red
-    if (d.kcal >= eff * 0.9) return CAL_COLORS.near; // within ±10% → amber
-    return CAL_COLORS.under; // comfortably under → green
+    if (d.kcal > eff) return CAL_COLORS.near; // up to 10% over → amber
+    return CAL_COLORS.under; // at or under target → green (contingency already covers under-reporting)
   };
 
   const logged = data.filter((d) => d.kcal > 0);
@@ -201,8 +201,8 @@ export function CalorieChart({
           </ResponsiveContainer>
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <Swatch color={CAL_COLORS.under} label="Under" />
-            <Swatch color={CAL_COLORS.near} label="Within ±10%" />
+            <Swatch color={CAL_COLORS.under} label="On/under" />
+            <Swatch color={CAL_COLORS.near} label="Up to 10% over" />
             <Swatch color={CAL_COLORS.over} label="Over" />
             <span>· judged vs the day’s logged-meal share of {target} kcal</span>
           </div>
