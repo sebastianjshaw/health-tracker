@@ -12,6 +12,7 @@ import {
 } from "./google-health";
 
 const SOURCE = "google-health";
+const MIN_EXERCISE_MIN = 10; // below this, with no distance, treat as auto-detected noise
 
 // ---- small parse helpers (the API mixes numbers and int64-as-string) ----
 const num = (v: unknown): number | null => {
@@ -88,29 +89,31 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     const date = dateOf(ex?.interval?.startTime);
     const externalId = typeof dp.name === "string" ? dp.name : null;
     if (!ex || !date || !externalId || date < start) continue;
+
     const m = ex.metricsSummary ?? {};
+    const durationMin = durationToMin(ex.activeDuration);
+    const distanceKm = m.distanceMillimeters != null ? m.distanceMillimeters / 1_000_000 : null;
+
+    // Skip Google Fit's auto-detected micro-activities: short blips with no
+    // distance (e.g. 1–5 min "OTHER"). Keep anything with a distance or ≥10 min.
+    if ((distanceKm == null || distanceKm === 0) && (durationMin == null || durationMin < MIN_EXERCISE_MIN)) {
+      continue;
+    }
+
+    const row = {
+      date,
+      type: exerciseToCardio(ex.exerciseType),
+      durationMin,
+      distanceKm,
+      avgHr: num(m.averageHeartRateBeatsPerMinute),
+      kcal: m.caloriesKcal != null ? Math.round(m.caloriesKcal) : null,
+    };
     await db
       .insert(cardioSessions)
-      .values({
-        date,
-        type: exerciseToCardio(ex.exerciseType),
-        durationMin: durationToMin(ex.activeDuration),
-        distanceKm: m.distanceMillimeters != null ? m.distanceMillimeters / 1_000_000 : null,
-        avgHr: num(m.averageHeartRateBeatsPerMinute),
-        kcal: m.caloriesKcal != null ? Math.round(m.caloriesKcal) : null,
-        source: SOURCE,
-        externalId,
-      })
+      .values({ ...row, source: SOURCE, externalId })
       .onConflictDoUpdate({
         target: [cardioSessions.source, cardioSessions.externalId],
-        set: {
-          date,
-          type: exerciseToCardio(ex.exerciseType),
-          durationMin: durationToMin(ex.activeDuration),
-          distanceKm: m.distanceMillimeters != null ? m.distanceMillimeters / 1_000_000 : null,
-          avgHr: num(m.averageHeartRateBeatsPerMinute),
-          kcal: m.caloriesKcal != null ? Math.round(m.caloriesKcal) : null,
-        },
+        set: row,
       });
     summary.exercise++;
   }
