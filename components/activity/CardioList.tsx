@@ -2,19 +2,11 @@
 
 import { Card, EmptyState } from "@/components/ui";
 import { DeleteButton } from "@/components/DeleteButton";
+import { CARDIO_LABELS, CardioType } from "@/lib/constants";
 import { prettyDate, relativeLabel } from "@/lib/date";
 import { trimNum } from "@/lib/format";
 import { deleteCardio } from "@/lib/activity-actions";
 import type { CardioSession } from "@/db/schema";
-
-const TYPE_LABELS: Record<string, string> = {
-  run: "Run",
-  bike: "Bike",
-  row: "Row",
-  walk: "Walk",
-  swim: "Swim",
-  other: "Other",
-};
 
 export function CardioList({ sessions }: { sessions: CardioSession[] }) {
   if (sessions.length === 0) {
@@ -33,7 +25,9 @@ export function CardioList({ sessions }: { sessions: CardioSession[] }) {
         return (
           <div key={s.id} className="flex items-center gap-2 px-4 py-3">
             <div className="min-w-0 flex-1">
-              <div className="font-medium">{TYPE_LABELS[s.type] ?? s.type}</div>
+              <div className="font-medium">
+                {CARDIO_LABELS[s.type as CardioType] ?? s.type}
+              </div>
               <div className="truncate text-xs text-muted-foreground">
                 {relativeLabel(s.date) ?? prettyDate(s.date)}
                 {bits.length > 0 && ` · ${bits.join(" · ")}`}

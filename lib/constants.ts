@@ -97,6 +97,15 @@ export const SCHEDULE_LABELS: Record<Schedule, string> = {
 export const CARDIO_TYPES = ["run", "bike", "row", "walk", "swim", "other"] as const;
 export type CardioType = (typeof CARDIO_TYPES)[number];
 
+export const CARDIO_LABELS: Record<CardioType, string> = {
+  run: "Run",
+  bike: "Bike",
+  row: "Row",
+  walk: "Walk",
+  swim: "Swim",
+  other: "Other",
+};
+
 // StrongLifts 5x5
 export const EXERCISES = ["squat", "bench", "row", "ohp", "deadlift"] as const;
 export type Exercise = (typeof EXERCISES)[number];

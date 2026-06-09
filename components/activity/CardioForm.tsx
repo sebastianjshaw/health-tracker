@@ -3,18 +3,9 @@
 import * as React from "react";
 import { useTransition } from "react";
 import { Button, Card, Field, Input, Select } from "@/components/ui";
-import { CARDIO_TYPES, CardioType } from "@/lib/constants";
+import { CARDIO_LABELS, CARDIO_TYPES, CardioType } from "@/lib/constants";
 import { logCardio } from "@/lib/activity-actions";
 import { nullableNum } from "@/lib/format";
-
-const TYPE_LABELS: Record<CardioType, string> = {
-  run: "Run",
-  bike: "Bike",
-  row: "Row",
-  walk: "Walk",
-  swim: "Swim",
-  other: "Other",
-};
 
 export function CardioForm({ date }: { date: string }) {
   const formRef = React.useRef<HTMLFormElement>(null);
@@ -53,7 +44,7 @@ export function CardioForm({ date }: { date: string }) {
           <Select value={type} onChange={(e) => setType(e.target.value as CardioType)}>
             {CARDIO_TYPES.map((t) => (
               <option key={t} value={t}>
-                {TYPE_LABELS[t]}
+                {CARDIO_LABELS[t]}
               </option>
             ))}
           </Select>
