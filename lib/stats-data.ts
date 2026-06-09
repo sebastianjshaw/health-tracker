@@ -13,7 +13,8 @@ import {
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { addDays, todayISO } from "./date";
 import { materializeRecurringRange } from "./recurring-materialize";
-import { getContingency } from "./settings";
+import { getContingency, getTargetHistory } from "./settings";
+import { targetForDate } from "./targets";
 
 export async function getBodyMetrics() {
   return db
@@ -45,6 +46,9 @@ export type CaloriePoint = {
   protein: number;
   /** Meals that have at least one entry that day (drives the proportional target). */
   meals: Meal[];
+  /** Target that was in effect on this date (so past days aren't re-judged). */
+  targetKcal: number;
+  targetProtein: number;
 };
 
 /**
@@ -67,6 +71,7 @@ export async function calorieSeriesRange(
 
   await materializeRecurringRange(db, start, end);
   const contingency = await getContingency();
+  const targetHistory = await getTargetHistory();
 
   const logged = await db
     .select({
@@ -95,11 +100,14 @@ export async function calorieSeriesRange(
 
   return dates.map((date) => {
     const l = loggedByDate.get(date);
+    const t = targetForDate(targetHistory, date);
     return {
       date,
       kcal: Math.round(l?.kcal ?? 0),
       protein: Math.round(l?.protein ?? 0),
       meals: [...(mealsByDate.get(date) ?? [])],
+      targetKcal: t.kcal,
+      targetProtein: t.protein,
     };
   });
 }
