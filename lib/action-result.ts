@@ -1,7 +1,7 @@
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export type ActionResult = { ok: true; message?: string } | { ok: false; error: string };
 
-export function actionOk(): ActionResult {
-  return { ok: true };
+export function actionOk(message?: string): ActionResult {
+  return { ok: true, message };
 }
 
 export function actionFail(error: string): ActionResult {

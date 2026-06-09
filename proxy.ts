@@ -5,6 +5,10 @@ import { SESSION_COOKIE, isValidToken } from "@/lib/session";
 // Next.js 16: "Proxy" replaces "Middleware". Runs on the edge runtime.
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Cron sync authenticates itself with CRON_SECRET (no session cookie).
+  if (pathname.startsWith("/api/cron/")) return NextResponse.next();
+
   const isLogin = pathname === "/login";
   const valid = await isValidToken(request.cookies.get(SESSION_COOKIE)?.value);
 
