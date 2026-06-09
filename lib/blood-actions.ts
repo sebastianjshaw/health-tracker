@@ -33,7 +33,7 @@ export async function addBloodMarker(
     category: input.category ?? null,
     clinic: input.clinic ?? null,
   });
-  revalidatePaths("/stats");
+  revalidatePaths("/bloodwork", "/report");
   return actionOk();
 }
 
@@ -59,13 +59,13 @@ export async function addBloodPanel(input: {
       clinic: input.clinic ?? null,
     })),
   );
-  revalidatePaths("/stats");
+  revalidatePaths("/bloodwork", "/report");
   return actionOk();
 }
 
 export async function deleteBloodMarker(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(bloodMarkers).where(eq(bloodMarkers.id, id));
-  revalidatePaths("/stats");
+  revalidatePaths("/bloodwork", "/report");
   return actionOk();
 }

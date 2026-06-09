@@ -84,14 +84,14 @@ export async function logBody(input: BodyInput): Promise<ActionResult> {
   }
 
   // Latest weight also drives the Profile "suggested target" and the doctor report.
-  revalidatePaths("/stats", "/profile", "/report");
+  revalidatePaths("/measurements", "/stats", "/profile", "/report");
   return actionOk();
 }
 
 export async function deleteBody(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(bodyMetrics).where(eq(bodyMetrics.id, id));
-  revalidatePaths("/stats", "/profile", "/report");
+  revalidatePaths("/measurements", "/stats", "/profile", "/report");
   return actionOk();
 }
 
