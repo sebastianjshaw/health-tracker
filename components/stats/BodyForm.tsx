@@ -16,14 +16,8 @@ export function BodyForm() {
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    if (
-      nullableNum(fd.get("weightKg")) == null &&
-      nullableNum(fd.get("bodyFatPct")) == null &&
-      nullableNum(fd.get("waistCm")) == null &&
-      nullableNum(fd.get("restingHr")) == null
-    ) {
-      return;
-    }
+    // No client-side "is anything filled?" guard — logBody validates and returns
+    // a clear message (covers all fields, incl. chest/hips/notes).
     start(async () => {
       setError(null);
       const result = await logBody({

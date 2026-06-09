@@ -39,14 +39,14 @@ export async function logCardio(input: CardioInput): Promise<ActionResult> {
     kcal: input.kcal ?? null,
     notes: input.notes ?? null,
   });
-  revalidatePaths("/activity");
+  revalidatePaths("/activity", "/stats");
   return actionOk();
 }
 
 export async function deleteCardio(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
-  revalidatePaths("/activity");
+  revalidatePaths("/activity", "/stats");
   return actionOk();
 }
 
