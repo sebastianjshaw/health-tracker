@@ -5,8 +5,10 @@ import {
   bodyMetrics,
   cardioSessions,
   foodLog,
+  heartRateDaily,
   liftSessions,
   liftSets,
+  sleepSessions,
 } from "@/db/schema";
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { addDays, todayISO } from "./date";
@@ -113,6 +115,45 @@ export async function getCardioDistances(): Promise<DistancePoint[]> {
     .orderBy(asc(cardioSessions.date))
     .all();
   return rows.map((r) => ({ date: r.date, km: r.km as number }));
+}
+
+export type RestingHrPoint = { date: string; restingBpm: number };
+
+/** Daily resting heart rate (where recorded), oldest first. */
+export async function getRestingHrSeries(): Promise<RestingHrPoint[]> {
+  const rows = await db
+    .select({ date: heartRateDaily.date, bpm: heartRateDaily.restingBpm })
+    .from(heartRateDaily)
+    .where(isNotNull(heartRateDaily.restingBpm))
+    .orderBy(asc(heartRateDaily.date))
+    .all();
+  return rows.map((r) => ({ date: r.date, restingBpm: r.bpm as number }));
+}
+
+export type SleepPoint = {
+  date: string;
+  durationMin: number;
+  deepMin: number | null;
+  remMin: number | null;
+  lightMin: number | null;
+  awakeMin: number | null;
+};
+
+/** Nightly sleep sessions, oldest first. */
+export async function getSleepSeries(): Promise<SleepPoint[]> {
+  const rows = await db
+    .select()
+    .from(sleepSessions)
+    .orderBy(asc(sleepSessions.date))
+    .all();
+  return rows.map((r) => ({
+    date: r.date,
+    durationMin: r.durationMin,
+    deepMin: r.deepMin,
+    remMin: r.remMin,
+    lightMin: r.lightMin,
+    awakeMin: r.awakeMin,
+  }));
 }
 
 export type LiftPoint = { date: string } & Partial<Record<Exercise, number>>;

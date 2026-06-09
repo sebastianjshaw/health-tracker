@@ -121,8 +121,48 @@ export const cardioSessions = sqliteTable("cardio_sessions", {
   avgHr: integer("avg_hr"),
   kcal: real("kcal"),
   notes: text("notes"),
+  // 'manual' | 'google-health' | 'fitbit' — and a provider id for import dedup
+  source: text("source").notNull().default("manual"),
+  externalId: text("external_id"),
   createdAt: createdAt(),
-}, (t) => [index("cardio_sessions_date_idx").on(t.date)]);
+}, (t) => [
+  index("cardio_sessions_date_idx").on(t.date),
+  uniqueIndex("cardio_sessions_external_uidx").on(t.source, t.externalId),
+]);
+
+/** Imported nightly sleep (one row per night), keyed to wake date. */
+export const sleepSessions = sqliteTable("sleep_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // YYYY-MM-DD of wake
+  start: text("start"), // ISO datetime
+  end: text("end"), // ISO datetime
+  durationMin: integer("duration_min").notNull(),
+  deepMin: integer("deep_min"),
+  remMin: integer("rem_min"),
+  lightMin: integer("light_min"),
+  awakeMin: integer("awake_min"),
+  source: text("source").notNull().default("manual"),
+  externalId: text("external_id"),
+  createdAt: createdAt(),
+}, (t) => [
+  index("sleep_sessions_date_idx").on(t.date),
+  uniqueIndex("sleep_sessions_external_uidx").on(t.source, t.externalId),
+]);
+
+/** Imported daily heart-rate summary (resting / min / max), one row per day. */
+export const heartRateDaily = sqliteTable("heart_rate_daily", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(),
+  restingBpm: integer("resting_bpm"),
+  minBpm: integer("min_bpm"),
+  maxBpm: integer("max_bpm"),
+  source: text("source").notNull().default("manual"),
+  externalId: text("external_id"),
+  createdAt: createdAt(),
+}, (t) => [
+  index("heart_rate_daily_date_idx").on(t.date),
+  uniqueIndex("heart_rate_daily_external_uidx").on(t.source, t.externalId),
+]);
 
 export const liftSessions = sqliteTable("lift_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -171,6 +211,8 @@ export type FoodLogRow = typeof foodLog.$inferSelect;
 export type BodyMetric = typeof bodyMetrics.$inferSelect;
 export type DayHealthRow = typeof dayHealth.$inferSelect;
 export type CardioSession = typeof cardioSessions.$inferSelect;
+export type SleepSession = typeof sleepSessions.$inferSelect;
+export type HeartRateDay = typeof heartRateDaily.$inferSelect;
 export type LiftSession = typeof liftSessions.$inferSelect;
 export type LiftSet = typeof liftSets.$inferSelect;
 export type BloodMarker = typeof bloodMarkers.$inferSelect;

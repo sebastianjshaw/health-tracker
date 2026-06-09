@@ -19,9 +19,11 @@ import {
   cardioSessions,
   foodLog,
   foods,
+  heartRateDaily,
   liftSessions,
   liftSets,
   settings,
+  sleepSessions,
 } from "../db/schema";
 import {
   DEFAULT_LIFT_WEIGHTS,
@@ -439,7 +441,64 @@ server.tool(
           distanceKm: r.distanceKm,
           avgHr: r.avgHr,
           kcal: r.kcal,
+          source: r.source,
           notes: r.notes ?? undefined,
+        })),
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+server.tool(
+  "get_sleep",
+  "Recent nightly sleep sessions (duration + stage minutes), newest first. Defaults to the last 30.",
+  { limit: z.number().optional() },
+  async ({ limit }) => {
+    const rows = await db
+      .select()
+      .from(sleepSessions)
+      .orderBy(desc(sleepSessions.date), desc(sleepSessions.id))
+      .limit(limit ?? 30)
+      .all();
+    return text(
+      JSON.stringify(
+        rows.map((r) => ({
+          date: r.date,
+          durationMin: r.durationMin,
+          deepMin: r.deepMin,
+          remMin: r.remMin,
+          lightMin: r.lightMin,
+          awakeMin: r.awakeMin,
+          source: r.source,
+        })),
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+server.tool(
+  "get_heart_rate",
+  "Recent daily heart-rate summary (resting/min/max bpm), newest first. Defaults to the last 30 days.",
+  { limit: z.number().optional() },
+  async ({ limit }) => {
+    const rows = await db
+      .select()
+      .from(heartRateDaily)
+      .orderBy(desc(heartRateDaily.date), desc(heartRateDaily.id))
+      .limit(limit ?? 30)
+      .all();
+    return text(
+      JSON.stringify(
+        rows.map((r) => ({
+          date: r.date,
+          restingBpm: r.restingBpm,
+          minBpm: r.minBpm,
+          maxBpm: r.maxBpm,
+          source: r.source,
         })),
         null,
         2,

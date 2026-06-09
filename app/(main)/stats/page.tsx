@@ -2,7 +2,9 @@ import { PageHeader } from "@/components/PageHeader";
 import {
   CalorieChart,
   DistanceChart,
+  HeartRateChart,
   LiftChart,
+  SleepChart,
   WeightChart,
 } from "@/components/stats/charts-lazy";
 import { HealthCalendar } from "@/components/stats/HealthCalendar";
@@ -18,6 +20,8 @@ import {
   getCalorieSeries,
   getCardioDistances,
   getLiftProgression,
+  getRestingHrSeries,
+  getSleepSeries,
   getWeightSeries,
 } from "@/lib/stats-data";
 
@@ -34,6 +38,8 @@ export default async function StatsPage() {
     bloodPanels,
     health,
     distances,
+    sleep,
+    restingHr,
   ] = await Promise.all([
     getTargets(),
     getGoalWeight(),
@@ -45,6 +51,8 @@ export default async function StatsPage() {
     getBloodPanels(),
     getHealthSeries(addDays(today, -363), today),
     getCardioDistances(),
+    getSleepSeries(),
+    getRestingHrSeries(),
   ]);
 
   return (
@@ -55,6 +63,8 @@ export default async function StatsPage() {
       <CalorieChart data={calories} target={targets.kcal} mealSplit={mealSplit} />
       <LiftChart data={lifts} />
       <DistanceChart data={distances} end={today} />
+      <SleepChart data={sleep} />
+      <HeartRateChart data={restingHr} />
       <HealthCalendar statuses={health} end={today} />
 
       <BodyForm />

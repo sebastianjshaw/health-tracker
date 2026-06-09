@@ -29,3 +29,13 @@ export const DistanceChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.DistanceChart })),
   { ssr: false, loading: ChartSkeleton },
 );
+
+export const SleepChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.SleepChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
+export const HeartRateChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.HeartRateChart })),
+  { ssr: false, loading: ChartSkeleton },
+);

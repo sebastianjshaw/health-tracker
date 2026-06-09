@@ -18,7 +18,14 @@ import { Card, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
 import { addDays } from "@/lib/date";
-import type { CaloriePoint, DistancePoint, LiftPoint, WeightPoint } from "@/lib/stats-data";
+import type {
+  CaloriePoint,
+  DistancePoint,
+  LiftPoint,
+  RestingHrPoint,
+  SleepPoint,
+  WeightPoint,
+} from "@/lib/stats-data";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -386,6 +393,110 @@ export function DistanceChart({ data, end }: { data: DistancePoint[]; end: strin
             {equiv && <> · {equiv}</>}
           </p>
         </>
+      )}
+    </ChartCard>
+  );
+}
+
+// ---- Sleep ----
+
+const SLEEP_COLORS = { deep: "#1e3a8a", rem: "#6366f1", light: "#93c5fd" };
+
+export function SleepChart({ data }: { data: SleepPoint[] }) {
+  const recent = data.slice(-14);
+  const hasStages = recent.some(
+    (d) => d.deepMin != null || d.remMin != null || d.lightMin != null,
+  );
+  const chart = recent.map((d) => ({
+    date: d.date,
+    deep: round1((d.deepMin ?? 0) / 60),
+    rem: round1((d.remMin ?? 0) / 60),
+    light: round1((d.lightMin ?? 0) / 60),
+    asleep: round1(d.durationMin / 60),
+  }));
+  const avgH = data.length
+    ? round1(data.reduce((s, d) => s + d.durationMin, 0) / data.length / 60)
+    : 0;
+
+  return (
+    <ChartCard title="Sleep">
+      {data.length === 0 ? (
+        <EmptyState>Connect a wearable to see your sleep.</EmptyState>
+      ) : (
+        <>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+              <YAxis stroke={AXIS} fontSize={11} width={40} unit="h" />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(l) => shortDate(String(l))}
+                formatter={(v, n) => [`${v} h`, String(n)]}
+              />
+              {hasStages ? (
+                <>
+                  <Bar dataKey="deep" stackId="s" fill={SLEEP_COLORS.deep} name="Deep" />
+                  <Bar dataKey="rem" stackId="s" fill={SLEEP_COLORS.rem} name="REM" />
+                  <Bar
+                    dataKey="light"
+                    stackId="s"
+                    fill={SLEEP_COLORS.light}
+                    name="Light"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </>
+              ) : (
+                <Bar dataKey="asleep" fill={SLEEP_COLORS.rem} name="Asleep" radius={[4, 4, 0, 0]} />
+              )}
+            </BarChart>
+          </ResponsiveContainer>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            {hasStages && (
+              <>
+                <Swatch color={SLEEP_COLORS.deep} label="Deep" />
+                <Swatch color={SLEEP_COLORS.rem} label="REM" />
+                <Swatch color={SLEEP_COLORS.light} label="Light" />
+              </>
+            )}
+            <span>· avg {avgH} h/night</span>
+          </div>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+// ---- Resting heart rate ----
+
+export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
+  const lo = data.length ? Math.floor(Math.min(...data.map((d) => d.restingBpm)) - 3) : 0;
+  const hi = data.length ? Math.ceil(Math.max(...data.map((d) => d.restingBpm)) + 3) : 1;
+  return (
+    <ChartCard title="Resting heart rate">
+      {data.length === 0 ? (
+        <EmptyState>Connect a wearable to see resting HR.</EmptyState>
+      ) : (
+        <ResponsiveContainer width="100%" height={200}>
+          <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+            <CartesianGrid stroke={GRID} vertical={false} />
+            <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+            <YAxis stroke={AXIS} fontSize={11} width={40} domain={[lo, hi]} allowDecimals={false} />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              labelFormatter={(l) => shortDate(String(l))}
+              formatter={(v) => [`${v} bpm`, "Resting HR"]}
+            />
+            <Line
+              type="monotone"
+              dataKey="restingBpm"
+              stroke="#ef4444"
+              strokeWidth={2.5}
+              dot={{ r: 2 }}
+              name="bpm"
+            />
+          </LineChart>
+        </ResponsiveContainer>
       )}
     </ChartCard>
   );
