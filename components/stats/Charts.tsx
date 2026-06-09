@@ -15,9 +15,13 @@ import {
   YAxis,
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
-import { cn } from "@/lib/cn";
 import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
-import { addDays } from "@/lib/date";
+import {
+  Granularity,
+  bucketKey,
+  bucketKeysBetween,
+  bucketLabel,
+} from "@/lib/stats-range";
 import type {
   CaloriePoint,
   DistancePoint,
@@ -26,8 +30,6 @@ import type {
   SleepPoint,
   WeightPoint,
 } from "@/lib/stats-data";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 // Calorie-bar status colours.
 const CAL_COLORS = {
@@ -73,11 +75,15 @@ export function WeightChart({
   const values = data.map((d) => d.weight).concat(goal != null ? [goal] : []);
   const lo = values.length ? Math.floor(Math.min(...values) - 1) : 0;
   const hi = values.length ? Math.ceil(Math.max(...values) + 1) : 1;
+  const summary = data.length
+    ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.`
+    : "No weight logged.";
   return (
     <ChartCard title="Weight">
       {data.length === 0 ? (
         <EmptyState>Log your weight to see the trend.</EmptyState>
       ) : (
+        <div role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
@@ -111,6 +117,7 @@ export function WeightChart({
             />
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </ChartCard>
   );
@@ -150,12 +157,18 @@ export function CalorieChart({
     return CAL_COLORS.under; // comfortably under → green
   };
 
+  const logged = data.filter((d) => d.kcal > 0);
+  const avg = logged.length
+    ? Math.round(logged.reduce((s, d) => s + d.kcal, 0) / logged.length)
+    : 0;
+  const summary = `Calories: averaging ${avg} kcal per logged day versus a ${target} kcal target.`;
   return (
-    <ChartCard title="Calories (last 14 days)">
+    <ChartCard title="Calories">
       {!hasData ? (
         <EmptyState>No food logged yet.</EmptyState>
       ) : (
         <>
+          <div role="img" aria-label={summary}>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
@@ -186,6 +199,7 @@ export function CalorieChart({
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <Swatch color={CAL_COLORS.under} label="Under" />
             <Swatch color={CAL_COLORS.near} label="Within ±10%" />
@@ -207,12 +221,14 @@ const LIFT_COLORS: Record<string, string> = {
 };
 
 export function LiftChart({ data }: { data: LiftPoint[] }) {
+  const summary = `Lift progression across ${data.length} workout${data.length === 1 ? "" : "s"}.`;
   return (
     <ChartCard title="Lift progression (kg)">
       {data.length === 0 ? (
         <EmptyState>Complete a workout to see progress.</EmptyState>
       ) : (
         <>
+          <div role="img" aria-label={summary}>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -16 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
@@ -233,6 +249,7 @@ export function LiftChart({ data }: { data: LiftPoint[] }) {
               ))}
             </LineChart>
           </ResponsiveContainer>
+          </div>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
             {EXERCISES.map((ex) => (
               <span key={ex} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -279,117 +296,54 @@ function distanceEquivalent(km: number): string | null {
   return `${mStr} · ${rStr}`;
 }
 
-type Period = "day" | "week" | "month" | "year";
-const PERIODS: { key: Period; label: string }[] = [
-  { key: "day", label: "Day" },
-  { key: "week", label: "Week" },
-  { key: "month", label: "Month" },
-  { key: "year", label: "Year" },
-];
-const PERIOD_COUNT: Record<Period, number> = { day: 14, week: 12, month: 12, year: 5 };
-
-function mondayOf(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  return addDays(iso, -((d.getDay() + 6) % 7));
-}
-function bucketKey(period: Period, date: string): string {
-  if (period === "day") return date;
-  if (period === "week") return mondayOf(date);
-  if (period === "month") return date.slice(0, 7);
-  return date.slice(0, 4);
-}
-function bucketLabel(period: Period, key: string): string {
-  if (period === "day" || period === "week") {
-    const [, m, d] = key.split("-");
-    return `${d}/${m}`;
+export function DistanceChart({
+  data,
+  start,
+  end,
+  granularity,
+}: {
+  data: DistancePoint[];
+  start: string;
+  end: string;
+  granularity: Granularity;
+}) {
+  const keys = bucketKeysBetween(granularity, start, end);
+  const sums = new Map<string, number>(keys.map((k) => [k, 0]));
+  for (const p of data) {
+    const k = bucketKey(granularity, p.date);
+    if (sums.has(k)) sums.set(k, (sums.get(k) ?? 0) + p.km);
   }
-  if (period === "month") {
-    const [y, m] = key.split("-");
-    return `${MONTHS[Number(m) - 1]} ${y.slice(2)}`;
-  }
-  return key;
-}
-/** Ordered bucket keys for the window ending at `end` (oldest → newest). */
-function bucketKeysEnding(period: Period, end: string): string[] {
-  const n = PERIOD_COUNT[period];
-  const keys: string[] = [];
-  if (period === "day") {
-    for (let i = n - 1; i >= 0; i--) keys.push(addDays(end, -i));
-  } else if (period === "week") {
-    const m = mondayOf(end);
-    for (let i = n - 1; i >= 0; i--) keys.push(addDays(m, -i * 7));
-  } else if (period === "month") {
-    const [y, mo] = end.split("-").map(Number);
-    for (let i = n - 1; i >= 0; i--) {
-      const d = new Date(y, mo - 1 - i, 1);
-      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-    }
-  } else {
-    const y = Number(end.slice(0, 4));
-    for (let i = n - 1; i >= 0; i--) keys.push(String(y - i));
-  }
-  return keys;
-}
-
-export function DistanceChart({ data, end }: { data: DistancePoint[]; end: string }) {
-  const [period, setPeriod] = React.useState<Period>("month");
-
-  const { chart, total } = React.useMemo(() => {
-    const keys = bucketKeysEnding(period, end);
-    const sums = new Map<string, number>(keys.map((k) => [k, 0]));
-    for (const p of data) {
-      const k = bucketKey(period, p.date);
-      if (sums.has(k)) sums.set(k, (sums.get(k) ?? 0) + p.km);
-    }
-    return {
-      chart: keys.map((k) => ({ label: bucketLabel(period, k), km: round1(sums.get(k) ?? 0) })),
-      total: keys.reduce((s, k) => s + (sums.get(k) ?? 0), 0),
-    };
-  }, [data, end, period]);
-
-  const windowLabel = period === "day" ? "14 days" : `${PERIOD_COUNT[period]} ${period}s`;
+  const chart = keys.map((k) => ({ label: bucketLabel(granularity, k), km: round1(sums.get(k) ?? 0) }));
+  const total = data.reduce((s, p) => s + p.km, 0);
   const equiv = distanceEquivalent(total);
+  const summary =
+    total > 0
+      ? `Distance: ${round1(total)} km total${equiv ? `, ${equiv}` : ""}.`
+      : "No distance in range.";
 
   return (
     <ChartCard title="Distance">
-      <div className="mb-3 flex gap-1.5">
-        {PERIODS.map((p) => (
-          <button
-            key={p.key}
-            type="button"
-            onClick={() => setPeriod(p.key)}
-            className={cn(
-              "rounded-lg px-2.5 py-1 text-sm",
-              period === p.key
-                ? "bg-accent text-accent-foreground"
-                : "border border-border text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {p.label}
-          </button>
-        ))}
-      </div>
-
       {data.length === 0 ? (
         <EmptyState>Log a cardio session with a distance to see this.</EmptyState>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
-              <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
-              <YAxis stroke={AXIS} fontSize={11} width={40} />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                cursor={{ fill: "var(--muted)" }}
-                formatter={(v) => [`${v} km`, "Distance"]}
-              />
-              <Bar dataKey="km" radius={[4, 4, 0, 0]} fill="#2563eb" name="km" />
-            </BarChart>
-          </ResponsiveContainer>
+          <div role="img" aria-label={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <YAxis stroke={AXIS} fontSize={11} width={40} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  cursor={{ fill: "var(--muted)" }}
+                  formatter={(v) => [`${v} km`, "Distance"]}
+                />
+                <Bar dataKey="km" radius={[4, 4, 0, 0]} fill="#2563eb" name="km" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">{round1(total)} km</span> over the last{" "}
-            {windowLabel}
+            <span className="font-medium text-foreground">{round1(total)} km</span> total
             {equiv && <> · {equiv}</>}
           </p>
         </>
@@ -402,55 +356,88 @@ export function DistanceChart({ data, end }: { data: DistancePoint[]; end: strin
 
 const SLEEP_COLORS = { deep: "#1e3a8a", rem: "#6366f1", light: "#93c5fd" };
 
-export function SleepChart({ data }: { data: SleepPoint[] }) {
-  const recent = data.slice(-14);
-  const hasStages = recent.some(
+export function SleepChart({
+  data,
+  start,
+  end,
+  granularity,
+}: {
+  data: SleepPoint[];
+  start: string;
+  end: string;
+  granularity: Granularity;
+}) {
+  const hasStages = data.some(
     (d) => d.deepMin != null || d.remMin != null || d.lightMin != null,
   );
-  const chart = recent.map((d) => ({
-    date: d.date,
-    deep: round1((d.deepMin ?? 0) / 60),
-    rem: round1((d.remMin ?? 0) / 60),
-    light: round1((d.lightMin ?? 0) / 60),
-    asleep: round1(d.durationMin / 60),
-  }));
-  const avgH = data.length
-    ? round1(data.reduce((s, d) => s + d.durationMin, 0) / data.length / 60)
+  const keys = bucketKeysBetween(granularity, start, end);
+  type Acc = { dur: number; deep: number; rem: number; light: number; n: number };
+  const acc = new Map<string, Acc>(
+    keys.map((k) => [k, { dur: 0, deep: 0, rem: 0, light: 0, n: 0 }]),
+  );
+  for (const d of data) {
+    const a = acc.get(bucketKey(granularity, d.date));
+    if (!a) continue;
+    a.dur += d.durationMin;
+    a.deep += d.deepMin ?? 0;
+    a.rem += d.remMin ?? 0;
+    a.light += d.lightMin ?? 0;
+    a.n++;
+  }
+  // Per bucket: average per-night hours (so week/month buckets are comparable).
+  const chart = keys.map((k) => {
+    const a = acc.get(k)!;
+    const n = a.n || 1;
+    return {
+      label: bucketLabel(granularity, k),
+      deep: round1(a.deep / n / 60),
+      rem: round1(a.rem / n / 60),
+      light: round1(a.light / n / 60),
+      asleep: round1(a.dur / n / 60),
+    };
+  });
+  const nights = data.length;
+  const avgH = nights
+    ? round1(data.reduce((s, d) => s + d.durationMin, 0) / nights / 60)
     : 0;
+  const summary = nights
+    ? `Sleep: ${avgH} hours per night on average over ${nights} nights.`
+    : "No sleep data in range.";
 
   return (
     <ChartCard title="Sleep">
-      {data.length === 0 ? (
+      {nights === 0 ? (
         <EmptyState>Connect a wearable to see your sleep.</EmptyState>
       ) : (
         <>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
-              <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
-              <YAxis stroke={AXIS} fontSize={11} width={40} unit="h" />
-              <Tooltip
-                contentStyle={tooltipStyle}
-                labelFormatter={(l) => shortDate(String(l))}
-                formatter={(v, n) => [`${v} h`, String(n)]}
-              />
-              {hasStages ? (
-                <>
-                  <Bar dataKey="deep" stackId="s" fill={SLEEP_COLORS.deep} name="Deep" />
-                  <Bar dataKey="rem" stackId="s" fill={SLEEP_COLORS.rem} name="REM" />
-                  <Bar
-                    dataKey="light"
-                    stackId="s"
-                    fill={SLEEP_COLORS.light}
-                    name="Light"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </>
-              ) : (
-                <Bar dataKey="asleep" fill={SLEEP_COLORS.rem} name="Asleep" radius={[4, 4, 0, 0]} />
-              )}
-            </BarChart>
-          </ResponsiveContainer>
+          <div role="img" aria-label={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <YAxis stroke={AXIS} fontSize={11} width={40} unit="h" />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v, n) => [`${v} h`, String(n)]}
+                />
+                {hasStages ? (
+                  <>
+                    <Bar dataKey="deep" stackId="s" fill={SLEEP_COLORS.deep} name="Deep" />
+                    <Bar dataKey="rem" stackId="s" fill={SLEEP_COLORS.rem} name="REM" />
+                    <Bar
+                      dataKey="light"
+                      stackId="s"
+                      fill={SLEEP_COLORS.light}
+                      name="Light"
+                      radius={[4, 4, 0, 0]}
+                    />
+                  </>
+                ) : (
+                  <Bar dataKey="asleep" fill={SLEEP_COLORS.rem} name="Asleep" radius={[4, 4, 0, 0]} />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {hasStages && (
               <>
@@ -472,11 +459,15 @@ export function SleepChart({ data }: { data: SleepPoint[] }) {
 export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
   const lo = data.length ? Math.floor(Math.min(...data.map((d) => d.restingBpm)) - 3) : 0;
   const hi = data.length ? Math.ceil(Math.max(...data.map((d) => d.restingBpm)) + 3) : 1;
+  const summary = data.length
+    ? `Resting heart rate: latest ${data[data.length - 1].restingBpm} bpm.`
+    : "No resting heart rate in range.";
   return (
     <ChartCard title="Resting heart rate">
       {data.length === 0 ? (
         <EmptyState>Connect a wearable to see resting HR.</EmptyState>
       ) : (
+        <div role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
@@ -497,6 +488,7 @@ export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
             />
           </LineChart>
         </ResponsiveContainer>
+        </div>
       )}
     </ChartCard>
   );

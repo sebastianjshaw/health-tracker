@@ -1,13 +1,5 @@
 import { PageHeader } from "@/components/PageHeader";
-import {
-  CalorieChart,
-  DistanceChart,
-  HeartRateChart,
-  LiftChart,
-  SleepChart,
-  WeightChart,
-} from "@/components/stats/charts-lazy";
-import { HealthCalendar } from "@/components/stats/HealthCalendar";
+import { StatsView } from "@/components/stats/StatsView";
 import { getHealthSeries } from "@/lib/day-data";
 import { addDays, todayISO } from "@/lib/date";
 import { getGoalWeight, getMealSplit, getTargets } from "@/lib/settings";
@@ -28,7 +20,7 @@ export default async function StatsPage() {
       getGoalWeight(),
       getMealSplit(),
       getWeightSeries(),
-      getCalorieSeries(14),
+      getCalorieSeries(365), // bounded; the range control filters client-side
       getLiftProgression(),
       getCardioDistances(),
       getSleepSeries(),
@@ -39,14 +31,19 @@ export default async function StatsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Stats" subtitle="Your trends over time" />
-
-      <WeightChart data={weight} goalWeight={goalWeight} />
-      <CalorieChart data={calories} target={targets.kcal} mealSplit={mealSplit} />
-      <LiftChart data={lifts} />
-      <DistanceChart data={distances} end={today} />
-      <SleepChart data={sleep} />
-      <HeartRateChart data={restingHr} />
-      <HealthCalendar statuses={health} end={today} />
+      <StatsView
+        today={today}
+        weight={weight}
+        calories={calories}
+        lifts={lifts}
+        distances={distances}
+        sleep={sleep}
+        restingHr={restingHr}
+        health={health}
+        targets={targets}
+        goalWeight={goalWeight}
+        mealSplit={mealSplit}
+      />
     </div>
   );
 }
