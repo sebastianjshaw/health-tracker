@@ -176,6 +176,7 @@ export function CalorieChart({
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
+                itemStyle={{ color: "var(--foreground)" }}
                 labelFormatter={(label) => shortDate(String(label))}
                 cursor={{ fill: "var(--muted)" }}
               />
