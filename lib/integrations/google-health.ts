@@ -152,7 +152,26 @@ export async function listDataPoints(
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
-      throw new Error(`Google Health ${dataType} fetch failed (${res.status})`);
+      const body = await res.text();
+      let reason: string | undefined;
+      let message: string | undefined;
+      try {
+        const j = JSON.parse(body) as {
+          error?: { message?: string; details?: { reason?: string }[] };
+        };
+        reason = j.error?.details?.[0]?.reason;
+        message = j.error?.message;
+      } catch {
+        /* non-JSON error body */
+      }
+      if (reason === "ACCOUNT_NOT_LINKED") {
+        throw new Error(
+          "Your Google account isn't linked to Google Health yet. Finish setup at fitbit.google.com (link a Fitbit or Pixel Watch), then Sync again.",
+        );
+      }
+      throw new Error(
+        `Google Health ${dataType} fetch failed (${res.status})${message ? `: ${message}` : ""}`,
+      );
     }
     const data = (await res.json()) as { dataPoints?: DataPoint[]; nextPageToken?: string };
     if (data.dataPoints) out.push(...data.dataPoints);
