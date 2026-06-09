@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useActionState } from "react";
+import { useTransition } from "react";
 import { Button, Field, Input, Select } from "@/components/ui";
 import {
   CATEGORIES,
@@ -62,9 +62,9 @@ export function ManualFoodForm({
   onSaved?: () => void;
 }) {
   const editing = !!food;
-  const action = editing ? updateFood : createFood;
   const formRef = React.useRef<HTMLFormElement>(null);
-  const [state, formAction, pending] = useActionState(action, initialState);
+  const [pending, start] = useTransition();
+  const [error, setError] = React.useState<string | null>(null);
 
   const [extras, setExtras] = React.useState<Extra[]>(() =>
     parseExtras(food?.extras ?? null),
@@ -80,12 +80,21 @@ export function ManualFoodForm({
   );
   const [more, setMore] = React.useState(hasExtended);
 
-  React.useEffect(() => {
-    if (state.ok) {
+  function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const action = editing ? updateFood : createFood;
+    start(async () => {
+      setError(null);
+      const result = await action(initialState, fd);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       if (!editing) formRef.current?.reset();
       onSaved?.();
-    }
-  }, [state.ok, editing, onSaved]);
+    });
+  }
 
   const dv = {
     name: food?.name ?? defaults?.name ?? "",
@@ -114,7 +123,7 @@ export function ManualFoodForm({
     .map((e) => ({ label: e.label.trim(), value: e.value.trim(), unit: e.unit.trim() }));
 
   return (
-    <form ref={formRef} action={formAction} className="space-y-3">
+    <form ref={formRef} onSubmit={submit} className="space-y-3">
       {editing && <input type="hidden" name="id" value={food!.id} />}
       <input type="hidden" name="source" value={dv.source} />
       <input type="hidden" name="barcode" value={dv.barcode} />
@@ -204,7 +213,7 @@ export function ManualFoodForm({
         </div>
       )}
 
-      {state.error && <p className="text-sm text-danger">{state.error}</p>}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
       <Button type="submit" className="w-full" disabled={pending}>
         {pending ? "Saving…" : editing ? "Save changes" : "Save food"}
