@@ -1,7 +1,9 @@
 import "server-only";
+import { desc, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
-import { cardioSessions, heartRateDaily, sleepSessions } from "@/db/schema";
+import { bodyMetrics, cardioSessions, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
+import { estimateCardioKcal } from "@/lib/cardio-calories";
 import { todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
@@ -70,6 +72,17 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   const summary: SyncSummary = { from: start, to: today, exercise: 0, sleep: 0, restingHr: 0 };
 
   // ---- Exercise → cardioSessions ----
+  // Latest weigh-in feeds the MET-based calorie estimate for sessions the
+  // provider imports without a measured figure.
+  const latestWeight = await db
+    .select({ weight: bodyMetrics.weightKg })
+    .from(bodyMetrics)
+    .where(isNotNull(bodyMetrics.weightKg))
+    .orderBy(desc(bodyMetrics.date))
+    .limit(1)
+    .get();
+  const weightKg = latestWeight?.weight ?? null;
+
   // exercise is a session type — it rejects time filters, so fetch all and
   // window client-side by start date.
   const exPoints = await listDataPoints(token, DATA_TYPES.exercise);
@@ -100,13 +113,20 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
       continue;
     }
 
+    const type = exerciseToCardio(ex.exerciseType);
     const row = {
       date,
-      type: exerciseToCardio(ex.exerciseType),
+      type,
       durationMin,
       distanceKm,
       avgHr: num(m.averageHeartRateBeatsPerMinute),
-      kcal: m.caloriesKcal != null ? Math.round(m.caloriesKcal) : null,
+      // Prefer the provider's measured calories; fall back to a MET estimate so
+      // synced workouts still count toward energy expenditure (and don't skew
+      // the weight prediction by reading as zero burn).
+      kcal:
+        m.caloriesKcal != null
+          ? Math.round(m.caloriesKcal)
+          : estimateCardioKcal(type, durationMin, weightKg),
     };
     await db
       .insert(cardioSessions)
