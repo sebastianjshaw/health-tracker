@@ -27,6 +27,7 @@ import type {
   RestingHrPoint,
   SleepPoint,
   WeightPoint,
+  WeightPrediction,
 } from "@/lib/stats-data";
 import type { HealthStatus } from "@/lib/constants";
 
@@ -62,6 +63,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function StatsView({
   today,
   weight,
+  predictions,
   calories,
   lifts,
   distances,
@@ -74,6 +76,7 @@ export function StatsView({
 }: {
   today: string;
   weight: WeightPoint[];
+  predictions: WeightPrediction[];
   calories: CaloriePoint[];
   lifts: LiftPoint[];
   distances: DistancePoint[];
@@ -89,6 +92,7 @@ export function StatsView({
   const granularity = granularityFor(range);
 
   const fWeight = withinRange(weight, cutoff);
+  const fPredictions = withinRange(predictions, cutoff);
   const fCalories = withinRange(calories, cutoff);
   const fLifts = withinRange(lifts, cutoff);
   const fDistances = withinRange(distances, cutoff);
@@ -200,7 +204,7 @@ export function StatsView({
       </Card>
 
       <Section title="Body">
-        <WeightChart data={fWeight} goalWeight={goalWeight} />
+        <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} />
         <HeartRateChart data={fHr} />
         <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
       </Section>

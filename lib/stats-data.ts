@@ -12,9 +12,11 @@ import {
 } from "@/db/schema";
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { addDays, todayISO } from "./date";
+import { ageFrom } from "./health";
 import { materializeRecurringRange } from "./recurring-materialize";
-import { getContingency, getTargetHistory } from "./settings";
+import { getContingency, getProfile, getTargetHistory } from "./settings";
 import { targetForDate } from "./targets";
+import { predictWeights, type WeightPrediction } from "./weight-prediction";
 
 export async function getBodyMetrics() {
   return db
@@ -38,6 +40,48 @@ export async function getWeightSeries(): Promise<WeightPoint[]> {
     weight: r.weightKg as number,
     bodyFat: r.bodyFatPct ?? null,
   }));
+}
+
+export type { WeightPrediction } from "./weight-prediction";
+
+/**
+ * Per-weigh-in predicted weight from energy balance (contingency-adjusted
+ * intake minus BMR-baseline maintenance plus logged cardio), so expected can be
+ * compared against actual. Empty if the profile can't yield a BMR or there are
+ * fewer than two weigh-ins.
+ */
+export async function getWeightPredictions(): Promise<WeightPrediction[]> {
+  const weighIns = await getWeightSeries(); // ascending, weight present
+  if (weighIns.length < 2) return [];
+
+  const start = weighIns[0].date;
+  const end = weighIns[weighIns.length - 1].date;
+
+  const [series, cardio, profile] = await Promise.all([
+    calorieSeriesRange(start, end), // contingency-adjusted intake per day
+    db
+      .select({ date: cardioSessions.date, kcal: cardioSessions.kcal })
+      .from(cardioSessions)
+      .where(and(gte(cardioSessions.date, start), lte(cardioSessions.date, end)))
+      .all(),
+    getProfile(),
+  ]);
+
+  const intakeByDate = new Map(series.map((c) => [c.date, c.kcal]));
+  const cardioByDate = new Map<string, number>();
+  for (const c of cardio) {
+    if (c.kcal == null) continue;
+    cardioByDate.set(c.date, (cardioByDate.get(c.date) ?? 0) + c.kcal);
+  }
+
+  return predictWeights({
+    weighIns,
+    intakeByDate,
+    cardioByDate,
+    heightCm: profile.heightCm,
+    age: ageFrom(profile.dob),
+    sex: profile.sex,
+  });
 }
 
 export type CaloriePoint = {

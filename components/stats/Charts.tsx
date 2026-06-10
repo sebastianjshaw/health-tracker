@@ -29,7 +29,11 @@ import type {
   RestingHrPoint,
   SleepPoint,
   WeightPoint,
+  WeightPrediction,
 } from "@/lib/stats-data";
+
+const ACTUAL_COLOR = "#22c55e";
+const PREDICTED_COLOR = "#60a5fa";
 
 // Calorie-bar status colours.
 const CAL_COLORS = {
@@ -66,18 +70,36 @@ const tooltipStyle = {
 
 export function WeightChart({
   data,
+  predictions = [],
   goalWeight,
 }: {
   data: WeightPoint[];
+  predictions?: WeightPrediction[];
   goalWeight?: number | null;
 }) {
   const goal = goalWeight ?? null;
-  const values = data.map((d) => d.weight).concat(goal != null ? [goal] : []);
+  const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
+  const chartData = data.map((d) => ({
+    ...d,
+    predicted: predByDate.get(d.date) ?? null,
+  }));
+
+  const values = data
+    .map((d) => d.weight)
+    .concat(predictions.map((p) => p.predicted))
+    .concat(goal != null ? [goal] : []);
   const lo = values.length ? Math.floor(Math.min(...values) - 1) : 0;
   const hi = values.length ? Math.ceil(Math.max(...values) + 1) : 1;
+
+  const latestPred = predictions[predictions.length - 1];
   const summary = data.length
-    ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.`
+    ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.${
+        latestPred
+          ? ` Latest prediction ${latestPred.predicted} kg vs actual ${latestPred.actual} kg.`
+          : ""
+      }`
     : "No weight logged.";
+
   return (
     <ChartCard title="Weight">
       {data.length === 0 ? (
@@ -85,7 +107,7 @@ export function WeightChart({
       ) : (
         <div role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+          <LineChart data={chartData} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
             <YAxis
@@ -98,6 +120,9 @@ export function WeightChart({
             <Tooltip
               contentStyle={tooltipStyle}
               labelFormatter={(label) => shortDate(String(label))}
+              formatter={(value, name) =>
+                value == null ? ["—", name] : [`${value} kg`, name]
+              }
             />
             {goal != null && (
               <ReferenceLine
@@ -110,14 +135,38 @@ export function WeightChart({
             <Line
               type="monotone"
               dataKey="weight"
-              stroke="#22c55e"
+              stroke={ACTUAL_COLOR}
               strokeWidth={2.5}
               dot={{ r: 3 }}
-              name="kg"
+              name="actual"
             />
+            {predictions.length > 0 && (
+              <Line
+                type="monotone"
+                dataKey="predicted"
+                stroke={PREDICTED_COLOR}
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                connectNulls={false}
+                dot={{ r: 3, fill: PREDICTED_COLOR }}
+                name="predicted"
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
         </div>
+      )}
+      {predictions.length > 0 && (
+        <>
+          <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+            <Swatch color={ACTUAL_COLOR} label="Actual" />
+            <Swatch color={PREDICTED_COLOR} label="Predicted" />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Predicted from the prior window&apos;s food &amp; exercise. A gap from
+            actual suggests under-reporting or that contingency needs tuning.
+          </p>
+        </>
       )}
     </ChartCard>
   );
