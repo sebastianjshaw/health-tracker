@@ -84,12 +84,26 @@ export function WeightChart({
     predicted: predByDate.get(d.date) ?? null,
   }));
 
-  const values = data
-    .map((d) => d.weight)
-    .concat(predictions.map((p) => p.predicted))
-    .concat(goal != null ? [goal] : []);
+  // Scope the y-axis to the actual + predicted data only; a far-off goal would
+  // otherwise squash the whole weight band. The goal is shown as an annotation.
+  const values = data.map((d) => d.weight).concat(predictions.map((p) => p.predicted));
   const lo = values.length ? Math.floor(Math.min(...values) - 1) : 0;
   const hi = values.length ? Math.ceil(Math.max(...values) + 1) : 1;
+  const goalInView = goal != null && goal >= lo && goal <= hi;
+
+  const latestWeight = data.length ? data[data.length - 1].weight : null;
+  const toGoal =
+    goal != null && latestWeight != null
+      ? Math.round((latestWeight - goal) * 10) / 10
+      : null;
+  const goalNote =
+    goal != null
+      ? `Goal ${goal} kg${
+          toGoal != null && toGoal !== 0
+            ? ` · ${Math.abs(toGoal)} kg ${toGoal > 0 ? "to go" : "below"}`
+            : ""
+        }`
+      : null;
 
   const latestPred = predictions[predictions.length - 1];
   const summary = data.length
@@ -124,9 +138,9 @@ export function WeightChart({
                 value == null ? ["—", name] : [`${value} kg`, name]
               }
             />
-            {goal != null && (
+            {goalInView && (
               <ReferenceLine
-                y={goal}
+                y={goal as number}
                 stroke="var(--accent)"
                 strokeDasharray="5 4"
                 label={{ value: `goal ${goal}`, position: "insideTopRight", fontSize: 10, fill: "var(--muted-foreground)" }}
@@ -155,6 +169,15 @@ export function WeightChart({
           </LineChart>
         </ResponsiveContainer>
         </div>
+      )}
+      {goalNote && (
+        <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span
+            className="inline-block h-0 w-3 border-t-2 border-dashed"
+            style={{ borderColor: "var(--accent)" }}
+          />
+          {goalNote}
+        </p>
       )}
       {predictions.length > 0 && (
         <>
