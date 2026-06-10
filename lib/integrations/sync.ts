@@ -122,9 +122,10 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
       avgHr: num(m.averageHeartRateBeatsPerMinute),
       // Prefer the provider's measured calories; fall back to a MET estimate so
       // synced workouts still count toward energy expenditure (and don't skew
-      // the weight prediction by reading as zero burn).
+      // the weight prediction by reading as zero burn). Google Health reports 0
+      // (not null) for many walk sessions, so treat ≤0 as "not measured" too.
       kcal:
-        m.caloriesKcal != null
+        m.caloriesKcal != null && m.caloriesKcal > 0
           ? Math.round(m.caloriesKcal)
           : estimateCardioKcal(type, durationMin, weightKg),
     };
