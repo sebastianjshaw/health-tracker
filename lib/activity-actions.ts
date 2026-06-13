@@ -20,6 +20,7 @@ import { revalidatePaths } from "./revalidate";
 export type CardioInput = {
   date: string;
   type: CardioType;
+  startedAt?: string | null;
   durationMin?: number | null;
   distanceKm?: number | null;
   avgHr?: number | null;
@@ -33,12 +34,61 @@ export async function logCardio(input: CardioInput): Promise<ActionResult> {
   await db.insert(cardioSessions).values({
     date: input.date,
     type: input.type,
+    startedAt: input.startedAt ?? null,
     durationMin: input.durationMin ?? null,
     distanceKm: input.distanceKm ?? null,
     avgHr: input.avgHr ?? null,
     kcal: input.kcal ?? null,
     notes: input.notes ?? null,
   });
+  revalidatePaths("/activity", "/stats");
+  return actionOk();
+}
+
+export type CardioUpdate = {
+  id: number;
+  type?: CardioType;
+  startedAt?: string | null;
+  durationMin?: number | null;
+  distanceKm?: number | null;
+  avgHr?: number | null;
+  kcal?: number | null;
+  notes?: string | null;
+};
+
+/**
+ * Edit a logged cardio session. Imported sessions (source !== "manual") only
+ * allow editing fields Google Health doesn't own — currently just notes — so
+ * a re-sync can't silently revert the user's measured data either.
+ */
+export async function updateCardio(input: CardioUpdate): Promise<ActionResult> {
+  await requireAuth();
+  const existing = await db
+    .select()
+    .from(cardioSessions)
+    .where(eq(cardioSessions.id, input.id))
+    .get();
+  if (!existing) return actionFail("Session not found");
+
+  if (existing.source !== "manual") {
+    await db
+      .update(cardioSessions)
+      .set({ notes: input.notes ?? null })
+      .where(eq(cardioSessions.id, input.id));
+  } else {
+    await db
+      .update(cardioSessions)
+      .set({
+        type: input.type ?? existing.type,
+        startedAt: input.startedAt ?? null,
+        durationMin: input.durationMin ?? null,
+        distanceKm: input.distanceKm ?? null,
+        avgHr: input.avgHr ?? null,
+        kcal: input.kcal ?? null,
+        notes: input.notes ?? null,
+      })
+      .where(eq(cardioSessions.id, input.id));
+  }
   revalidatePaths("/activity", "/stats");
   return actionOk();
 }
