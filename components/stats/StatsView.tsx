@@ -7,8 +7,10 @@ import { Meal } from "@/lib/constants";
 import {
   CalorieChart,
   DistanceChart,
+  FiberChart,
   HeartRateChart,
   LiftChart,
+  SatFatChart,
   SleepChart,
   WeightChart,
 } from "@/components/stats/charts-lazy";
@@ -211,6 +213,8 @@ export function StatsView({
 
       <Section title="Nutrition">
         <CalorieChart data={fCalories} target={targets.kcal} mealSplit={mealSplit} />
+        <FiberChart data={fCalories} />
+        <SatFatChart data={fCalories} />
       </Section>
 
       <Section title="Training">

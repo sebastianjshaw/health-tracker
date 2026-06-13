@@ -88,6 +88,10 @@ export type CaloriePoint = {
   date: string;
   kcal: number;
   protein: number;
+  /** Daily fiber / saturated-fat totals (only present on rows logged since the
+   * snapshot columns were added; older days read as 0). */
+  fiber: number;
+  satFat: number;
   /** Meals that have at least one entry that day (drives the proportional target). */
   meals: Meal[];
   /** Target that was in effect on this date (so past days aren't re-judged). */
@@ -124,18 +128,25 @@ export async function calorieSeriesRange(
       quantity: foodLog.quantity,
       kcal: foodLog.kcal,
       protein: foodLog.protein,
+      fiber: foodLog.fiber,
+      saturatedFat: foodLog.saturatedFat,
       evolution: foodLog.evolution,
     })
     .from(foodLog)
     .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
     .all();
 
-  const loggedByDate = new Map<string, { kcal: number; protein: number }>();
+  const loggedByDate = new Map<
+    string,
+    { kcal: number; protein: number; fiber: number; satFat: number }
+  >();
   const mealsByDate = new Map<string, Set<Meal>>();
   for (const r of logged) {
-    const acc = loggedByDate.get(r.date) ?? { kcal: 0, protein: 0 };
+    const acc = loggedByDate.get(r.date) ?? { kcal: 0, protein: 0, fiber: 0, satFat: 0 };
     acc.kcal += r.kcal * r.quantity * contingencyMultiplier(r.evolution, contingency);
     acc.protein += r.protein * r.quantity;
+    acc.fiber += (r.fiber ?? 0) * r.quantity;
+    acc.satFat += (r.saturatedFat ?? 0) * r.quantity;
     loggedByDate.set(r.date, acc);
     const ms = mealsByDate.get(r.date) ?? new Set<Meal>();
     ms.add(r.meal as Meal);
@@ -149,6 +160,8 @@ export async function calorieSeriesRange(
       date,
       kcal: Math.round(l?.kcal ?? 0),
       protein: Math.round(l?.protein ?? 0),
+      fiber: Math.round(l?.fiber ?? 0),
+      satFat: Math.round(l?.satFat ?? 0),
       meals: [...(mealsByDate.get(date) ?? [])],
       targetKcal: t.kcal,
       targetProtein: t.protein,
