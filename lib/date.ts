@@ -55,13 +55,28 @@ export function relativeLabel(date: string): string | null {
   return null;
 }
 
+/** The user's timezone — single-user app, so a fixed UK zone (DST-aware). */
+const APP_TZ = "Europe/London";
+
 /**
- * "HH:MM" (24h) from an ISO datetime's wall-clock portion. Reads the recorded
- * time directly from the string rather than converting timezones, so it's
- * stable between server and client render. Null if there's no time part.
+ * "HH:MM" (24h) for an ISO datetime, in the user's local time. Timezone-aware
+ * inputs (a trailing Z or ±hh:mm offset — e.g. Google Health's UTC times) are
+ * converted to {@link APP_TZ}; naive inputs (e.g. a manually logged
+ * "2026-06-13T07:15") are read verbatim as the wall-clock entered. Using a
+ * fixed zone rather than the runtime's keeps server and client render in sync.
  */
 export function timeOf(iso: string | null | undefined): string | null {
   if (!iso) return null;
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso)) {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return null;
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: APP_TZ,
+    }).format(d);
+  }
   const m = /T(\d{2}):(\d{2})/.exec(iso);
   return m ? `${m[1]}:${m[2]}` : null;
 }
