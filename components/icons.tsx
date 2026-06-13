@@ -99,3 +99,12 @@ export const ScaleIcon = (p: IconProps) => (
     <path d="M12 8V6" />
   </svg>
 );
+
+export const SyncIcon = (p: IconProps) => (
+  <svg {...base} {...p}>
+    <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.9-4.7" />
+    <path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.9 4.7" />
+    <path d="M21 3v5h-5" />
+    <path d="M3 21v-5h5" />
+  </svg>
+);

@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
+import { LogWeightButton } from "@/components/stats/LogWeightButton";
 import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
 import {
   Granularity,
@@ -51,10 +52,21 @@ function shortDate(d: string) {
   return `${day}/${m}`;
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <Card className="p-4">
-      <h3 className="mb-3 font-semibold">{title}</h3>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="font-semibold">{title}</h3>
+        {action}
+      </div>
       {children}
     </Card>
   );
@@ -72,10 +84,13 @@ export function WeightChart({
   data,
   predictions = [],
   goalWeight,
+  today,
 }: {
   data: WeightPoint[];
   predictions?: WeightPrediction[];
   goalWeight?: number | null;
+  /** When set, shows a quick weight-log button that logs against this date. */
+  today?: string;
 }) {
   const goal = goalWeight ?? null;
   const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
@@ -115,7 +130,14 @@ export function WeightChart({
     : "No weight logged.";
 
   return (
-    <ChartCard title="Weight">
+    <ChartCard
+      title="Weight"
+      action={
+        today ? (
+          <LogWeightButton date={today} current={data[data.length - 1]?.weight ?? null} />
+        ) : undefined
+      }
+    >
       {data.length === 0 ? (
         <EmptyState>Log your weight to see the trend.</EmptyState>
       ) : (
