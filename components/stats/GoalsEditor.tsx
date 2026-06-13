@@ -12,6 +12,9 @@ export function GoalsEditor({
   goalWeight,
   mealSplit,
   suggestedKcal,
+  suggestedProtein,
+  maintenanceKcal,
+  bmrKcal,
 }: {
   kcal: number;
   protein: number;
@@ -19,6 +22,12 @@ export function GoalsEditor({
   mealSplit: Record<Meal, number>;
   /** Calculated target from current weight + goal; null if profile incomplete. */
   suggestedKcal?: number | null;
+  /** Suggested protein (g) from bodyweight; null if profile incomplete. */
+  suggestedProtein?: number | null;
+  /** Maintenance (TDEE) kcal; used to flag an over-aggressive deficit. */
+  maintenanceKcal?: number | null;
+  /** Estimated BMR kcal; eating below this is the hard floor. */
+  bmrKcal?: number | null;
 }) {
   const [k, setK] = React.useState(String(kcal));
   const [p, setP] = React.useState(String(protein));
@@ -30,6 +39,22 @@ export function GoalsEditor({
 
   const splitSum = MEALS.reduce((s, m) => s + (split[m] || 0), 0);
   const splitValid = splitSum === 100;
+
+  // "Don't starve" guardrail: eating under BMR is the hard floor; a deficit of
+  // more than ~1000 kcal/day below maintenance is steeper than is sustainable.
+  const kNum = Number(k) || 0;
+  const deficit =
+    kNum > 0 && bmrKcal != null && kNum < bmrKcal
+      ? {
+          tone: "danger" as const,
+          text: `Below your estimated BMR (~${bmrKcal} kcal). That's too aggressive — it sheds muscle and stalls your metabolism. Keep it above BMR.`,
+        }
+      : kNum > 0 && maintenanceKcal != null && kNum <= maintenanceKcal - 1000
+        ? {
+            tone: "warn" as const,
+            text: `That's a steep deficit (>1000 kcal/day below your ~${maintenanceKcal} maintenance). ~500/day gives steadier, more sustainable loss.`,
+          }
+        : null;
 
   function touch() {
     setSaved(false);
@@ -90,6 +115,32 @@ export function GoalsEditor({
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">
           Add height, DOB &amp; sex in your profile to get a suggested calorie target.
+        </p>
+      )}
+
+      {deficit && (
+        <p className={`mt-2 text-xs ${deficit.tone === "danger" ? "text-danger" : "text-warn"}`}>
+          {deficit.text}
+        </p>
+      )}
+
+      {suggestedProtein != null && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Suggested protein ≈{" "}
+          <span className="font-medium text-foreground">{suggestedProtein}</span> g/day
+          (~2 g/kg of bodyweight).{" "}
+          {String(suggestedProtein) !== p && (
+            <button
+              type="button"
+              onClick={() => {
+                setP(String(suggestedProtein));
+                touch();
+              }}
+              className="font-medium text-accent"
+            >
+              Use this
+            </button>
+          )}
         </p>
       )}
 

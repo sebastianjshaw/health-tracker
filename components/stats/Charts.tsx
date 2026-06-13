@@ -35,6 +35,7 @@ import type {
 
 const ACTUAL_COLOR = "#22c55e";
 const PREDICTED_COLOR = "#60a5fa";
+const AVG_COLOR = "var(--muted-foreground)";
 
 // Calorie-bar status colours.
 const CAL_COLORS = {
@@ -94,10 +95,18 @@ export function WeightChart({
 }) {
   const goal = goalWeight ?? null;
   const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
-  const chartData = data.map((d) => ({
-    ...d,
-    predicted: predByDate.get(d.date) ?? null,
-  }));
+  // Trailing 7-point moving average smooths daily water-weight noise so the
+  // trend is readable (only worth showing once there are a few weigh-ins).
+  const showAvg = data.length >= 5;
+  const chartData = data.map((d, i) => {
+    const window = data.slice(Math.max(0, i - 6), i + 1);
+    const avg = window.reduce((s, p) => s + p.weight, 0) / window.length;
+    return {
+      ...d,
+      predicted: predByDate.get(d.date) ?? null,
+      avg: showAvg ? Math.round(avg * 10) / 10 : null,
+    };
+  });
 
   // Scope the y-axis to the actual + predicted data only; a far-off goal would
   // otherwise squash the whole weight band. The goal is shown as an annotation.
@@ -168,6 +177,16 @@ export function WeightChart({
                 label={{ value: `goal ${goal}`, position: "insideTopRight", fontSize: 10, fill: "var(--muted-foreground)" }}
               />
             )}
+            {showAvg && (
+              <Line
+                type="monotone"
+                dataKey="avg"
+                stroke={AVG_COLOR}
+                strokeWidth={1.5}
+                dot={false}
+                name="7-day avg"
+              />
+            )}
             <Line
               type="monotone"
               dataKey="weight"
@@ -201,16 +220,19 @@ export function WeightChart({
           {goalNote}
         </p>
       )}
-      {predictions.length > 0 && (
+      {(showAvg || predictions.length > 0) && (
         <>
-          <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
             <Swatch color={ACTUAL_COLOR} label="Actual" />
-            <Swatch color={PREDICTED_COLOR} label="Predicted" />
+            {showAvg && <Swatch color={AVG_COLOR} label="7-day avg" />}
+            {predictions.length > 0 && <Swatch color={PREDICTED_COLOR} label="Predicted" />}
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Predicted from the prior window&apos;s food &amp; exercise. A gap from
-            actual suggests under-reporting or that contingency needs tuning.
-          </p>
+          {predictions.length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Predicted from the prior window&apos;s food &amp; exercise. A gap from
+              actual suggests under-reporting or that contingency needs tuning.
+            </p>
+          )}
         </>
       )}
     </ChartCard>
