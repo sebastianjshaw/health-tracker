@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isConnected } from "@/lib/integrations/google-health";
 import { syncGoogleHealth } from "@/lib/integrations/sync";
 
+// The first sync pulls years of history; give it room beyond the default ~10s.
+export const maxDuration = 60;
+
 /** Daily Vercel cron — authenticates with CRON_SECRET, not a session. */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
