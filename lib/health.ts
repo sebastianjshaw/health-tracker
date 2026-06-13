@@ -56,6 +56,28 @@ export function suggestedCalorieTarget(opts: {
   return Math.round(Math.max(floor, raw) / 50) * 50;
 }
 
+/**
+ * Suggested daily protein (g) from bodyweight. ~1.6–2.2 g/kg preserves lean
+ * mass in a deficit (the classic "1 g per lb" ≈ 2.2 g/kg); we use 2.0 g/kg as a
+ * sensible middle, rounded to the nearest 5 g. Null without a weight.
+ */
+export function suggestedProtein(currentWeightKg: number | null): number | null {
+  if (!currentWeightKg || currentWeightKg <= 0) return null;
+  return Math.round((currentWeightKg * 2.0) / 5) * 5;
+}
+
+/** Maintenance calories (TDEE) = BMR × the sedentary-to-light activity factor.
+ * Null if the profile can't yield a BMR. */
+export function maintenanceCalories(opts: {
+  currentWeightKg: number | null;
+  heightCm: number | null;
+  age: number | null;
+  sex: string;
+}): number | null {
+  const b = bmr(opts.currentWeightKg, opts.heightCm, opts.age, opts.sex);
+  return b == null ? null : Math.round(b * ACTIVITY_FACTOR);
+}
+
 /** Whole-years age from a YYYY-MM-DD date of birth. */
 export function ageFrom(dob: string): number | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return null;
