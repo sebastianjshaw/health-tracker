@@ -6,7 +6,6 @@ import {
   getRecentCardio,
   getRecentLiftSessions,
 } from "@/lib/activity-data";
-import { isConfigured, isConnected } from "@/lib/integrations/google-health";
 
 export default async function ActivityPage({
   searchParams,
@@ -16,13 +15,11 @@ export default async function ActivityPage({
   const { d } = await searchParams;
   const date = d && isValidISO(d) ? d : todayISO();
 
-  const [cardio, nextWorkout, liftHistory, connected] = await Promise.all([
+  const [cardio, nextWorkout, liftHistory] = await Promise.all([
     getRecentCardio(),
     getNextLiftWorkout(),
     getRecentLiftSessions(),
-    isConnected(),
   ]);
-  const canSync = isConfigured() && connected;
 
   return (
     <>
@@ -32,7 +29,6 @@ export default async function ActivityPage({
         cardio={cardio}
         nextWorkout={nextWorkout}
         liftHistory={liftHistory}
-        canSync={canSync}
       />
     </>
   );
