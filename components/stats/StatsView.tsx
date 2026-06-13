@@ -204,7 +204,7 @@ export function StatsView({
       </Card>
 
       <Section title="Body">
-        <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} />
+        <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} today={today} />
         <HeartRateChart data={fHr} />
         <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
       </Section>

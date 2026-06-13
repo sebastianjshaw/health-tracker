@@ -3,6 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 import { DateNav } from "@/components/DateNav";
+import { SyncButton } from "./SyncButton";
 import { CardioForm } from "./CardioForm";
 import { CardioList } from "./CardioList";
 import { LiftTracker } from "./LiftTracker";
@@ -15,16 +16,23 @@ export function ActivityView({
   cardio,
   nextWorkout,
   liftHistory,
+  canSync,
 }: {
   date: string;
   cardio: CardioSession[];
   nextWorkout: NextLiftWorkout;
   liftHistory: LiftHistoryEntry[];
+  canSync: boolean;
 }) {
   const [tab, setTab] = React.useState<"lift" | "cardio">("lift");
 
   return (
     <div className="space-y-4">
+      {canSync && (
+        <div className="flex justify-end">
+          <SyncButton />
+        </div>
+      )}
       <DateNav date={date} basePath="/activity" />
 
       <div className="flex rounded-xl bg-muted p-1">
