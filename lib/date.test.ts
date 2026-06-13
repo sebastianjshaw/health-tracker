@@ -3,12 +3,12 @@ import { describe, it } from "node:test";
 import { addDays, isValidISO, isWeekend, schedulesFor, timeOf, toISODate } from "./date";
 
 describe("timeOf", () => {
-  it("converts a UTC (Z) time to UK local — BST is +1", () => {
-    assert.equal(timeOf("2026-06-13T05:44:34.419Z"), "06:44");
+  it("converts a UTC (Z) time to Swedish local — CEST is +2 in summer", () => {
+    assert.equal(timeOf("2026-06-13T05:44:34.419Z"), "07:44");
   });
 
-  it("converts a UTC (Z) time to UK local — GMT in winter is +0", () => {
-    assert.equal(timeOf("2026-01-15T05:44:00Z"), "05:44");
+  it("converts a UTC (Z) time to Swedish local — CET is +1 in winter", () => {
+    assert.equal(timeOf("2026-01-15T05:44:00Z"), "06:44");
   });
 
   it("reads a naive (manual) wall-clock verbatim", () => {

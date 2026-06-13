@@ -55,8 +55,8 @@ export function relativeLabel(date: string): string | null {
   return null;
 }
 
-/** The user's timezone — single-user app, so a fixed UK zone (DST-aware). */
-const APP_TZ = "Europe/London";
+/** The user's timezone — single-user app based in Sweden (DST-aware). */
+const APP_TZ = "Europe/Stockholm";
 
 /**
  * "HH:MM" (24h) for an ISO datetime, in the user's local time. Timezone-aware
