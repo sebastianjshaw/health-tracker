@@ -70,6 +70,10 @@ export const foodLog = sqliteTable("food_log", {
   protein: real("protein").notNull().default(0),
   carbs: real("carbs").notNull().default(0),
   fat: real("fat").notNull().default(0),
+  // per-serving snapshots of the secondary macros the library carries, so the
+  // stats trends can be computed without re-joining (and stay history-stable)
+  fiber: real("fiber"),
+  saturatedFat: real("saturated_fat"),
   servingSize: real("serving_size").notNull().default(100),
   servingUnit: text("serving_unit").notNull().default("g"),
   source: text("source").notNull().default("manual"),

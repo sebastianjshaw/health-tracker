@@ -22,6 +22,8 @@ type RecurringRow = {
   protein: number;
   carbs: number;
   fat: number;
+  fiber: number | null;
+  saturatedFat: number | null;
   servingSize: number;
   servingUnit: string;
   source: string;
@@ -42,6 +44,8 @@ async function loadRecurringTemplates(db: AppDb): Promise<RecurringRow[]> {
       protein: foods.protein,
       carbs: foods.carbs,
       fat: foods.fat,
+      fiber: foods.fiber,
+      saturatedFat: foods.saturatedFat,
       servingSize: foods.servingSize,
       servingUnit: foods.servingUnit,
       source: foods.source,
@@ -105,6 +109,8 @@ export async function materializeRecurringForDates(db: AppDb, dates: string[]): 
             protein: rec.protein,
             carbs: rec.carbs,
             fat: rec.fat,
+            fiber: rec.fiber,
+            saturatedFat: rec.saturatedFat,
             servingSize: rec.servingSize,
             servingUnit: rec.servingUnit,
             source: "recurring",

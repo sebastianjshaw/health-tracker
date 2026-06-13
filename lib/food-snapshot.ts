@@ -13,6 +13,9 @@ export type LibraryFoodLike = PerServingMacros & {
   servingUnit: string;
   source: string;
   evolution: string;
+  /** Optional secondary macros — snapshotted onto the log row when present. */
+  fiber?: number | null;
+  saturatedFat?: number | null;
 };
 
 /** Wrap absolute portion totals as one serving (MCP free-text logging). */
@@ -50,6 +53,8 @@ export function foodLogSnapshot(
     protein: food.protein,
     carbs: food.carbs,
     fat: food.fat,
+    fiber: food.fiber ?? null,
+    saturatedFat: food.saturatedFat ?? null,
     servingSize: food.servingSize,
     servingUnit: food.servingUnit,
     source: food.source,

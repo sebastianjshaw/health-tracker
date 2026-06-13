@@ -330,6 +330,116 @@ export function CalorieChart({
   );
 }
 
+/** Shared daily-grams bar chart for secondary macros (fiber, saturated fat). */
+function NutrientBarChart({
+  title,
+  data,
+  dataKey,
+  color,
+  target,
+  targetLabel,
+  mode,
+  emptyHint,
+}: {
+  title: string;
+  data: CaloriePoint[];
+  dataKey: "fiber" | "satFat";
+  color: string;
+  target: number;
+  targetLabel: string;
+  /** "more" = good when ≥ target (fiber); "less" = good when ≤ target (sat fat). */
+  mode: "more" | "less";
+  emptyHint: string;
+}) {
+  const val = (d: CaloriePoint) => d[dataKey];
+  const hasData = data.some((d) => val(d) > 0);
+  const dataMax = Math.max(0, ...data.map(val));
+  const yMax = Math.max(5, Math.ceil(Math.max(dataMax, target) / 5) * 5);
+  const logged = data.filter((d) => val(d) > 0);
+  const avg = logged.length
+    ? Math.round(logged.reduce((s, d) => s + val(d), 0) / logged.length)
+    : 0;
+  const summary = `${title}: averaging ${avg} g per logged day (target ${target} g).`;
+  const colorFor = (v: number) =>
+    mode === "less"
+      ? v > target
+        ? "#ef4444"
+        : color
+      : v >= target
+        ? color
+        : "#f59e0b";
+  return (
+    <ChartCard title={`${title} (g/day)`}>
+      {!hasData ? (
+        <EmptyState>{emptyHint}</EmptyState>
+      ) : (
+        <div role="img" aria-label={summary}>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+              <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                itemStyle={{ color: "var(--foreground)" }}
+                labelFormatter={(label) => shortDate(String(label))}
+                formatter={(value) => [`${value} g`, title]}
+                cursor={{ fill: "var(--muted)" }}
+              />
+              <ReferenceLine
+                y={target}
+                stroke="var(--muted-foreground)"
+                strokeDasharray="4 4"
+                label={{
+                  value: targetLabel,
+                  position: "insideTopRight",
+                  fontSize: 10,
+                  fill: "var(--muted-foreground)",
+                }}
+              />
+              <Bar dataKey={dataKey} radius={[4, 4, 0, 0]} name={title}>
+                {data.map((d) => (
+                  <Cell key={d.date} fill={colorFor(val(d))} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </ChartCard>
+  );
+}
+
+export function FiberChart({ data }: { data: CaloriePoint[] }) {
+  return (
+    <NutrientBarChart
+      title="Fiber"
+      data={data}
+      dataKey="fiber"
+      color="#22c55e"
+      target={30}
+      targetLabel="30g goal"
+      mode="more"
+      emptyHint="Fiber shows here once you log foods with fiber data."
+    />
+  );
+}
+
+export function SatFatChart({ data }: { data: CaloriePoint[] }) {
+  return (
+    <NutrientBarChart
+      title="Saturated fat"
+      data={data}
+      dataKey="satFat"
+      color="#94a3b8"
+      target={22}
+      targetLabel="22g cap"
+      mode="less"
+      emptyHint="Saturated fat shows here once you log foods with that data."
+    />
+  );
+}
+
 const LIFT_COLORS: Record<string, string> = {
   squat: "#22c55e",
   bench: "#2563eb",

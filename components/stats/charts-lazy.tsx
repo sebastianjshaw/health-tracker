@@ -20,6 +20,16 @@ export const CalorieChart = dynamic(
   { ssr: false, loading: ChartSkeleton },
 );
 
+export const FiberChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.FiberChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
+export const SatFatChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.SatFatChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 export const LiftChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.LiftChart })),
   { ssr: false, loading: ChartSkeleton },
