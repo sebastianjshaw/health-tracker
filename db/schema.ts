@@ -121,6 +121,9 @@ export const cardioSessions = sqliteTable("cardio_sessions", {
   avgHr: integer("avg_hr"),
   kcal: real("kcal"),
   notes: text("notes"),
+  // ISO start time of the session (from the provider's interval, or set when
+  // logged manually); drives the time-of-day shown in the activity list.
+  startedAt: text("started_at"),
   // 'manual' | 'google-health' | 'fitbit' — and a provider id for import dedup
   source: text("source").notNull().default("manual"),
   externalId: text("external_id"),

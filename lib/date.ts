@@ -54,3 +54,14 @@ export function relativeLabel(date: string): string | null {
   if (date === addDays(todayISO(), 1)) return "Tomorrow";
   return null;
 }
+
+/**
+ * "HH:MM" (24h) from an ISO datetime's wall-clock portion. Reads the recorded
+ * time directly from the string rather than converting timezones, so it's
+ * stable between server and client render. Null if there's no time part.
+ */
+export function timeOf(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const m = /T(\d{2}):(\d{2})/.exec(iso);
+  return m ? `${m[1]}:${m[2]}` : null;
+}

@@ -133,6 +133,7 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     const row = {
       date,
       type,
+      startedAt: ex.interval?.startTime ?? null,
       durationMin,
       distanceKm,
       avgHr: num(m.averageHeartRateBeatsPerMinute),
