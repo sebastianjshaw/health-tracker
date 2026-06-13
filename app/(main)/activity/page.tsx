@@ -8,6 +8,10 @@ import {
 } from "@/lib/activity-data";
 import { isConfigured, isConnected } from "@/lib/integrations/google-health";
 
+// The manual "Sync now" server action runs on this route; the first full sync
+// can take a while, so allow more than the default ~10s function limit.
+export const maxDuration = 60;
+
 export default async function ActivityPage({
   searchParams,
 }: {

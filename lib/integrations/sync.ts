@@ -1,5 +1,6 @@
 import "server-only";
 import { desc, isNotNull } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { bodyMetrics, cardioSessions, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
@@ -62,6 +63,20 @@ export type SyncSummary = {
   restingHr: number;
 };
 
+type SqliteBatchItem = BatchItem<"sqlite">;
+
+/** Run upserts in chunked batches (one round-trip per chunk) instead of one
+ * network round-trip per row — the difference between a full sync finishing
+ * inside the function timeout and timing out before the cursor is saved. */
+async function runBatched(stmts: SqliteBatchItem[], size = 100): Promise<void> {
+  for (let i = 0; i < stmts.length; i += size) {
+    const chunk = stmts.slice(i, i + size);
+    if (chunk.length > 0) {
+      await db.batch(chunk as [SqliteBatchItem, ...SqliteBatchItem[]]);
+    }
+  }
+}
+
 export async function syncGoogleHealth(): Promise<SyncSummary> {
   const token = await getAccessToken();
   if (!token) throw new Error("Google Health is not connected.");
@@ -86,6 +101,7 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   // exercise is a session type — it rejects time filters, so fetch all and
   // window client-side by start date.
   const exPoints = await listDataPoints(token, DATA_TYPES.exercise);
+  const cardioStmts: SqliteBatchItem[] = [];
   for (const dp of exPoints) {
     const ex = dp.exercise as
       | {
@@ -129,18 +145,22 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
           ? Math.round(m.caloriesKcal)
           : estimateCardioKcal(type, durationMin, weightKg),
     };
-    await db
-      .insert(cardioSessions)
-      .values({ ...row, source: SOURCE, externalId })
-      .onConflictDoUpdate({
-        target: [cardioSessions.source, cardioSessions.externalId],
-        set: row,
-      });
+    cardioStmts.push(
+      db
+        .insert(cardioSessions)
+        .values({ ...row, source: SOURCE, externalId })
+        .onConflictDoUpdate({
+          target: [cardioSessions.source, cardioSessions.externalId],
+          set: row,
+        }),
+    );
     summary.exercise++;
   }
+  await runBatched(cardioStmts);
 
   // ---- Sleep → sleepSessions ---- (session type: fetch all, window client-side)
   const sleepPoints = await listDataPoints(token, DATA_TYPES.sleep);
+  const sleepStmts: SqliteBatchItem[] = [];
   for (const dp of sleepPoints) {
     const sl = dp.sleep as
       | {
@@ -162,33 +182,36 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     const stagedAsleep =
       (stages.get("DEEP") ?? 0) + (stages.get("REM") ?? 0) + (stages.get("LIGHT") ?? 0);
     const durationMin = num(sl.summary?.minutesAsleep) ?? stagedAsleep;
-    await db
-      .insert(sleepSessions)
-      .values({
-        date,
-        start: sl.interval?.startTime ?? null,
-        end: sl.interval?.endTime ?? null,
-        durationMin: Math.round(durationMin),
-        deepMin: stages.get("DEEP") ?? null,
-        remMin: stages.get("REM") ?? null,
-        lightMin: stages.get("LIGHT") ?? null,
-        awakeMin: stages.get("AWAKE") ?? null,
-        source: SOURCE,
-        externalId,
-      })
-      .onConflictDoUpdate({
-        target: [sleepSessions.source, sleepSessions.externalId],
-        set: {
+    sleepStmts.push(
+      db
+        .insert(sleepSessions)
+        .values({
           date,
+          start: sl.interval?.startTime ?? null,
+          end: sl.interval?.endTime ?? null,
           durationMin: Math.round(durationMin),
           deepMin: stages.get("DEEP") ?? null,
           remMin: stages.get("REM") ?? null,
           lightMin: stages.get("LIGHT") ?? null,
           awakeMin: stages.get("AWAKE") ?? null,
-        },
-      });
+          source: SOURCE,
+          externalId,
+        })
+        .onConflictDoUpdate({
+          target: [sleepSessions.source, sleepSessions.externalId],
+          set: {
+            date,
+            durationMin: Math.round(durationMin),
+            deepMin: stages.get("DEEP") ?? null,
+            remMin: stages.get("REM") ?? null,
+            lightMin: stages.get("LIGHT") ?? null,
+            awakeMin: stages.get("AWAKE") ?? null,
+          },
+        }),
+    );
     summary.sleep++;
   }
+  await runBatched(sleepStmts);
 
   // ---- Daily resting heart rate → heartRateDaily ----
   // Daily summary type supports a server-side date filter.
@@ -197,6 +220,7 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     DATA_TYPES.restingHr,
     `daily_resting_heart_rate.date >= "${start}"`,
   );
+  const hrStmts: SqliteBatchItem[] = [];
   for (const dp of hrPoints) {
     const rhr = dp.dailyRestingHeartRate as
       | { date?: { year?: number; month?: number; day?: number }; beatsPerMinute?: string | number }
@@ -210,15 +234,18 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     const externalId =
       (typeof dp.name === "string" ? dp.name : null) ?? (date ? `gh-rhr-${date}` : null);
     if (!date || bpm == null || !externalId) continue;
-    await db
-      .insert(heartRateDaily)
-      .values({ date, restingBpm: Math.round(bpm), source: SOURCE, externalId })
-      .onConflictDoUpdate({
-        target: [heartRateDaily.source, heartRateDaily.externalId],
-        set: { date, restingBpm: Math.round(bpm) },
-      });
+    hrStmts.push(
+      db
+        .insert(heartRateDaily)
+        .values({ date, restingBpm: Math.round(bpm), source: SOURCE, externalId })
+        .onConflictDoUpdate({
+          target: [heartRateDaily.source, heartRateDaily.externalId],
+          set: { date, restingBpm: Math.round(bpm) },
+        }),
+    );
     summary.restingHr++;
   }
+  await runBatched(hrStmts);
 
   await setCursor(today);
   return summary;
