@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { estimateWaterMl, totalWaterMl } from "./hydration";
+import { estimateWaterMl, totalWaterMl, waterSourceOf } from "./hydration";
 
 const base = { protein: 0, carbs: 0, fat: 0, category: "food" as string | null };
 
@@ -53,6 +53,14 @@ describe("estimateWaterMl", () => {
       estimateWaterMl({ ...base, servingSize: 1, servingUnit: "tablet", quantity: 1 }),
       0,
     );
+  });
+
+  it("classifies water source: plain water vs other drink vs food", () => {
+    const drink = { servingSize: 250, servingUnit: "ml", quantity: 1, protein: 0, carbs: 0, fat: 0 };
+    assert.equal(waterSourceOf({ ...drink, category: "drink", name: "Sparkling water" }), "water");
+    assert.equal(waterSourceOf({ ...drink, category: "drink", name: "Vatten" }), "water");
+    assert.equal(waterSourceOf({ ...drink, category: "drink", name: "Latte" }), "drink");
+    assert.equal(waterSourceOf({ ...drink, category: "food", name: "Watermelon" }), "food");
   });
 
   it("sums a day's entries", () => {

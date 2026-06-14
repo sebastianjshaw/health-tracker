@@ -17,7 +17,24 @@ export type WaterEntry = {
   fat: number;
   /** Library category ('food' | 'drink' | 'other'); drives the no-mass fallback. */
   category?: string | null;
+  /** Entry name — used to tell plain water apart from other drinks. */
+  name?: string | null;
 };
+
+/** Which bucket an entry's water counts toward in the breakdown. */
+export type WaterSource = "water" | "drink" | "food";
+
+/** Plain water (incl. sparkling/coconut; Swedish "vatten"), as a whole word. */
+const WATER_NAME = /\b(water|vatten)\b/i;
+
+/**
+ * Classify where an entry's water comes from: plain `water`, another `drink`,
+ * or `food` (incidental moisture in solids). Only drinks can be plain water.
+ */
+export function waterSourceOf(e: WaterEntry): WaterSource {
+  if ((e.category ?? "").toLowerCase() !== "drink") return "food";
+  return WATER_NAME.test(e.name ?? "") ? "water" : "drink";
+}
 
 /** Drinks are ~95% water (covers coffee, tea, squash, milk, soda, etc.). */
 const DRINK_WATER_FRACTION = 0.95;
