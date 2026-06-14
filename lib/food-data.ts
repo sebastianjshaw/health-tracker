@@ -22,6 +22,8 @@ export type DayEntry = {
   servingUnit: string;
   source: string;
   evolution: string;
+  /** Library category of the linked food ('food' | 'drink' | 'other'), if any. */
+  category: string | null;
 };
 
 export type RecurringWithFood = {
@@ -81,9 +83,14 @@ export async function getRecurring(): Promise<RecurringWithFood[]> {
 export async function getDayEntries(date: string): Promise<DayEntry[]> {
   await materializeRecurringForDates(db, [date]);
 
-  const logged = await db.select().from(foodLog).where(eq(foodLog.date, date)).all();
+  const logged = await db
+    .select({ log: foodLog, category: foods.category })
+    .from(foodLog)
+    .leftJoin(foods, eq(foodLog.foodId, foods.id))
+    .where(eq(foodLog.date, date))
+    .all();
 
-  return logged.map((r) => ({
+  return logged.map(({ log: r, category }) => ({
     key: `log-${r.id}`,
     kind: r.recurringId != null ? ("recurring" as const) : ("logged" as const),
     logId: r.id,
@@ -100,6 +107,7 @@ export async function getDayEntries(date: string): Promise<DayEntry[]> {
     servingUnit: r.servingUnit,
     source: r.source,
     evolution: r.evolution,
+    category: category ?? null,
   }));
 }
 

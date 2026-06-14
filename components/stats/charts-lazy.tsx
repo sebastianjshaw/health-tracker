@@ -30,6 +30,11 @@ export const SatFatChart = dynamic(
   { ssr: false, loading: ChartSkeleton },
 );
 
+export const HydrationChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.HydrationChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 export const LiftChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.LiftChart })),
   { ssr: false, loading: ChartSkeleton },
