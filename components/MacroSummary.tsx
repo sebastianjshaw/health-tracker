@@ -30,11 +30,14 @@ export function MacroSummary({
   totals,
   targets,
   adjustedKcal,
+  waterMl,
 }: {
   totals: Macros;
   targets: { kcal: number; protein: number };
   /** Contingency-adjusted calories; falls back to raw logged when omitted. */
   adjustedKcal?: number;
+  /** Estimated water (mL) from the day's food & drink; hidden when 0/omitted. */
+  waterMl?: number;
 }) {
   const shownKcal = Math.round(adjustedKcal ?? totals.kcal);
   const buffer = shownKcal - Math.round(totals.kcal);
@@ -84,6 +87,12 @@ export function MacroSummary({
         <MacroStat label="Carbs" grams={totals.carbs} color="var(--carbs)" />
         <MacroStat label="Fat" grams={totals.fat} color="var(--fat)" />
       </div>
+
+      {waterMl != null && waterMl > 0 && (
+        <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+          💧 ~{(waterMl / 1000).toFixed(1)} L water today, estimated from food &amp; drink.
+        </p>
+      )}
     </Card>
   );
 }

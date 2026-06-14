@@ -6,6 +6,7 @@ import { MEALS } from "@/lib/constants";
 import { isValidISO, todayISO } from "@/lib/date";
 import { getDayHealth } from "@/lib/day-data";
 import { getDayEntries } from "@/lib/food-data";
+import { totalWaterMl } from "@/lib/hydration";
 import { adjustedCalories, totals } from "@/lib/nutrition";
 import { getContingency, getTargets } from "@/lib/settings";
 
@@ -26,6 +27,7 @@ export default async function TodayPage({
 
   const dayTotals = totals(entries);
   const adjustedKcal = adjustedCalories(entries, contingency);
+  const waterMl = totalWaterMl(entries);
 
   return (
     <div className="space-y-4">
@@ -33,7 +35,7 @@ export default async function TodayPage({
       <div className="-mt-2 flex justify-end">
         <DayHealthControl key={date} date={date} status={health} />
       </div>
-      <MacroSummary totals={dayTotals} targets={targets} adjustedKcal={adjustedKcal} />
+      <MacroSummary totals={dayTotals} targets={targets} adjustedKcal={adjustedKcal} waterMl={waterMl} />
 
       {MEALS.map((meal) => (
         <MealSection

@@ -440,6 +440,77 @@ export function SatFatChart({ data }: { data: CaloriePoint[] }) {
   );
 }
 
+const WATER_COLORS = {
+  water: "#38bdf8", // plain water
+  drink: "#22d3ee", // other drinks (coffee, tea, milk, …)
+  food: "#64748b", // incidental moisture from solid food
+};
+
+export function HydrationChart({ data }: { data: CaloriePoint[] }) {
+  const hasData = data.some((d) => d.water > 0);
+  const dataMax = Math.max(0, ...data.map((d) => d.water));
+  const yMax = Math.max(500, Math.ceil(Math.max(dataMax, 2500) / 500) * 500);
+  const logged = data.filter((d) => d.water > 0);
+  const avg = logged.length
+    ? Math.round(logged.reduce((s, d) => s + d.water, 0) / logged.length)
+    : 0;
+  const summary = `Hydration: averaging ${(avg / 1000).toFixed(1)} L per logged day — split across plain water, other drinks and food.`;
+  return (
+    <ChartCard title="Hydration (est. ml/day)">
+      {!hasData ? (
+        <EmptyState>Logged food &amp; drink will show estimated water here.</EmptyState>
+      ) : (
+        <>
+          <div role="img" aria-label={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+                <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) => shortDate(String(label))}
+                  formatter={(value, name) => [`${value} ml`, name]}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                <ReferenceLine
+                  y={2500}
+                  stroke="var(--muted-foreground)"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: "~2.5L",
+                    position: "insideTopRight",
+                    fontSize: 10,
+                    fill: "var(--muted-foreground)",
+                  }}
+                />
+                <Bar dataKey="waterWater" stackId="w" fill={WATER_COLORS.water} name="Water" />
+                <Bar dataKey="waterDrink" stackId="w" fill={WATER_COLORS.drink} name="Other drinks" />
+                <Bar
+                  dataKey="waterFood"
+                  stackId="w"
+                  fill={WATER_COLORS.food}
+                  name="From food"
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <Swatch color={WATER_COLORS.water} label="Water" />
+            <Swatch color={WATER_COLORS.drink} label="Other drinks" />
+            <Swatch color={WATER_COLORS.food} label="From food" />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Estimated from logged mass &amp; macros — directional, not exact.
+          </p>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
 const LIFT_COLORS: Record<string, string> = {
   squat: "#22c55e",
   bench: "#2563eb",

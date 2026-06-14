@@ -1,10 +1,11 @@
 import "server-only";
-import { and, asc, desc, gte, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bodyMetrics,
   cardioSessions,
   foodLog,
+  foods,
   heartRateDaily,
   liftSessions,
   liftSets,
@@ -13,6 +14,7 @@ import {
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { addDays, todayISO } from "./date";
 import { ageFrom } from "./health";
+import { estimateWaterMl, waterSourceOf } from "./hydration";
 import { materializeRecurringRange } from "./recurring-materialize";
 import { getContingency, getProfile, getTargetHistory } from "./settings";
 import { targetForDate } from "./targets";
@@ -92,6 +94,11 @@ export type CaloriePoint = {
    * snapshot columns were added; older days read as 0). */
   fiber: number;
   satFat: number;
+  /** Estimated water intake (mL) from food + drink, total and by source. */
+  water: number;
+  waterWater: number;
+  waterDrink: number;
+  waterFood: number;
   /** Meals that have at least one entry that day (drives the proportional target). */
   meals: Meal[];
   /** Target that was in effect on this date (so past days aren't re-judged). */
@@ -126,27 +133,59 @@ export async function calorieSeriesRange(
       date: foodLog.date,
       meal: foodLog.meal,
       quantity: foodLog.quantity,
+      name: foodLog.name,
       kcal: foodLog.kcal,
       protein: foodLog.protein,
+      carbs: foodLog.carbs,
+      fat: foodLog.fat,
       fiber: foodLog.fiber,
       saturatedFat: foodLog.saturatedFat,
+      servingSize: foodLog.servingSize,
+      servingUnit: foodLog.servingUnit,
       evolution: foodLog.evolution,
+      category: foods.category,
     })
     .from(foodLog)
+    .leftJoin(foods, eq(foodLog.foodId, foods.id))
     .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
     .all();
 
   const loggedByDate = new Map<
     string,
-    { kcal: number; protein: number; fiber: number; satFat: number }
+    {
+      kcal: number;
+      protein: number;
+      fiber: number;
+      satFat: number;
+      waterWater: number;
+      waterDrink: number;
+      waterFood: number;
+    }
   >();
   const mealsByDate = new Map<string, Set<Meal>>();
   for (const r of logged) {
-    const acc = loggedByDate.get(r.date) ?? { kcal: 0, protein: 0, fiber: 0, satFat: 0 };
+    const acc =
+      loggedByDate.get(r.date) ??
+      { kcal: 0, protein: 0, fiber: 0, satFat: 0, waterWater: 0, waterDrink: 0, waterFood: 0 };
     acc.kcal += r.kcal * r.quantity * contingencyMultiplier(r.evolution, contingency);
     acc.protein += r.protein * r.quantity;
     acc.fiber += (r.fiber ?? 0) * r.quantity;
     acc.satFat += (r.saturatedFat ?? 0) * r.quantity;
+    const we = {
+      servingSize: r.servingSize,
+      servingUnit: r.servingUnit,
+      quantity: r.quantity,
+      protein: r.protein,
+      carbs: r.carbs,
+      fat: r.fat,
+      category: r.category,
+      name: r.name,
+    };
+    const ml = estimateWaterMl(we);
+    const src = waterSourceOf(we);
+    if (src === "water") acc.waterWater += ml;
+    else if (src === "drink") acc.waterDrink += ml;
+    else acc.waterFood += ml;
     loggedByDate.set(r.date, acc);
     const ms = mealsByDate.get(r.date) ?? new Set<Meal>();
     ms.add(r.meal as Meal);
@@ -162,6 +201,10 @@ export async function calorieSeriesRange(
       protein: Math.round(l?.protein ?? 0),
       fiber: Math.round(l?.fiber ?? 0),
       satFat: Math.round(l?.satFat ?? 0),
+      water: Math.round((l?.waterWater ?? 0) + (l?.waterDrink ?? 0) + (l?.waterFood ?? 0)),
+      waterWater: Math.round(l?.waterWater ?? 0),
+      waterDrink: Math.round(l?.waterDrink ?? 0),
+      waterFood: Math.round(l?.waterFood ?? 0),
       meals: [...(mealsByDate.get(date) ?? [])],
       targetKcal: t.kcal,
       targetProtein: t.protein,

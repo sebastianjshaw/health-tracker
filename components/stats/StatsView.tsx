@@ -9,6 +9,7 @@ import {
   DistanceChart,
   FiberChart,
   HeartRateChart,
+  HydrationChart,
   LiftChart,
   SatFatChart,
   SleepChart,
@@ -215,6 +216,7 @@ export function StatsView({
         <CalorieChart data={fCalories} target={targets.kcal} mealSplit={mealSplit} />
         <FiberChart data={fCalories} />
         <SatFatChart data={fCalories} />
+        <HydrationChart data={fCalories} />
       </Section>
 
       <Section title="Training">
