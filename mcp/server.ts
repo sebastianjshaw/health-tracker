@@ -11,12 +11,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { asc, and, desc, eq, inArray, isNotNull, like, sql } from "drizzle-orm";
+import { asc, and, desc, eq, gte, inArray, isNotNull, like, lte, sql } from "drizzle-orm";
 import { z } from "zod";
 import {
   bloodMarkers,
   bodyMetrics,
   cardioSessions,
+  dayHealth,
   foodLog,
   foods,
   heartRateDaily,
@@ -26,20 +27,29 @@ import {
   sleepSessions,
 } from "../db/schema";
 import {
+  DEFAULT_CONTINGENCY,
   DEFAULT_LIFT_WEIGHTS,
+  DEFAULT_TARGETS,
   EXERCISE_LABELS,
   Exercise,
+  contingencyMultiplier,
   evolutionForSource,
+  type Contingency,
 } from "../lib/constants";
-import { todayISO } from "../lib/date";
+import { addDays, todayISO } from "../lib/date";
 import { inferCategory } from "../lib/food-category";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
+import { ageFrom } from "../lib/health";
+import { estimateCardioKcal } from "../lib/cardio-calories";
+import { estimateWaterMl, waterSourceOf } from "../lib/hydration";
 import { totals as macroTotals } from "../lib/nutrition";
 import {
   hideRecurringOnDate,
   materializeRecurringForDates,
   type AppDb,
 } from "../lib/recurring-materialize";
+import { targetForDate, type TargetEntry } from "../lib/targets";
+import { predictWeights } from "../lib/weight-prediction";
 
 // ---- db ----
 const url = process.env.DATABASE_URL ?? "file:local.db";
@@ -102,16 +112,135 @@ function text(s: string) {
   return { content: [{ type: "text" as const, text: s }] };
 }
 
+async function loadContingency(): Promise<Contingency> {
+  const stored = await getSetting<Partial<Contingency>>("contingency", {});
+  return { ...DEFAULT_CONTINGENCY, ...stored };
+}
+
+/** Effective-dated target history, ascending; seeded from the current target. */
+async function loadTargetHistory(): Promise<TargetEntry[]> {
+  const hist = await getSetting<TargetEntry[] | null>("targetHistory", null);
+  if (hist && hist.length) return [...hist].sort((a, b) => a.from.localeCompare(b.from));
+  const cur = await getSetting("targets", DEFAULT_TARGETS);
+  return [{ from: "2000-01-01", kcal: cur.kcal, protein: cur.protein }];
+}
+
+type DayNutrition = {
+  date: string;
+  kcal: number; // contingency-adjusted, matching the app's displayed figure
+  loggedKcal: number; // raw logged
+  protein: number;
+  fiber: number;
+  satFat: number;
+  water: number;
+  waterWater: number;
+  waterDrink: number;
+  waterFood: number;
+  targetKcal: number;
+  targetProtein: number;
+};
+
+/** Per-day nutrition + hydration totals across an inclusive range (mirrors the
+ * app's calorieSeriesRange, re-implemented here since that module is server-only). */
+async function nutritionForRange(start: string, end: string): Promise<DayNutrition[]> {
+  const dates: string[] = [];
+  for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
+  await materializeRecurringForDates(db, dates);
+  const contingency = await loadContingency();
+  const history = await loadTargetHistory();
+
+  const rows = await db
+    .select({
+      date: foodLog.date,
+      name: foodLog.name,
+      quantity: foodLog.quantity,
+      kcal: foodLog.kcal,
+      protein: foodLog.protein,
+      carbs: foodLog.carbs,
+      fat: foodLog.fat,
+      fiber: foodLog.fiber,
+      saturatedFat: foodLog.saturatedFat,
+      servingSize: foodLog.servingSize,
+      servingUnit: foodLog.servingUnit,
+      evolution: foodLog.evolution,
+      category: foods.category,
+    })
+    .from(foodLog)
+    .leftJoin(foods, eq(foodLog.foodId, foods.id))
+    .where(and(gte(foodLog.date, start), lte(foodLog.date, end)))
+    .all();
+
+  type Acc = Omit<DayNutrition, "date" | "targetKcal" | "targetProtein">;
+  const byDate = new Map<string, Acc>();
+  for (const r of rows) {
+    const a =
+      byDate.get(r.date) ??
+      {
+        kcal: 0,
+        loggedKcal: 0,
+        protein: 0,
+        fiber: 0,
+        satFat: 0,
+        water: 0,
+        waterWater: 0,
+        waterDrink: 0,
+        waterFood: 0,
+      };
+    a.loggedKcal += r.kcal * r.quantity;
+    a.kcal += r.kcal * r.quantity * contingencyMultiplier(r.evolution, contingency);
+    a.protein += r.protein * r.quantity;
+    a.fiber += (r.fiber ?? 0) * r.quantity;
+    a.satFat += (r.saturatedFat ?? 0) * r.quantity;
+    const we = {
+      servingSize: r.servingSize,
+      servingUnit: r.servingUnit,
+      quantity: r.quantity,
+      protein: r.protein,
+      carbs: r.carbs,
+      fat: r.fat,
+      category: r.category,
+      name: r.name,
+    };
+    const ml = estimateWaterMl(we);
+    const src = waterSourceOf(we);
+    a.water += ml;
+    if (src === "water") a.waterWater += ml;
+    else if (src === "drink") a.waterDrink += ml;
+    else a.waterFood += ml;
+    byDate.set(r.date, a);
+  }
+
+  return dates.map((date) => {
+    const a = byDate.get(date);
+    const t = targetForDate(history, date);
+    return {
+      date,
+      kcal: Math.round(a?.kcal ?? 0),
+      loggedKcal: Math.round(a?.loggedKcal ?? 0),
+      protein: Math.round(a?.protein ?? 0),
+      fiber: Math.round(a?.fiber ?? 0),
+      satFat: Math.round(a?.satFat ?? 0),
+      water: Math.round(a?.water ?? 0),
+      waterWater: Math.round(a?.waterWater ?? 0),
+      waterDrink: Math.round(a?.waterDrink ?? 0),
+      waterFood: Math.round(a?.waterFood ?? 0),
+      targetKcal: t.kcal,
+      targetProtein: t.protein,
+    };
+  });
+}
+
 const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Get all food entries (logged + recurring defaults) and nutrition totals for a date. Defaults to today.",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), that day's effective calorie & protein target, and the logged health status (healthy/unwell/injured).",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
-    await materializeRecurringForDates(db, [d]);
+    const [day] = await nutritionForRange(d, d); // materialises recurring + aggregates
     const logged = await db.select().from(foodLog).where(eq(foodLog.date, d)).all();
+    const healthRow = await db.select().from(dayHealth).where(eq(dayHealth.date, d)).get();
 
     const entries = logged.map((r) => ({
       id: r.id,
@@ -122,21 +251,33 @@ server.tool(
       protein: r.protein,
       carbs: r.carbs,
       fat: r.fat,
+      fiber: r.fiber ?? undefined,
+      saturatedFat: r.saturatedFat ?? undefined,
       source: r.source,
       recurring: r.recurringId != null,
     }));
-
-    const totals = macroTotals(entries);
+    const macros = macroTotals(entries);
 
     return text(
       JSON.stringify(
         {
           date: d,
+          healthStatus: healthRow?.status ?? "healthy",
+          target: { kcal: day.targetKcal, protein: day.targetProtein },
           totals: {
-            kcal: Math.round(totals.kcal),
-            protein: Math.round(totals.protein),
-            carbs: Math.round(totals.carbs),
-            fat: Math.round(totals.fat),
+            kcal: day.kcal, // contingency-adjusted (what the app shows)
+            loggedKcal: day.loggedKcal, // raw logged, before the uplift
+            protein: Math.round(macros.protein),
+            carbs: Math.round(macros.carbs),
+            fat: Math.round(macros.fat),
+            fiber: day.fiber,
+            saturatedFat: day.satFat,
+          },
+          hydrationMl: {
+            total: day.water,
+            water: day.waterWater,
+            otherDrinks: day.waterDrink,
+            fromFood: day.waterFood,
           },
           entries,
         },
@@ -266,7 +407,7 @@ server.tool(
 
 server.tool(
   "get_weight_trend",
-  "Recent body weight measurements, newest first.",
+  "Recent body weight (newest first) plus goal distance and an energy-balance PREDICTION per weigh-in: what weight the logged food (contingency-adjusted) and exercise imply, vs the actual measured weight. A persistent gap means logging/contingency is off — predicted above actual = losing faster than logs suggest (under-reported intake); below = the reverse.",
   { limit: z.number().optional() },
   async ({ limit }) => {
     const rows = await db
@@ -276,9 +417,59 @@ server.tool(
       .orderBy(desc(bodyMetrics.date))
       .limit(limit ?? 30)
       .all();
+
+    const goalWeight = await getSetting<number | null>("goalWeight", null);
+    const latest = rows[0]?.weightKg ?? null;
+
+    // Predict over the span of the returned weigh-ins (oldest → newest).
+    const weighIns = [...rows]
+      .reverse()
+      .map((r) => ({ date: r.date, weight: r.weightKg as number }));
+    let predictions: ReturnType<typeof predictWeights> = [];
+    if (weighIns.length >= 2) {
+      const start = weighIns[0].date;
+      const end = weighIns[weighIns.length - 1].date;
+      const nut = await nutritionForRange(start, end);
+      const intakeByDate = new Map(nut.map((n) => [n.date, n.kcal]));
+      const cardioRows = await db
+        .select({ date: cardioSessions.date, kcal: cardioSessions.kcal })
+        .from(cardioSessions)
+        .where(and(gte(cardioSessions.date, start), lte(cardioSessions.date, end)))
+        .all();
+      const cardioByDate = new Map<string, number>();
+      for (const c of cardioRows) {
+        if (c.kcal == null) continue;
+        cardioByDate.set(c.date, (cardioByDate.get(c.date) ?? 0) + c.kcal);
+      }
+      const profile = await getSetting<{ heightCm: number | null; dob: string; sex: string }>(
+        "profile",
+        { heightCm: null, dob: "", sex: "" },
+      );
+      predictions = predictWeights({
+        weighIns,
+        intakeByDate,
+        cardioByDate,
+        heightCm: profile.heightCm,
+        age: profile.dob ? ageFrom(profile.dob) : null,
+        sex: profile.sex,
+      });
+    }
+
     return text(
       JSON.stringify(
-        rows.map((r) => ({ date: r.date, weightKg: r.weightKg, bodyFatPct: r.bodyFatPct })),
+        {
+          goalWeight,
+          toGoalKg:
+            latest != null && goalWeight != null
+              ? Math.round((latest - goalWeight) * 10) / 10
+              : null,
+          weights: rows.map((r) => ({
+            date: r.date,
+            weightKg: r.weightKg,
+            bodyFatPct: r.bodyFatPct,
+          })),
+          predictions,
+        },
         null,
         2,
       ),
@@ -436,6 +627,7 @@ server.tool(
       JSON.stringify(
         rows.map((r) => ({
           date: r.date,
+          startedAt: r.startedAt ?? undefined,
           type: r.type,
           durationMin: r.durationMin,
           distanceKm: r.distanceKm,
@@ -509,10 +701,10 @@ server.tool(
 
 server.tool(
   "get_goals",
-  "Get daily goals: calorie & protein targets, goal weight, and meal calorie split.",
+  "Get daily goals: current calorie & protein targets, goal weight, meal calorie split, and the effective-dated target history (targets are versioned, so a past day was judged against the target valid then — not the current one).",
   {},
   async () => {
-    const targets = await getSetting("targets", { kcal: 2200, protein: 150 });
+    const targets = await getSetting("targets", DEFAULT_TARGETS);
     const goalWeight = await getSetting<number | null>("goalWeight", null);
     const mealSplit = await getSetting("mealSplit", {
       breakfast: 25,
@@ -520,7 +712,106 @@ server.tool(
       dinner: 35,
       snacks: 10,
     });
-    return text(JSON.stringify({ targets, goalWeight, mealSplit }, null, 2));
+    const targetHistory = await loadTargetHistory();
+    return text(JSON.stringify({ targets, goalWeight, mealSplit, targetHistory }, null, 2));
+  },
+);
+
+server.tool(
+  "get_nutrition_trend",
+  "Daily nutrition & hydration over the last N days (default 30): per day the contingency-adjusted calories vs that day's effective target, protein, fiber, saturated fat, and estimated water (split by source). Includes averages and adherence counts — use this for weekly/period coaching, not single-day questions (use get_day for those).",
+  { days: z.number().optional() },
+  async ({ days }) => {
+    const n = Math.max(1, Math.min(days ?? 30, 365));
+    const today = todayISO();
+    const series = await nutritionForRange(addDays(today, -(n - 1)), today);
+    const logged = series.filter((s) => s.loggedKcal > 0);
+    const avg = (sel: (s: DayNutrition) => number) =>
+      logged.length ? Math.round(logged.reduce((a, s) => a + sel(s), 0) / logged.length) : 0;
+    const summary = {
+      daysLogged: logged.length,
+      avgKcal: avg((s) => s.kcal),
+      avgProtein: avg((s) => s.protein),
+      avgFiber: avg((s) => s.fiber),
+      avgSatFat: avg((s) => s.satFat),
+      avgWaterMl: avg((s) => s.water),
+      daysAtOrUnderKcalTarget: logged.filter((s) => s.kcal <= s.targetKcal).length,
+      daysHitProteinTarget: logged.filter((s) => s.protein >= s.targetProtein).length,
+    };
+    return text(JSON.stringify({ rangeDays: n, summary, series }, null, 2));
+  },
+);
+
+server.tool(
+  "get_health_status",
+  "Days flagged unwell or injured over the last N days (default 30) — context for dips in training, appetite or weight. Healthy days are omitted.",
+  { days: z.number().optional() },
+  async ({ days }) => {
+    const n = Math.max(1, Math.min(days ?? 30, 365));
+    const today = todayISO();
+    const start = addDays(today, -(n - 1));
+    const rows = await db
+      .select()
+      .from(dayHealth)
+      .where(and(gte(dayHealth.date, start), lte(dayHealth.date, today)))
+      .orderBy(desc(dayHealth.date))
+      .all();
+    const flagged = rows.filter((r) => r.status && r.status !== "healthy");
+    return text(
+      JSON.stringify(
+        {
+          rangeDays: n,
+          unwellDays: flagged.filter((r) => r.status === "unwell").length,
+          injuredDays: flagged.filter((r) => r.status === "injured").length,
+          days: flagged.map((r) => ({ date: r.date, status: r.status })),
+        },
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+server.tool(
+  "log_cardio",
+  "Log a cardio session (run/bike/row/walk/swim/other). Defaults to today. If calories aren't given, they're estimated from the type, duration and your latest bodyweight.",
+  {
+    date: ISO.optional(),
+    type: z.enum(["run", "bike", "row", "walk", "swim", "other"]),
+    durationMin: z.number().optional(),
+    distanceKm: z.number().optional(),
+    avgHr: z.number().optional(),
+    kcal: z.number().optional(),
+    notes: z.string().optional(),
+  },
+  async ({ date, type, durationMin, distanceKm, avgHr, kcal, notes }) => {
+    const d = date ?? todayISO();
+    let cal = kcal ?? null;
+    if (cal == null) {
+      const w = await db
+        .select({ weight: bodyMetrics.weightKg })
+        .from(bodyMetrics)
+        .where(isNotNull(bodyMetrics.weightKg))
+        .orderBy(desc(bodyMetrics.date))
+        .limit(1)
+        .get();
+      cal = estimateCardioKcal(type, durationMin ?? null, w?.weight ?? null);
+    }
+    await db.insert(cardioSessions).values({
+      date: d,
+      type,
+      durationMin: durationMin ?? null,
+      distanceKm: distanceKm ?? null,
+      avgHr: avgHr ?? null,
+      kcal: cal,
+      notes: notes ?? null,
+      source: "manual",
+    });
+    return text(
+      `Logged ${type} on ${d}${durationMin ? ` (${durationMin} min)` : ""}${
+        cal ? ` ~${Math.round(cal)} kcal` : ""
+      }.`,
+    );
   },
 );
 
