@@ -25,6 +25,13 @@ describe("projectGoalEta", () => {
     assert.ok(eta!.days > 40 && eta!.days < 120, `unexpected days: ${eta!.days}`);
   });
 
+  it("projects from a short (~10-day) window of weigh-ins", () => {
+    const w = series(113, -0.12, 10); // ~0.84 kg/wk over 10 days
+    const eta = projectGoalEta(w, 85, w[w.length - 1].date);
+    assert.ok(eta, "expected an ETA from a 10-day span");
+    assert.ok(eta!.kgPerWeek < 0);
+  });
+
   it("returns null when the trend moves away from the goal", () => {
     const w = series(100, +0.1, 30); // gaining, but goal is below
     assert.equal(projectGoalEta(w, 90, w[w.length - 1].date), null);
