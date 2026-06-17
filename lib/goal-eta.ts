@@ -33,7 +33,7 @@ export function projectGoalEta(
   const dayOf = (d: string) => (parseISO(d).getTime() - firstMs) / 86_400_000;
   const xs = ma.map((p) => dayOf(p.date));
   const ys = ma.map((p) => p.value);
-  if (xs[xs.length - 1] < 14) return null; // need a couple of weeks of span
+  if (xs[xs.length - 1] < 7) return null; // need at least a week of span
 
   // Least-squares slope (kg/day).
   const n = xs.length;
