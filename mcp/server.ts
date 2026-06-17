@@ -65,14 +65,20 @@ async function ensureMcpLibraryFood(opts: {
   protein: number;
   carbs: number;
   fat: number;
+  fiber?: number | null;
+  saturatedFat?: number | null;
 }): Promise<number> {
   const name = opts.name.trim();
-  const serving = portionAsSingleServing({
-    kcal: opts.kcal,
-    protein: opts.protein,
-    carbs: opts.carbs,
-    fat: opts.fat,
-  });
+  const serving = {
+    ...portionAsSingleServing({
+      kcal: opts.kcal,
+      protein: opts.protein,
+      carbs: opts.carbs,
+      fat: opts.fat,
+    }),
+    fiber: opts.fiber ?? null,
+    saturatedFat: opts.saturatedFat ?? null,
+  };
   const existing = await db
     .select()
     .from(foods)
@@ -323,7 +329,7 @@ server.tool(
 
 server.tool(
   "log_food",
-  "Add a free-text food entry to a day's meal. kcal/protein/carbs/fat are the ABSOLUTE TOTALS for the whole portion eaten — already account for the amount, do NOT pass per-unit values or a multiplier.",
+  "Add a free-text food entry to a day's meal. kcal/protein/carbs/fat (and optional fiber/saturatedFat) are the ABSOLUTE TOTALS in grams for the whole portion eaten — already account for the amount, do NOT pass per-unit values or a multiplier. Include fiber and saturatedFat when known so the daily fiber/sat-fat trends are accurate.",
   {
     date: ISO.optional(),
     meal: MEAL,
@@ -332,16 +338,20 @@ server.tool(
     protein: z.number().optional(),
     carbs: z.number().optional(),
     fat: z.number().optional(),
+    fiber: z.number().optional(),
+    saturatedFat: z.number().optional(),
   },
-  async ({ date, meal, name, kcal, protein, carbs, fat }) => {
+  async ({ date, meal, name, kcal, protein, carbs, fat, fiber, saturatedFat }) => {
     const d = date ?? todayISO();
-    const totals = {
+    const foodId = await ensureMcpLibraryFood({
+      name,
       kcal,
       protein: protein ?? 0,
       carbs: carbs ?? 0,
       fat: fat ?? 0,
-    };
-    const foodId = await ensureMcpLibraryFood({ name, ...totals });
+      fiber: fiber ?? null,
+      saturatedFat: saturatedFat ?? null,
+    });
     const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
     if (!food) return text(`Failed to save "${name}".`);
     await db.insert(foodLog).values(foodLogSnapshot(food, { date: d, meal, quantity: 1 }));
