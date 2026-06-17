@@ -376,6 +376,44 @@ server.tool(
 );
 
 server.tool(
+  "update_food_entry",
+  "Edit fields on an already-logged food entry by its id (from get_day) — e.g. backfill fiber/saturatedFat on an older entry, or correct a macro. Only the fields you pass change. Values are the per-serving figures stored on the entry; for free-text entries (quantity 1) that's the whole portion. Works on recurring-default entries too (edits just that day's instance).",
+  {
+    id: z.number(),
+    meal: MEAL.optional(),
+    name: z.string().optional(),
+    quantity: z.number().optional(),
+    kcal: z.number().optional(),
+    protein: z.number().optional(),
+    carbs: z.number().optional(),
+    fat: z.number().optional(),
+    fiber: z.number().optional(),
+    saturatedFat: z.number().optional(),
+  },
+  async ({ id, meal, name, quantity, kcal, protein, carbs, fat, fiber, saturatedFat }) => {
+    const row = await db.select().from(foodLog).where(eq(foodLog.id, id)).get();
+    if (!row) return text(`No food entry with id ${id}.`);
+
+    const set: Partial<typeof foodLog.$inferInsert> = {};
+    if (meal !== undefined) set.meal = meal;
+    if (name !== undefined) set.name = name;
+    if (quantity !== undefined) set.quantity = quantity;
+    if (kcal !== undefined) set.kcal = kcal;
+    if (protein !== undefined) set.protein = protein;
+    if (carbs !== undefined) set.carbs = carbs;
+    if (fat !== undefined) set.fat = fat;
+    if (fiber !== undefined) set.fiber = fiber;
+    if (saturatedFat !== undefined) set.saturatedFat = saturatedFat;
+
+    const fields = Object.keys(set);
+    if (fields.length === 0) return text("Nothing to update — pass at least one field to change.");
+
+    await db.update(foodLog).set(set).where(eq(foodLog.id, id));
+    return text(`Updated "${row.name}" on ${row.date}: ${fields.join(", ")}.`);
+  },
+);
+
+server.tool(
   "add_food_from_library",
   "Add an existing library food (by id from search_foods) to a day's meal.",
   { date: ISO.optional(), meal: MEAL, foodId: z.number(), quantity: z.number().optional() },
