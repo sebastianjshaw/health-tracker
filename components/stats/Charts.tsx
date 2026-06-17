@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
 import { LogWeightButton } from "@/components/stats/LogWeightButton";
+import { projectGoalEta } from "@/lib/goal-eta";
 import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
 import {
   Granularity,
@@ -51,6 +52,13 @@ const GRID = "var(--border)";
 function shortDate(d: string) {
   const [, m, day] = d.split("-");
   return `${day}/${m}`;
+}
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "12 Jul 2027" from an ISO date — tz-stable (parses the string parts). */
+function longDate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${d} ${MONTHS_SHORT[m - 1]} ${y}`;
 }
 
 function ChartCard({
@@ -120,12 +128,22 @@ export function WeightChart({
     goal != null && latestWeight != null
       ? Math.round((latestWeight - goal) * 10) / 10
       : null;
+  const eta =
+    goal != null && today
+      ? projectGoalEta(
+          data.map((d) => ({ date: d.date, weight: d.weight })),
+          goal,
+          today,
+        )
+      : null;
   const goalNote =
     goal != null
       ? `Goal ${goal} kg${
           toGoal != null && toGoal !== 0
             ? ` · ${Math.abs(toGoal)} kg ${toGoal > 0 ? "to go" : "below"}`
             : ""
+        }${
+          eta ? ` · est. ${longDate(eta.date)} at ${Math.abs(eta.kgPerWeek)} kg/wk` : ""
         }`
       : null;
 
