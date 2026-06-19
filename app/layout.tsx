@@ -8,12 +8,12 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Health Tracker",
-  description: "Personal food, activity and body-stats tracker",
+  title: "Baseline",
+  description: "Track less, know more — a personal food, training and body-stats tracker.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Health",
+    title: "Baseline",
   },
 };
 
