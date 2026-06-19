@@ -101,38 +101,41 @@ export function buildCharacter(input: CharacterInput): Character {
   }
 
   // ---- DEX: running pace, else cardio volume ----
+  // 10 ≈ an average mover (~7:30/km best effort); faster climbs (~5:00/km ≈ 14).
   let dex: number;
   let dexBasis: string;
   if (input.bestRunPace != null) {
-    dex = clamp(r(11 + (6.0 - input.bestRunPace) * 2), 3, 20);
+    dex = clamp(r(10 + (7.5 - input.bestRunPace) * 1.5), 3, 20);
     dexBasis = `best pace ${input.bestRunPace.toFixed(1)} min/km`;
     if (input.weeklyKm != null) dexBasis += `, ~${r(input.weeklyKm)} km/wk`;
   } else if (input.weeklyKm != null && input.weeklyKm > 0) {
-    dex = clamp(r(8 + input.weeklyKm * 0.2), 3, 18);
+    dex = clamp(r(10 + input.weeklyKm * 0.15), 3, 18);
     dexBasis = `~${r(input.weeklyKm)} km/wk cardio`;
   } else {
-    dex = 8;
-    dexBasis = "no cardio logged yet";
+    dex = 10; // unmeasured ≈ average
+    dexBasis = "no cardio logged — assumed average";
   }
 
-  // ---- CON: resting HR (lower = better) + sleep ----
+  // ---- CON: resting HR (lower = fitter) + sleep ----
+  // 70 bpm ≈ an average adult's resting pulse → 10; fitter pulses climb.
   let con: number;
   let conBasis: string;
   if (input.restingHr != null) {
-    let s = 11 + (60 - input.restingHr) * 0.3;
+    let s = 10 + (70 - input.restingHr) * 0.2;
     if (input.avgSleepH != null) s += input.avgSleepH >= 7.5 ? 2 : input.avgSleepH >= 7 ? 1 : input.avgSleepH < 6 ? -2 : 0;
     con = clamp(r(s), 3, 20);
     conBasis = `resting HR ${input.restingHr} bpm${input.avgSleepH != null ? `, ${input.avgSleepH.toFixed(1)} h sleep` : ""}`;
   } else if (input.avgSleepH != null) {
-    con = clamp(r(9 + (input.avgSleepH - 7) * 2), 3, 16);
+    con = clamp(r(10 + (input.avgSleepH - 7) * 2), 4, 16);
     conBasis = `${input.avgSleepH.toFixed(1)} h sleep (no resting HR)`;
   } else {
-    con = 9;
-    conBasis = "no resting HR or sleep logged";
+    con = 10; // unmeasured ≈ average
+    conBasis = "no resting HR or sleep logged — assumed average";
   }
 
   // ---- INT: self-knowledge = tracking breadth + consistency ----
-  const int = clamp(r(4 + input.trackingPct * 0.1 + input.domainsCovered * 1), 3, 20);
+  // Mostly upside: minimal tracking sits near average (~9); thoroughness climbs.
+  const int = clamp(r(9 + input.trackingPct * 0.04 + input.domainsCovered * 0.8), 3, 20);
   const intBasis = `${r(input.trackingPct)}% of days logged, ${input.domainsCovered}/6 data domains`;
 
   // ---- WIS: discipline = adherence to targets ----
@@ -143,7 +146,8 @@ export function buildCharacter(input: CharacterInput): Character {
   );
   if (adh.length) {
     const a = adh.reduce((s, x) => s + x, 0) / adh.length;
-    wis = clamp(r(4 + a * 0.14), 3, 20);
+    wis = clamp(r(10 + (a - 55) * 0.12), 3, 20); // ~55% adherence ≈ average
+
     wisBasis =
       `${input.calorieAdherencePct != null ? `${r(input.calorieAdherencePct)}% on calories` : ""}` +
       `${input.proteinAdherencePct != null ? `${input.calorieAdherencePct != null ? ", " : ""}${r(input.proteinAdherencePct)}% on protein` : ""}`;
@@ -152,14 +156,13 @@ export function buildCharacter(input: CharacterInput): Character {
     wisBasis = "no target adherence to judge yet";
   }
 
-  // ---- CHA: not really measurable — a proxy for vitality & showing up ----
+  // ---- CHA: a scale can't measure charisma. Average baseline, no penalties —
+  // only a small nod for energy (good sleep) and being engaged (consistency). ----
   let chaAdj = 0;
-  if (input.bmi != null) {
-    chaAdj += input.bmi >= 18.5 && input.bmi < 25 ? 3 : input.bmi < 30 ? 0 : input.bmi < 35 ? -2 : -3;
-  }
   if (input.avgSleepH != null && input.avgSleepH >= 7) chaAdj += 1;
-  const cha = clamp(r(10 + chaAdj + input.trackingPct * 0.02), 3, 18);
-  const chaBasis = `vitality proxy${input.bmi != null ? ` (BMI ${input.bmi})` : ""} — charisma isn't something a scale can read`;
+  if (input.trackingPct >= 70) chaAdj += 1;
+  const cha = clamp(r(10 + chaAdj), 10, 13);
+  const chaBasis = "a scale can't read charisma — average, with a nod for energy & showing up";
 
   const raw: Record<AbilityKey, { score: number; basis: string }> = {
     str: { score: str, basis: strBasis },
@@ -177,29 +180,29 @@ export function buildCharacter(input: CharacterInput): Character {
       "Genuinely strong. The barbell respects you.",
     ],
     dex: [
-      "Cardio is more theory than practice right now.",
-      "Reasonably nimble — you can chase a bus without regret.",
-      "Quick and conditioned; you'd take the parkrun sprint finish.",
+      "Below an average pace right now — cardio's more theory than practice.",
+      "Gets around fine; cardio's ticking over without being a strength.",
+      "Quick and well-conditioned — sprint-finish material.",
     ],
     con: [
-      "Resting pulse and/or sleep suggest the engine works hard at idle.",
-      "Solid constitution — holds up to a normal week.",
-      "Runs cool and steady: low resting pulse, good recovery.",
+      "Engine runs a bit hot at rest — elevated resting pulse and/or short sleep.",
+      "Steady constitution — holds up to a normal week.",
+      "Runs cool and efficient: low resting pulse, strong recovery.",
     ],
     int: [
-      "Flying partly blind — the data's patchy.",
-      "Tracks the essentials, with gaps.",
+      "Light on self-data — going partly by feel.",
+      "Tracks the essentials and knows the rough shape of things.",
       "Meticulous logger; you know your own numbers cold.",
     ],
     wis: [
-      "Targets are more of a guideline than a rule lately.",
-      "Mostly on plan, with the occasional detour.",
+      "Targets drift more than they're hit lately.",
+      "Mostly on plan, with the odd detour.",
       "Disciplined — hits the targets set, most days.",
     ],
     cha: [
-      "Low on the proxy: tired engine, inconsistent showing-up.",
-      "Average presence — fed, rested enough, present.",
-      "High energy and consistency reading through.",
+      "Running low on energy of late.",
+      "A scale can't read charisma — call it average, with credit for showing up.",
+      "High energy and consistency, present and engaged.",
     ],
   };
 
