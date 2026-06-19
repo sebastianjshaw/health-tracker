@@ -12,6 +12,7 @@ const ITEMS = [
   { href: "/bloodwork", label: "Blood & lab results" },
   { href: "/settings", label: "Settings" },
   { href: "/report", label: "Doctor report" },
+  { href: "/character", label: "Character Sheet" },
 ] as const;
 
 export function AccountMenu({ name }: { name?: string }) {
