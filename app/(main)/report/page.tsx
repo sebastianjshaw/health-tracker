@@ -302,7 +302,7 @@ export default async function ReportPage({
         </Section>
 
         <footer className="mt-6 border-t border-border pt-2 text-xs text-muted-foreground">
-          Self-reported data from the Health Tracker app. Nutrition and activity
+          Self-reported data from the Baseline app. Nutrition and activity
           figures are user-entered estimates. Generated {prettyDate(r.generatedOn)}.
         </footer>
       </article>

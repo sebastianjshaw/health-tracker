@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Health Tracker",
-    short_name: "Health",
-    description: "Personal food, activity and body-stats tracker",
+    name: "Baseline",
+    short_name: "Baseline",
+    description: "Track less, know more — a personal food, training and body-stats tracker.",
     start_url: "/",
     display: "standalone",
     background_color: "#0c0e12",
