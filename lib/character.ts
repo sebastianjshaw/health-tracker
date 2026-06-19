@@ -87,15 +87,17 @@ const HIT_DIE: Record<string, number> = {
 
 export function buildCharacter(input: CharacterInput): Character {
   // ---- STR: big-three relative to bodyweight ----
+  // Anchored to D&D's scale where 10 is an average human commoner: a novice
+  // total (~1.5× bodyweight S+B+D) sits ~9, climbing to elite ~20 near 6×.
   let str: number;
   let strBasis: string;
   if (input.liftTotalKg > 0 && input.weightKg && input.weightKg > 0) {
     const ratio = input.liftTotalKg / input.weightKg;
-    str = clamp(r(11 + (ratio - 3) * 3), 3, 20);
+    str = clamp(r(9 + (ratio - 1.5) * 2.4), 3, 20);
     strBasis = `S+B+D ≈ ${r(input.liftTotalKg)} kg (${ratio.toFixed(1)}× bodyweight)`;
   } else {
-    str = 8;
-    strBasis = "no lifts logged yet";
+    str = 10; // unmeasured ≈ an average human, not weak
+    strBasis = "no lifts logged — assumed average";
   }
 
   // ---- DEX: running pace, else cardio volume ----
@@ -170,9 +172,9 @@ export function buildCharacter(input: CharacterInput): Character {
 
   const NOTES: Record<AbilityKey, [string, string, string]> = {
     str: [
-      "Untested or undertrained — gravity is winning for now.",
-      "Functionally strong; you can carry all the shopping in one trip.",
-      "Moves serious weight. The barbell respects you.",
+      "Around an average human's strength — fine for daily life, but no one's calling you to shift their piano.",
+      "Solid, practical strength — daily life and then some.",
+      "Genuinely strong. The barbell respects you.",
     ],
     dex: [
       "Cardio is more theory than practice right now.",
