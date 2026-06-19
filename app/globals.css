@@ -121,3 +121,36 @@ button {
     box-shadow: none;
   }
 }
+
+/* ---- Brand logo reveal (login screen) ---- */
+@keyframes logo-pop {
+  0% { opacity: 0; transform: scale(0.2); }
+  60% { opacity: 1; transform: scale(1.15); }
+  80% { transform: scale(0.94); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes heartbeat {
+  0%, 42%, 100% { transform: scale(1); }
+  12% { transform: scale(1.12); }
+  24% { transform: scale(1); }
+  31% { transform: scale(1.06); }
+}
+@keyframes rise-in {
+  0% { opacity: 0; transform: translateY(10px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.brand-pop { animation: logo-pop 0.85s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.brand-beat { transform-origin: center; animation: heartbeat 1.7s ease-in-out 1.15s infinite; }
+.brand-rise-1 { opacity: 0; animation: rise-in 0.7s ease-out 1s forwards; }
+.brand-rise-2 { opacity: 0; animation: rise-in 0.8s ease-out 1.6s forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-pop,
+  .brand-beat,
+  .brand-rise-1,
+  .brand-rise-2 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
