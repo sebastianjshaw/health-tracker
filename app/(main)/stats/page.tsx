@@ -6,6 +6,7 @@ import { getGoalWeight, getMealSplit, getTargets } from "@/lib/settings";
 import {
   getCalorieSeries,
   getCardioDistances,
+  getDailyActivity,
   getLiftProgression,
   getRestingHrSeries,
   getSleepSeries,
@@ -15,7 +16,7 @@ import {
 
 export default async function StatsPage() {
   const today = todayISO();
-  const [targets, goalWeight, mealSplit, weight, predictions, calories, lifts, distances, sleep, restingHr, health] =
+  const [targets, goalWeight, mealSplit, weight, predictions, calories, lifts, distances, activity, sleep, restingHr, health] =
     await Promise.all([
       getTargets(),
       getGoalWeight(),
@@ -25,6 +26,7 @@ export default async function StatsPage() {
       getCalorieSeries(365), // bounded; the range control filters client-side
       getLiftProgression(),
       getCardioDistances(),
+      getDailyActivity(),
       getSleepSeries(),
       getRestingHrSeries(),
       getHealthSeries(addDays(today, -363), today),
@@ -40,6 +42,7 @@ export default async function StatsPage() {
         calories={calories}
         lifts={lifts}
         distances={distances}
+        activity={activity}
         sleep={sleep}
         restingHr={restingHr}
         health={health}

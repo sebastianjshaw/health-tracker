@@ -45,6 +45,11 @@ export const DistanceChart = dynamic(
   { ssr: false, loading: ChartSkeleton },
 );
 
+export const StepsChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.StepsChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 export const SleepChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.SleepChart })),
   { ssr: false, loading: ChartSkeleton },

@@ -22,6 +22,8 @@ export const DATA_TYPES = {
   exercise: "exercise",
   sleep: "sleep",
   restingHr: "daily-resting-heart-rate",
+  steps: "steps",
+  distance: "distance",
 } as const;
 
 const TOKENS_KEY = "googleHealth";
@@ -182,4 +184,95 @@ export async function listDataPoints(
     pageToken = data.nextPageToken || undefined;
   } while (pageToken && ++pages < MAX_PAGES);
   return out;
+}
+
+type MeasureNode = {
+  interval?: { civilStartTime?: { date?: { year?: number; month?: number; day?: number } } };
+  count?: string | number;
+  millimeters?: string | number;
+};
+
+type DataSource = {
+  platform?: string;
+  device?: { displayName?: string };
+  recordingMethod?: string;
+  dataSourceId?: string;
+  appPackageName?: string;
+};
+
+function civilDateISO(node: MeasureNode): string | null {
+  const d = node.interval?.civilStartTime?.date;
+  if (!d?.year || !d?.month || !d?.day) return null;
+  return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+}
+
+// Several providers report the SAME steps/distance for one day (e.g. the Fitbit
+// app and the phone's Health Connect both count phone steps). Summing them
+// double-counts, so we pick ONE source per day — preferring the user's tracker.
+const PLATFORM_RANK: Record<string, number> = { FITBIT: 0, HEALTH_CONNECT: 1 };
+const rankOf = (platform: string) => PLATFORM_RANK[platform] ?? 2;
+
+/**
+ * Per-local-day totals for a granular measurement type (steps, distance), from
+ * `since` (YYYY-MM-DD) to now. These reject time filters but come back
+ * newest-first, so we stop paging once we cross `since`. For each day we sum
+ * within a data source, then keep the single best source (preferred platform,
+ * then largest total) — never summing across sources.
+ */
+export async function fetchDailyTotals(
+  accessToken: string,
+  dataType: string,
+  valueOf: (node: MeasureNode) => number,
+  since: string,
+): Promise<Map<string, number>> {
+  // date -> sourceKey -> { platform, value }
+  const byDate = new Map<string, Map<string, { platform: string; value: number }>>();
+  let pageToken: string | undefined;
+  let pages = 0;
+  let done = false;
+  do {
+    const url = new URL(`${API_BASE}/${dataType}/dataPoints`);
+    url.searchParams.set("pageSize", "1000");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) {
+      throw new Error(`Google Health ${dataType} fetch failed (${res.status})`);
+    }
+    const data = (await res.json()) as { dataPoints?: DataPoint[]; nextPageToken?: string };
+    for (const dp of data.dataPoints ?? []) {
+      const node = dp[dataType] as MeasureNode | undefined;
+      if (!node) continue;
+      const date = civilDateISO(node);
+      if (!date) continue;
+      if (date < since) {
+        done = true;
+        break;
+      }
+      const ds = dp.dataSource as DataSource | undefined;
+      const platform = ds?.platform ?? "?";
+      const srcKey = `${platform}|${ds?.device?.displayName ?? ""}|${ds?.dataSourceId ?? ds?.appPackageName ?? ds?.recordingMethod ?? ""}`;
+      const day = byDate.get(date) ?? new Map<string, { platform: string; value: number }>();
+      const cur = day.get(srcKey) ?? { platform, value: 0 };
+      cur.value += valueOf(node);
+      day.set(srcKey, cur);
+      byDate.set(date, day);
+    }
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken && !done && ++pages < MAX_PAGES);
+
+  const totals = new Map<string, number>();
+  for (const [date, sources] of byDate) {
+    let best: { platform: string; value: number } | null = null;
+    for (const s of sources.values()) {
+      if (
+        !best ||
+        rankOf(s.platform) < rankOf(best.platform) ||
+        (rankOf(s.platform) === rankOf(best.platform) && s.value > best.value)
+      ) {
+        best = s;
+      }
+    }
+    if (best) totals.set(date, best.value);
+  }
+  return totals;
 }

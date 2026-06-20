@@ -25,6 +25,7 @@ import {
   bucketLabel,
 } from "@/lib/stats-range";
 import type {
+  ActivityPoint,
   CaloriePoint,
   DistancePoint,
   LiftPoint,
@@ -522,6 +523,71 @@ export function HydrationChart({ data }: { data: CaloriePoint[] }) {
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             Estimated from logged mass &amp; macros — directional, not exact.
+          </p>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+export function StepsChart({ data }: { data: ActivityPoint[] }) {
+  const hasData = data.some((d) => d.steps > 0);
+  const dataMax = Math.max(0, ...data.map((d) => d.steps));
+  const yMax = Math.max(2000, Math.ceil(Math.max(dataMax, 10000) / 2000) * 2000);
+  const logged = data.filter((d) => d.steps > 0);
+  const avg = logged.length
+    ? Math.round(logged.reduce((s, d) => s + d.steps, 0) / logged.length)
+    : 0;
+  const summary = `Steps: averaging ${avg.toLocaleString()} per active day from passive movement.`;
+  return (
+    <ChartCard title="Steps (passive / day)">
+      {!hasData ? (
+        <EmptyState>Passive steps appear here once your device syncs movement.</EmptyState>
+      ) : (
+        <>
+          <div role="img" aria-label={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: 4 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+                <YAxis
+                  stroke={AXIS}
+                  fontSize={11}
+                  width={44}
+                  domain={[0, yMax]}
+                  tickFormatter={(v) => `${Math.round(Number(v) / 1000)}k`}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) => shortDate(String(label))}
+                  formatter={(value, _n, item) => {
+                    const km = (item?.payload as ActivityPoint | undefined)?.distanceKm;
+                    return [
+                      `${Number(value).toLocaleString()} steps${km ? ` · ${km} km` : ""}`,
+                      "Movement",
+                    ];
+                  }}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                <ReferenceLine
+                  y={10000}
+                  stroke="var(--muted-foreground)"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: "10k",
+                    position: "insideTopRight",
+                    fontSize: 10,
+                    fill: "var(--muted-foreground)",
+                  }}
+                />
+                <Bar dataKey="steps" radius={[4, 4, 0, 0]} fill="#2dd4bf" name="Steps" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Passive movement from your device — counted toward energy use, net of any logged
+            cardio sessions.
           </p>
         </>
       )}

@@ -2,12 +2,13 @@ import "server-only";
 import { desc, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
-import { bodyMetrics, cardioSessions, heartRateDaily, sleepSessions } from "@/db/schema";
+import { bodyMetrics, cardioSessions, dailyActivity, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
 import { estimateCardioKcal } from "@/lib/cardio-calories";
 import { addDays, todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
+  fetchDailyTotals,
   getAccessToken,
   getCursor,
   listDataPoints,
@@ -62,6 +63,7 @@ export type SyncSummary = {
   exercise: number;
   sleep: number;
   restingHr: number;
+  activeDays: number;
 };
 
 type SqliteBatchItem = BatchItem<"sqlite">;
@@ -89,7 +91,14 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   // Re-importing recent days is safe: rows upsert on (source, externalId).
   const cursor = await getCursor();
   const start = cursor ? addDays(cursor, -LOOKBACK_DAYS) : "2015-01-01";
-  const summary: SyncSummary = { from: start, to: today, exercise: 0, sleep: 0, restingHr: 0 };
+  const summary: SyncSummary = {
+    from: start,
+    to: today,
+    exercise: 0,
+    sleep: 0,
+    restingHr: 0,
+    activeDays: 0,
+  };
 
   // ---- Exercise → cardioSessions ----
   // Latest weigh-in feeds the MET-based calorie estimate for sessions the
@@ -252,6 +261,31 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     summary.restingHr++;
   }
   await runBatched(hrStmts);
+
+  // ---- Passive steps & distance → dailyActivity ----
+  // Granular measurement types: aggregated per local day. Bounded to ~90 days
+  // even on a first sync so we don't page through years of per-minute data.
+  const passiveSince = start < addDays(today, -90) ? addDays(today, -90) : start;
+  const [stepsByDay, distByDay] = await Promise.all([
+    fetchDailyTotals(token, DATA_TYPES.steps, (n) => Number(n.count ?? 0), passiveSince),
+    fetchDailyTotals(token, DATA_TYPES.distance, (n) => Number(n.millimeters ?? 0), passiveSince),
+  ]);
+  const activityStmts: SqliteBatchItem[] = [];
+  for (const date of new Set([...stepsByDay.keys(), ...distByDay.keys()])) {
+    const steps = Math.round(stepsByDay.get(date) ?? 0);
+    const distanceKm = Math.round(((distByDay.get(date) ?? 0) / 1_000_000) * 1000) / 1000;
+    activityStmts.push(
+      db
+        .insert(dailyActivity)
+        .values({ date, steps, distanceKm, source: SOURCE })
+        .onConflictDoUpdate({
+          target: dailyActivity.date,
+          set: { steps, distanceKm, source: SOURCE },
+        }),
+    );
+    summary.activeDays++;
+  }
+  await runBatched(activityStmts);
 
   await setCursor(today);
   return summary;

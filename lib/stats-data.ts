@@ -4,6 +4,7 @@ import { db } from "@/db";
 import {
   bodyMetrics,
   cardioSessions,
+  dailyActivity,
   foodLog,
   foods,
   heartRateDaily,
@@ -15,6 +16,7 @@ import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { addDays, todayISO } from "./date";
 import { ageFrom } from "./health";
 import { estimateWaterMl, waterSourceOf } from "./hydration";
+import { netPassiveKm, passiveWalkKcal } from "./passive-activity";
 import { materializeRecurringRange } from "./recurring-materialize";
 import { getContingency, getProfile, getTargetHistory } from "./settings";
 import { targetForDate } from "./targets";
@@ -59,21 +61,41 @@ export async function getWeightPredictions(): Promise<WeightPrediction[]> {
   const start = weighIns[0].date;
   const end = weighIns[weighIns.length - 1].date;
 
-  const [series, cardio, profile] = await Promise.all([
+  const [series, cardio, activity, profile] = await Promise.all([
     calorieSeriesRange(start, end), // contingency-adjusted intake per day
     db
-      .select({ date: cardioSessions.date, kcal: cardioSessions.kcal })
+      .select({
+        date: cardioSessions.date,
+        kcal: cardioSessions.kcal,
+        distanceKm: cardioSessions.distanceKm,
+      })
       .from(cardioSessions)
       .where(and(gte(cardioSessions.date, start), lte(cardioSessions.date, end)))
+      .all(),
+    db
+      .select({ date: dailyActivity.date, distanceKm: dailyActivity.distanceKm })
+      .from(dailyActivity)
+      .where(and(gte(dailyActivity.date, start), lte(dailyActivity.date, end)))
       .all(),
     getProfile(),
   ]);
 
   const intakeByDate = new Map(series.map((c) => [c.date, c.kcal]));
   const cardioByDate = new Map<string, number>();
+  const sessionDistByDate = new Map<string, number>();
   for (const c of cardio) {
-    if (c.kcal == null) continue;
-    cardioByDate.set(c.date, (cardioByDate.get(c.date) ?? 0) + c.kcal);
+    if (c.kcal != null) cardioByDate.set(c.date, (cardioByDate.get(c.date) ?? 0) + c.kcal);
+    if (c.distanceKm != null)
+      sessionDistByDate.set(c.date, (sessionDistByDate.get(c.date) ?? 0) + c.distanceKm);
+  }
+
+  // Passive walking adds to burn, but only the distance NOT already covered by a
+  // logged session that day, so it isn't double-counted against the sessions.
+  const latestWeight = weighIns[weighIns.length - 1]?.weight ?? null;
+  for (const a of activity) {
+    const net = netPassiveKm(a.distanceKm ?? 0, sessionDistByDate.get(a.date) ?? 0);
+    const kcal = passiveWalkKcal(net, latestWeight);
+    if (kcal > 0) cardioByDate.set(a.date, (cardioByDate.get(a.date) ?? 0) + kcal);
   }
 
   return predictWeights({
@@ -84,6 +106,18 @@ export async function getWeightPredictions(): Promise<WeightPrediction[]> {
     age: ageFrom(profile.dob),
     sex: profile.sex,
   });
+}
+
+export type ActivityPoint = { date: string; steps: number; distanceKm: number };
+
+/** Passive daily movement (steps + distance) imported from the provider, oldest first. */
+export async function getDailyActivity(): Promise<ActivityPoint[]> {
+  const rows = await db.select().from(dailyActivity).orderBy(asc(dailyActivity.date)).all();
+  return rows.map((r) => ({
+    date: r.date,
+    steps: r.steps ?? 0,
+    distanceKm: r.distanceKm ?? 0,
+  }));
 }
 
 export type CaloriePoint = {

@@ -137,6 +137,17 @@ export const cardioSessions = sqliteTable("cardio_sessions", {
   uniqueIndex("cardio_sessions_external_uidx").on(t.source, t.externalId),
 ]);
 
+/** Passive daily movement (steps, distance) from the provider — separate from
+ * deliberate cardio sessions. One row per local day; a full record we can use
+ * for trends and (netted against logged sessions) energy expenditure. */
+export const dailyActivity = sqliteTable("daily_activity", {
+  date: text("date").primaryKey(), // local YYYY-MM-DD
+  steps: integer("steps"),
+  distanceKm: real("distance_km"),
+  source: text("source").notNull().default("google-health"),
+  createdAt: createdAt(),
+});
+
 /** Imported nightly sleep (one row per night), keyed to wake date. */
 export const sleepSessions = sqliteTable("sleep_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
