@@ -1,13 +1,23 @@
 import "server-only";
 import { and, gte, lte, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { dayHealth } from "@/db/schema";
+import { dailyActivity, dayHealth } from "@/db/schema";
 import { HealthStatus } from "./constants";
 
 /** A day's health status; defaults to "healthy" when nothing is stored. */
 export async function getDayHealth(date: string): Promise<HealthStatus> {
   const row = await db.select().from(dayHealth).where(eq(dayHealth.date, date)).get();
   return (row?.status as HealthStatus) ?? "healthy";
+}
+
+/** A day's passive movement (steps + distance) imported from the provider, or
+ * null when nothing has been synced for that date. */
+export async function getDayActivity(
+  date: string,
+): Promise<{ steps: number; distanceKm: number } | null> {
+  const row = await db.select().from(dailyActivity).where(eq(dailyActivity.date, date)).get();
+  if (!row || (row.steps == null && row.distanceKm == null)) return null;
+  return { steps: row.steps ?? 0, distanceKm: row.distanceKm ?? 0 };
 }
 
 /**

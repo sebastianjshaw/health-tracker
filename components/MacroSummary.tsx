@@ -31,6 +31,8 @@ export function MacroSummary({
   targets,
   adjustedKcal,
   waterMl,
+  steps,
+  distanceKm,
 }: {
   totals: Macros;
   targets: { kcal: number; protein: number };
@@ -38,6 +40,10 @@ export function MacroSummary({
   adjustedKcal?: number;
   /** Estimated water (mL) from the day's food & drink; hidden when 0/omitted. */
   waterMl?: number;
+  /** Passive steps synced for the day; hidden when 0/omitted. */
+  steps?: number;
+  /** Passive distance (km) synced for the day; shown alongside steps when known. */
+  distanceKm?: number;
 }) {
   const shownKcal = Math.round(adjustedKcal ?? totals.kcal);
   const buffer = shownKcal - Math.round(totals.kcal);
@@ -88,10 +94,18 @@ export function MacroSummary({
         <MacroStat label="Fat" grams={totals.fat} color="var(--fat)" />
       </div>
 
-      {waterMl != null && waterMl > 0 && (
-        <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
-          💧 ~{(waterMl / 1000).toFixed(1)} L water today, estimated from food &amp; drink.
-        </p>
+      {((waterMl != null && waterMl > 0) || (steps != null && steps > 0)) && (
+        <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+          {waterMl != null && waterMl > 0 && (
+            <p>💧 ~{(waterMl / 1000).toFixed(1)} L water today, estimated from food &amp; drink.</p>
+          )}
+          {steps != null && steps > 0 && (
+            <p>
+              👟 {steps.toLocaleString()} steps today
+              {distanceKm != null && distanceKm > 0 && ` · ${distanceKm.toFixed(1)} km`}.
+            </p>
+          )}
+        </div>
       )}
     </Card>
   );

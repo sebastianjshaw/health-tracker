@@ -17,6 +17,7 @@ import {
   bloodMarkers,
   bodyMetrics,
   cardioSessions,
+  dailyActivity,
   dayHealth,
   foodLog,
   foods,
@@ -240,13 +241,18 @@ const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), that day's effective calorie & protein target, and the logged health status (healthy/unwell/injured).",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, and the logged health status (healthy/unwell/injured).",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
     const [day] = await nutritionForRange(d, d); // materialises recurring + aggregates
     const logged = await db.select().from(foodLog).where(eq(foodLog.date, d)).all();
     const healthRow = await db.select().from(dayHealth).where(eq(dayHealth.date, d)).get();
+    const activityRow = await db
+      .select()
+      .from(dailyActivity)
+      .where(eq(dailyActivity.date, d))
+      .get();
 
     const entries = logged.map((r) => ({
       id: r.id,
@@ -285,6 +291,9 @@ server.tool(
             otherDrinks: day.waterDrink,
             fromFood: day.waterFood,
           },
+          activity: activityRow
+            ? { steps: activityRow.steps ?? 0, distanceKm: activityRow.distanceKm ?? 0 }
+            : null, // passive steps/distance (background-counted); null = none synced
           entries,
         },
         null,
@@ -517,6 +526,43 @@ server.tool(
             bodyFatPct: r.bodyFatPct,
           })),
           predictions,
+        },
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+server.tool(
+  "get_activity_trend",
+  "Passive daily movement (background-counted steps & distance, separate from logged cardio sessions) over the last N days (default 30), newest first, with averages and the count of days actually synced. Use for walking/step-count trends; for a single day use get_day, and for deliberate workouts use get_cardio.",
+  { days: z.number().optional() },
+  async ({ days }) => {
+    const n = days ?? 30;
+    const start = addDays(todayISO(), -(n - 1));
+    const rows = await db
+      .select()
+      .from(dailyActivity)
+      .where(gte(dailyActivity.date, start))
+      .orderBy(desc(dailyActivity.date))
+      .all();
+
+    const daysWithData = rows.filter((r) => (r.steps ?? 0) > 0).length;
+    const totalSteps = rows.reduce((s, r) => s + (r.steps ?? 0), 0);
+    const totalKm = rows.reduce((s, r) => s + (r.distanceKm ?? 0), 0);
+
+    return text(
+      JSON.stringify(
+        {
+          days: rows.map((r) => ({
+            date: r.date,
+            steps: r.steps ?? 0,
+            distanceKm: r.distanceKm ?? 0,
+          })),
+          daysSynced: daysWithData,
+          avgSteps: daysWithData ? Math.round(totalSteps / daysWithData) : 0,
+          avgDistanceKm: daysWithData ? Math.round((totalKm / daysWithData) * 10) / 10 : 0,
         },
         null,
         2,

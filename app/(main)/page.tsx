@@ -4,7 +4,7 @@ import { DayHealthControl } from "@/components/today/DayHealthControl";
 import { MealSection } from "@/components/today/MealSection";
 import { MEALS } from "@/lib/constants";
 import { isValidISO, todayISO } from "@/lib/date";
-import { getDayHealth } from "@/lib/day-data";
+import { getDayActivity, getDayHealth } from "@/lib/day-data";
 import { getDayEntries } from "@/lib/food-data";
 import { totalWaterMl } from "@/lib/hydration";
 import { adjustedCalories, totals } from "@/lib/nutrition";
@@ -18,11 +18,12 @@ export default async function TodayPage({
   const { d } = await searchParams;
   const date = d && isValidISO(d) ? d : todayISO();
 
-  const [entries, targets, health, contingency] = await Promise.all([
+  const [entries, targets, health, contingency, activity] = await Promise.all([
     getDayEntries(date),
     getTargets(),
     getDayHealth(date),
     getContingency(),
+    getDayActivity(date),
   ]);
 
   const dayTotals = totals(entries);
@@ -35,7 +36,14 @@ export default async function TodayPage({
       <div className="-mt-2 flex justify-end">
         <DayHealthControl key={date} date={date} status={health} />
       </div>
-      <MacroSummary totals={dayTotals} targets={targets} adjustedKcal={adjustedKcal} waterMl={waterMl} />
+      <MacroSummary
+        totals={dayTotals}
+        targets={targets}
+        adjustedKcal={adjustedKcal}
+        waterMl={waterMl}
+        steps={activity?.steps}
+        distanceKm={activity?.distanceKm}
+      />
 
       {MEALS.map((meal) => (
         <MealSection
