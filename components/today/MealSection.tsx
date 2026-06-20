@@ -4,6 +4,7 @@ import { adjustedCalories } from "@/lib/nutrition";
 import type { DayEntry } from "@/lib/food-data";
 import { EntryRow } from "./EntryRow";
 import { AddFoodButton } from "./AddFoodButton";
+import { CopyYesterdayButton } from "./CopyYesterdayButton";
 
 export function MealSection({
   meal,
@@ -38,6 +39,7 @@ export function MealSection({
 
       <div className="px-4 pb-3 pt-2">
         <AddFoodButton date={date} meal={meal} />
+        <CopyYesterdayButton date={date} meal={meal} />
       </div>
     </Card>
   );

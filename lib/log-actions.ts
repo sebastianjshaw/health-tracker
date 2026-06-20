@@ -1,12 +1,12 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { foodLog, foods } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
 import { EVOLUTIONS, Evolution, Meal } from "./constants";
-import { isValidISO } from "./date";
+import { addDays, isValidISO } from "./date";
 import { foodLogSnapshot } from "./food-snapshot";
 import { hideRecurringOnDate } from "./recurring-materialize";
 import { revalidatePaths } from "./revalidate";
@@ -37,6 +37,56 @@ export async function addLogEntry(
 
   revalidatePaths("/", "/stats");
   return actionOk();
+}
+
+/** Copy yesterday's manually-logged entries for a meal onto `date`. Recurring
+ * defaults are excluded — they already auto-appear on every applicable day, so
+ * copying them would double them up. Snapshots are carried over verbatim. */
+export async function copyMealFromYesterday(
+  date: string,
+  meal: Meal,
+): Promise<ActionResult> {
+  await requireAuth();
+  if (!isValidISO(date)) return actionFail("Invalid date");
+  const yesterday = addDays(date, -1);
+
+  const rows = await db
+    .select()
+    .from(foodLog)
+    .where(
+      and(
+        eq(foodLog.date, yesterday),
+        eq(foodLog.meal, meal),
+        isNull(foodLog.recurringId),
+      ),
+    )
+    .all();
+
+  if (rows.length === 0) return actionFail("Nothing logged for this meal yesterday");
+
+  await db.insert(foodLog).values(
+    rows.map((r) => ({
+      date,
+      meal: r.meal,
+      foodId: r.foodId,
+      name: r.name,
+      quantity: r.quantity,
+      kcal: r.kcal,
+      protein: r.protein,
+      carbs: r.carbs,
+      fat: r.fat,
+      fiber: r.fiber,
+      saturatedFat: r.saturatedFat,
+      servingSize: r.servingSize,
+      servingUnit: r.servingUnit,
+      source: r.source,
+      evolution: r.evolution,
+      recurringId: null,
+    })),
+  );
+
+  revalidatePaths("/", "/stats");
+  return actionOk(`Copied ${rows.length} item${rows.length === 1 ? "" : "s"} from yesterday`);
 }
 
 export async function setLogQuantity(
