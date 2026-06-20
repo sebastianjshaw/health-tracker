@@ -8,6 +8,7 @@ const base: CharacterInput = {
   heightCm: 180,
   weightKg: 90,
   bmi: 27.8,
+  bodyFatPct: null,
   liftTotalKg: 0,
   restingHr: null,
   avgSleepH: null,
@@ -49,6 +50,16 @@ describe("buildCharacter", () => {
     const c = buildCharacter({ ...base, workoutCount: 40, cardioCount: 30, bloodPanels: 3 });
     assert.ok(c.level >= 1 && c.level <= 20);
     assert.ok(c.level > buildCharacter(base).level);
+  });
+
+  it("ties Charisma to body composition (leaner = higher), via body fat then BMI", () => {
+    const cha = (i: Partial<CharacterInput>) =>
+      buildCharacter({ ...base, ...i }).abilities.find((a) => a.key === "cha")!.score;
+    // leaner body fat scores higher than higher body fat
+    assert.ok(cha({ bodyFatPct: 12 }) > cha({ bodyFatPct: 30 }));
+    // falls back to BMI when no body fat: a high BMI sits below average (10)
+    assert.ok(cha({ bmi: 34, bodyFatPct: null }) < 10);
+    assert.ok(cha({ bmi: 22, bodyFatPct: null }) >= 10);
   });
 
   it("names a standout and a dump stat", () => {

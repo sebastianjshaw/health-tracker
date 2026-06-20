@@ -44,6 +44,14 @@ export async function getCharacterSheet(): Promise<{ character: Character; name:
 
   const weightKg = weights.length ? weights[weights.length - 1].weight : null;
   const bmiVal = weightKg != null ? bmi(weightKg, profile.heightCm) : null;
+  // most recent recorded body-fat %, if any
+  let bodyFatPct: number | null = null;
+  for (let i = weights.length - 1; i >= 0; i--) {
+    if (weights[i].bodyFat != null) {
+      bodyFatPct = weights[i].bodyFat;
+      break;
+    }
+  }
   const liftTotalKg = (lifts.squat ?? 0) + (lifts.bench ?? 0) + (lifts.deadlift ?? 0);
 
   // recent cardio volume (last 28 days) → per-week km
@@ -93,6 +101,7 @@ export async function getCharacterSheet(): Promise<{ character: Character; name:
     heightCm: profile.heightCm,
     weightKg,
     bmi: bmiVal,
+    bodyFatPct,
     liftTotalKg,
     restingHr: restingBpm,
     avgSleepH,

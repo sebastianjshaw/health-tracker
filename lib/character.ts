@@ -10,6 +10,7 @@ export type CharacterInput = {
   heightCm: number | null;
   weightKg: number | null;
   bmi: number | null;
+  bodyFatPct: number | null;
   /** squat + bench + deadlift working weights (kg). */
   liftTotalKg: number;
   restingHr: number | null;
@@ -156,13 +157,24 @@ export function buildCharacter(input: CharacterInput): Character {
     wisBasis = "no target adherence to judge yet";
   }
 
-  // ---- CHA: a scale can't measure charisma. Average baseline, no penalties —
-  // only a small nod for energy (good sleep) and being engaged (consistency). ----
-  let chaAdj = 0;
-  if (input.avgSleepH != null && input.avgSleepH >= 7) chaAdj += 1;
-  if (input.trackingPct >= 70) chaAdj += 1;
-  const cha = clamp(r(10 + chaAdj), 10, 13);
-  const chaBasis = "a scale can't read charisma — average, with a nod for energy & showing up";
+  // ---- CHA: physical presence, proxied by body composition (measurable).
+  // 10 ≈ an average build; leaner climbs, higher body fat / BMI eases off.
+  // Body fat % is preferred (sex-aware), with BMI as the fallback.
+  let cha: number;
+  let chaBasis: string;
+  if (input.bodyFatPct != null) {
+    const avgBf = input.sex === "female" ? 27 : 20; // rough average body-fat % by sex
+    cha = clamp(r(10 + (avgBf - input.bodyFatPct) * 0.3), 3, 18);
+    chaBasis = `body fat ${input.bodyFatPct}%`;
+  } else if (input.bmi != null) {
+    let s = 10 + (24 - input.bmi) * 0.5; // ~24 BMI ≈ average build
+    if (input.bmi < 18.5) s -= (18.5 - input.bmi) * 0.5; // underweight isn't a bonus
+    cha = clamp(r(s), 3, 18);
+    chaBasis = `BMI ${input.bmi}`;
+  } else {
+    cha = 10; // unmeasured ≈ average
+    chaBasis = "no body-composition data — assumed average";
+  }
 
   const raw: Record<AbilityKey, { score: number; basis: string }> = {
     str: { score: str, basis: strBasis },
@@ -200,9 +212,9 @@ export function buildCharacter(input: CharacterInput): Character {
       "Disciplined — hits the targets set, most days.",
     ],
     cha: [
-      "Running low on energy of late.",
-      "A scale can't read charisma — call it average, with credit for showing up.",
-      "High energy and consistency, present and engaged.",
+      "Carrying more than average for the frame — composition is the dial here.",
+      "An everyday build; composition sits around average.",
+      "Lean, athletic composition.",
     ],
   };
 
