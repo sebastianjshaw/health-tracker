@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { bodyMetrics, cardioSessions, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
 import { estimateCardioKcal } from "@/lib/cardio-calories";
-import { todayISO } from "@/lib/date";
+import { addDays, todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
   getAccessToken,
@@ -16,6 +16,7 @@ import {
 
 const SOURCE = "google-health";
 const MIN_EXERCISE_MIN = 10; // below this, with no distance, treat as auto-detected noise
+const LOOKBACK_DAYS = 7; // re-check the last week each sync to catch late-arriving data
 
 // ---- small parse helpers (the API mixes numbers and int64-as-string) ----
 const num = (v: unknown): number | null => {
@@ -82,8 +83,12 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   if (!token) throw new Error("Google Health is not connected.");
 
   const today = todayISO();
-  // First sync (no cursor) imports full history; then we go incremental.
-  const start = (await getCursor()) ?? "2015-01-01";
+  // First sync (no cursor) imports full history; then we go incremental — but
+  // with a lookback so data that lands in Google Health late (Fit/Health Connect
+  // sync with a delay) isn't skipped forever once the cursor moves past its date.
+  // Re-importing recent days is safe: rows upsert on (source, externalId).
+  const cursor = await getCursor();
+  const start = cursor ? addDays(cursor, -LOOKBACK_DAYS) : "2015-01-01";
   const summary: SyncSummary = { from: start, to: today, exercise: 0, sleep: 0, restingHr: 0 };
 
   // ---- Exercise → cardioSessions ----
