@@ -46,6 +46,23 @@ describe("buildCharacter", () => {
     assert.ok(lowHr.score > highHr.score);
   });
 
+  it("never blames short sleep when sleep was actually adequate (CON note honesty)", () => {
+    // HR drags CON below 10, but 7.2h sleep is a bonus — the note must not cite it.
+    const con = buildCharacter({ ...base, restingHr: 78, avgSleepH: 7.2 }).abilities.find(
+      (a) => a.key === "con",
+    )!;
+    assert.ok(con.score < 10, `expected sub-average CON, got ${con.score}`);
+    assert.match(con.note, /elevated resting pulse/);
+    assert.doesNotMatch(con.note, /short sleep/);
+  });
+
+  it("does cite short sleep when sleep genuinely dragged CON down", () => {
+    const con = buildCharacter({ ...base, restingHr: 70, avgSleepH: 5 }).abilities.find(
+      (a) => a.key === "con",
+    )!;
+    assert.match(con.note, /short sleep/);
+  });
+
   it("levels up with logged effort and stays in 1–20", () => {
     const c = buildCharacter({ ...base, workoutCount: 40, cardioCount: 30, bloodPanels: 3 });
     assert.ok(c.level >= 1 && c.level <= 20);

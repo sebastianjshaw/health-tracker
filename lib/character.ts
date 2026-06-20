@@ -218,13 +218,32 @@ export function buildCharacter(input: CharacterInput): Character {
     ],
   };
 
+  // CON's low-band note is generated from the inputs so it only blames factors
+  // that were actually negative — sleep ≥7h is a *bonus*, so it must never be
+  // cited as "short sleep" just because the resting pulse dragged the score down.
+  let conNote: string | undefined;
+  if (con < 10) {
+    const factors: string[] = [];
+    if (input.restingHr != null && input.restingHr > 70) factors.push("an elevated resting pulse");
+    // Sleep only counts against you where the formula actually penalises it:
+    // below 6h when paired with HR, or below the 7h recommendation when sleep
+    // is the sole input. At ≥7h it's a bonus and must never be blamed here.
+    const sleepThreshold = input.restingHr != null ? 6 : 7;
+    if (input.avgSleepH != null && input.avgSleepH < sleepThreshold) factors.push("short sleep");
+    conNote = factors.length
+      ? `Engine runs a bit hot at rest — ${factors.join(" and ")}.`
+      : "Constitution sits a touch below average.";
+  }
+
+  const noteOverride: Partial<Record<AbilityKey, string>> = { con: conNote };
+
   const abilities: Ability[] = (Object.keys(raw) as AbilityKey[]).map((key) => ({
     key,
     label: ABILITY_LABELS[key],
     score: raw[key].score,
     modifier: modifier(raw[key].score),
     basis: raw[key].basis,
-    note: band(raw[key].score, NOTES[key][0], NOTES[key][1], NOTES[key][2]),
+    note: noteOverride[key] ?? band(raw[key].score, NOTES[key][0], NOTES[key][1], NOTES[key][2]),
   }));
 
   // ---- class from the dominant *physical/mental* ability (CHA is a proxy) ----
