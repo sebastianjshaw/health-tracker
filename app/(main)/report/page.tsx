@@ -144,6 +144,20 @@ export default async function ReportPage({
                 </td>
               </tr>
               <tr>
+                <td className="py-1.5 text-muted-foreground">Lean mass</td>
+                <td className="py-1.5 text-right">
+                  {v.leanMassKg != null ? `${trimNum(v.leanMassKg)} kg` : "—"}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-1.5 text-muted-foreground">Metabolic age (est.)</td>
+                <td className="py-1.5 text-right">
+                  {v.metabolicAge != null
+                    ? `${v.metabolicAge} yr${r.age != null ? ` (vs ${r.age} actual)` : ""}`
+                    : "—"}
+                </td>
+              </tr>
+              <tr>
                 <td className="py-1.5 text-muted-foreground">Resting heart rate</td>
                 <td className="py-1.5 text-right">
                   {v.latestRestingHr ? `${v.latestRestingHr.value} bpm` : "—"}

@@ -10,6 +10,7 @@ import {
 } from "./constants";
 import { parseISO, todayISO } from "./date";
 import { ageFrom, bmi, bmiClass } from "./health";
+import { leanBodyMass, metabolicAge } from "./metabolic-age";
 import { getBloodPanels, markerStatus, type BloodPanel } from "./blood-data";
 import {
   calorieSeriesRange,
@@ -60,6 +61,8 @@ export type ReportData = {
     baselineWaist: { value: number; date: string } | null;
     latestBodyFat: { value: number; date: string } | null;
     latestRestingHr: { value: number; date: string } | null;
+    leanMassKg: number | null;
+    metabolicAge: number | null;
     bp: { systolic: number; diastolic: number; date: string } | null;
     inRange: BodyMetric[];
   };
@@ -187,6 +190,7 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
 
   const baselineBmi = baseline ? bmi(baseline.weight, profile.heightCm) : null;
   const currentBmi = current ? bmi(current.weight, profile.heightCm) : null;
+  const latestBodyFat = latestWith(allBody, (m) => m.bodyFatPct);
 
   // ---- nutrition (range) ----
   const logged = calorie.filter((c) => c.kcal > 0);
@@ -253,8 +257,16 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
     vitals: {
       latestWaist: latestWith(allBody, (m) => m.waistCm),
       baselineWaist: earliestWith(allBody, (m) => m.waistCm),
-      latestBodyFat: latestWith(allBody, (m) => m.bodyFatPct),
+      latestBodyFat,
       latestRestingHr: latestWith(allBody, (m) => m.restingHr),
+      // Derived from the latest weight + body-fat (estimates, not measurements).
+      leanMassKg: leanBodyMass(current?.weight ?? null, latestBodyFat?.value ?? null),
+      metabolicAge: metabolicAge({
+        weightKg: current?.weight ?? null,
+        heightCm: profile.heightCm,
+        bodyFatPct: latestBodyFat?.value ?? null,
+        sex: profile.sex,
+      }),
       bp: bpFromPanels(panels),
       inRange: allBody.filter((m) => m.date >= from && m.date <= to),
     },
