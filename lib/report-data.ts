@@ -9,9 +9,11 @@ import {
   Exercise,
 } from "./constants";
 import { todayISO } from "./date";
-import { ageFrom, bmi, bmiClass } from "./health";
+import { ageFrom, bmi, bmiClass, waistToHeight, whtrClass } from "./health";
 import { latestBodyComposition } from "./metabolic-age";
+import { detectPlateau } from "./plateau";
 import { summariseWeights } from "./report-summary";
+import { measuredTdee } from "./tdee";
 import { getBloodPanels, markerStatus, type BloodPanel } from "./blood-data";
 import {
   calorieSeriesRange,
@@ -53,6 +55,10 @@ export type ReportData = {
     currentBmi: number | null;
     baselineBmiClass: string;
     currentBmiClass: string;
+    /** Measured (adaptive) TDEE over the recent window, if computable. */
+    tdee: { value: number; confidence: string } | null;
+    /** A flat-trend-while-dieting plateau, if detected. */
+    plateaued: boolean;
   };
 
   weightSeries: { date: string; weight: number; bodyFat: number | null }[];
@@ -63,8 +69,12 @@ export type ReportData = {
     latestBodyFat: { value: number; date: string } | null;
     latestRestingHr: { value: number; date: string } | null;
     leanMassKg: number | null;
+    fatMassKg: number | null;
+    ffmi: number | null;
     metabolicAge: number | null;
     bodyCompDate: string | null;
+    whtr: number | null;
+    whtrClass: string;
     bp: { systolic: number; diastolic: number; date: string } | null;
     inRange: BodyMetric[];
   };
@@ -192,6 +202,18 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
     heightCm: profile.heightCm,
     sex: profile.sex,
   });
+  const latestWaist = latestWith(rangeBody, (m) => m.waistCm);
+  const whtr = waistToHeight(latestWaist?.value ?? null, profile.heightCm);
+
+  // ---- derived: measured TDEE + plateau (recent window, weight vs. intake) ----
+  const tryingToLose = goalWeight != null && current != null && current.weight > goalWeight;
+  const intakeByDate = new Map(calorie.map((c) => [c.date, c.kcal]));
+  const tdeeEst = measuredTdee({ weighIns: rangeWeights, intakeByDate, today: todayISO() });
+  const { plateaued } = detectPlateau({
+    weighIns: rangeWeights,
+    today: todayISO(),
+    tryingToLose,
+  });
 
   // ---- nutrition (range) ----
   const logged = calorie.filter((c) => c.kcal > 0);
@@ -253,17 +275,23 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
       currentBmi,
       baselineBmiClass: bmiClass(baselineBmi),
       currentBmiClass: bmiClass(currentBmi),
+      tdee: tdeeEst ? { value: tdeeEst.tdee, confidence: tdeeEst.confidence } : null,
+      plateaued,
     },
     weightSeries: rangeWeights,
     vitals: {
-      latestWaist: latestWith(rangeBody, (m) => m.waistCm),
+      latestWaist,
       baselineWaist: earliestWith(rangeBody, (m) => m.waistCm),
       latestBodyFat,
       latestRestingHr: latestWith(rangeBody, (m) => m.restingHr),
-      // Derived (estimates, not measurements), both from the same reading.
+      // Derived (estimates, not measurements), all from the same reading.
       leanMassKg: bodyComp?.leanMassKg ?? null,
+      fatMassKg: bodyComp?.fatMassKg ?? null,
+      ffmi: bodyComp?.ffmi ?? null,
       metabolicAge: bodyComp?.metabolicAge ?? null,
       bodyCompDate: bodyComp?.date ?? null,
+      whtr,
+      whtrClass: whtrClass(whtr),
       bp: bpFromPanels(panels),
       inRange: rangeBody,
     },

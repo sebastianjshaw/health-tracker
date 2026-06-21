@@ -37,6 +37,23 @@ export async function getBodyMetrics(from?: string, to?: string) {
     .all();
 }
 
+/** Every logged set as { date, exercise, weightKg, reps } — for 1RM/tonnage/PRs. */
+export async function getLiftSets(): Promise<
+  { date: string; exercise: string; weightKg: number; reps: number | null }[]
+> {
+  const rows = await db
+    .select({
+      date: liftSessions.date,
+      exercise: liftSets.exercise,
+      weightKg: liftSets.targetWeightKg,
+      reps: liftSets.repsDone,
+    })
+    .from(liftSets)
+    .innerJoin(liftSessions, eq(liftSets.sessionId, liftSessions.id))
+    .all();
+  return rows;
+}
+
 export type WeightPoint = { date: string; weight: number; bodyFat: number | null };
 
 /** Weigh-ins ascending. Optionally bounded to an inclusive [from, to] range. */

@@ -94,14 +94,17 @@ export type BodyComposition = {
   /** The date of the reading these figures derive from. */
   date: string;
   leanMassKg: number;
+  fatMassKg: number | null;
+  ffmi: number | null;
   metabolicAge: number | null;
 };
 
 /**
- * Lean mass + metabolic age from the most recent reading that has BOTH a weight
- * and a body-fat figure, so the two numbers are always derived from the same
- * measurement (never a fresh weight paired with a stale body-fat reading).
- * `readings` must be newest-first. Null if no reading carries both.
+ * Body-composition snapshot (lean mass, fat mass, FFMI, metabolic age) from the
+ * most recent reading that has BOTH a weight and a body-fat figure, so every
+ * number derives from the same measurement (never a fresh weight paired with a
+ * stale body-fat reading). `readings` must be newest-first; null if none carries
+ * both.
  */
 export function latestBodyComposition(
   readings: { date: string; weightKg: number | null; bodyFatPct: number | null }[],
@@ -113,6 +116,8 @@ export function latestBodyComposition(
     return {
       date: r.date,
       leanMassKg: lean,
+      fatMassKg: fatMass(r.weightKg, r.bodyFatPct),
+      ffmi: ffmi(r.weightKg, r.bodyFatPct, profile.heightCm),
       metabolicAge: metabolicAge({
         weightKg: r.weightKg,
         heightCm: profile.heightCm,

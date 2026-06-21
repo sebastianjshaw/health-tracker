@@ -115,7 +115,19 @@ export default async function ReportPage({
               value={s.currentBmi != null ? `${trimNum(s.currentBmi)}` : "—"}
               sub={s.currentBmiClass || (p.heightCm ? undefined : "set height")}
             />
+            <Stat
+              label="Maintenance (measured)"
+              value={s.tdee != null ? `${s.tdee.value} kcal` : "—"}
+              sub={s.tdee != null ? `${s.tdee.confidence} confidence` : "needs ~2 weeks of logs"}
+            />
           </div>
+
+          {s.plateaued && (
+            <p className="mt-3 rounded-lg border border-warn/40 bg-warn/10 p-2 text-sm text-warn print:border print:bg-transparent">
+              Weight has been flat for ~3 weeks despite a deficit — consider
+              recalculating the target against measured maintenance, or a short diet break.
+            </p>
+          )}
 
           {r.weightSeries.length > 1 && (
             <div className="mt-3">
@@ -138,16 +150,30 @@ export default async function ReportPage({
                 </td>
               </tr>
               <tr>
+                <td className="py-1.5 text-muted-foreground">Waist-to-height</td>
+                <td className="py-1.5 text-right">
+                  {v.whtr != null ? `${trimNum(v.whtr)}${v.whtrClass ? ` · ${v.whtrClass}` : ""}` : "—"}
+                </td>
+              </tr>
+              <tr>
                 <td className="py-1.5 text-muted-foreground">Body fat</td>
                 <td className="py-1.5 text-right">
                   {v.latestBodyFat ? `${trimNum(v.latestBodyFat.value)} %` : "—"}
                 </td>
               </tr>
               <tr>
-                <td className="py-1.5 text-muted-foreground">Lean mass</td>
+                <td className="py-1.5 text-muted-foreground">Fat / lean mass</td>
                 <td className="py-1.5 text-right">
-                  {v.leanMassKg != null ? `${trimNum(v.leanMassKg)} kg` : "—"}
+                  {v.leanMassKg != null
+                    ? `${v.fatMassKg != null ? `${trimNum(v.fatMassKg)} kg fat · ` : ""}${trimNum(v.leanMassKg)} kg lean`
+                    : "—"}
                   {v.bodyCompDate ? ` (as of ${prettyDate(v.bodyCompDate)})` : ""}
+                </td>
+              </tr>
+              <tr>
+                <td className="py-1.5 text-muted-foreground">FFMI</td>
+                <td className="py-1.5 text-right">
+                  {v.ffmi != null ? `${trimNum(v.ffmi)} kg/m²` : "—"}
                 </td>
               </tr>
               <tr>

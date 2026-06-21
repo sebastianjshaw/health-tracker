@@ -909,6 +909,51 @@ server.tool(
   },
 );
 
+server.tool(
+  "get_sync_freshness",
+  "Freshness of each synced Google Health / scale feed: the most recent date per source and how many days stale it is. Use this before trusting recent trends — a feed that stopped updating (e.g. a device went offline) makes 'latest weight/HR/sleep' misleading. staleDays counts whole days since the latest record; stale=true when that exceeds the threshold (default 3).",
+  { staleAfterDays: z.number().optional() },
+  async ({ staleAfterDays }) => {
+    const threshold = staleAfterDays ?? 3;
+    const today = todayISO();
+    const daysSince = (date: string | null) =>
+      date == null
+        ? null
+        : Math.round(
+            (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${date}T00:00:00Z`)) / 86_400_000,
+          );
+
+    const latestOf = async (
+      table: typeof cardioSessions | typeof sleepSessions | typeof heartRateDaily | typeof dailyActivity | typeof bodyMetrics,
+    ): Promise<string | null> => {
+      const row = await db
+        .select({ date: table.date })
+        .from(table)
+        .orderBy(desc(table.date))
+        .limit(1)
+        .get();
+      return row?.date ?? null;
+    };
+
+    const feeds = {
+      activities: await latestOf(cardioSessions),
+      passiveActivity: await latestOf(dailyActivity),
+      sleep: await latestOf(sleepSessions),
+      restingHeartRate: await latestOf(heartRateDaily),
+      bodyComposition: await latestOf(bodyMetrics),
+    } as const;
+
+    const out = Object.fromEntries(
+      Object.entries(feeds).map(([name, latest]) => {
+        const staleDays = daysSince(latest);
+        return [name, { latest, staleDays, stale: staleDays == null || staleDays > threshold }];
+      }),
+    );
+
+    return text(JSON.stringify({ today, staleAfterDays: threshold, feeds: out }, null, 2));
+  },
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);

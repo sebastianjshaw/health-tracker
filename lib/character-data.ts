@@ -8,15 +8,23 @@ import {
   getCalorieSeries,
   getCardioDistances,
   getLiftProgression,
+  getLiftSets,
   getRestingHrSeries,
   getSleepSeries,
   getWeightSeries,
 } from "./stats-data";
+import { latestBodyComposition, type BodyComposition } from "./metabolic-age";
+import { liftStats, type LiftStat } from "./strength";
 import { getLiftWeights, getProfile } from "./settings";
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
-export async function getCharacterSheet(): Promise<{ character: Character; name: string }> {
+export async function getCharacterSheet(): Promise<{
+  character: Character;
+  name: string;
+  bodyComp: BodyComposition | null;
+  lifts: LiftStat[];
+}> {
   const today = todayISO();
   const [
     profile,
@@ -29,6 +37,7 @@ export async function getCharacterSheet(): Promise<{ character: Character; name:
     sleep,
     calories,
     panels,
+    liftSetRows,
   ] = await Promise.all([
     getProfile(),
     getWeightSeries(),
@@ -40,6 +49,7 @@ export async function getCharacterSheet(): Promise<{ character: Character; name:
     getSleepSeries(),
     getCalorieSeries(30),
     getBloodPanels(),
+    getLiftSets(),
   ]);
 
   const weightKg = weights.length ? weights[weights.length - 1].weight : null;
@@ -116,5 +126,12 @@ export async function getCharacterSheet(): Promise<{ character: Character; name:
     bloodPanels: panels.length,
   });
 
-  return { character, name: profile.name?.trim() || "Adventurer" };
+  // Real derived body composition + strength (shown beside the playful stats).
+  const bodyComp = latestBodyComposition(
+    [...weights].reverse().map((w) => ({ date: w.date, weightKg: w.weight, bodyFatPct: w.bodyFat })),
+    { heightCm: profile.heightCm, sex: profile.sex },
+  );
+  const liftPRs = liftStats(liftSetRows).slice(0, 5);
+
+  return { character, name: profile.name?.trim() || "Adventurer", bodyComp, lifts: liftPRs };
 }

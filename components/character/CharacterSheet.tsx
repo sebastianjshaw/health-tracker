@@ -1,5 +1,9 @@
 import { Card } from "@/components/ui";
 import { fmtMod, type Character } from "@/lib/character";
+import { trimNum } from "@/lib/format";
+import { EXERCISE_LABELS, type Exercise } from "@/lib/constants";
+import type { BodyComposition } from "@/lib/metabolic-age";
+import type { LiftStat } from "@/lib/strength";
 
 function StatChip({ label, value }: { label: string; value: string | number }) {
   return (
@@ -10,7 +14,26 @@ function StatChip({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-export function CharacterSheet({ character, name }: { character: Character; name: string }) {
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 px-4 py-2.5">
+      <span className="text-sm text-muted-foreground">{label}</span>
+      <span className="text-sm font-medium tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+export function CharacterSheet({
+  character,
+  name,
+  bodyComp,
+  lifts,
+}: {
+  character: Character;
+  name: string;
+  bodyComp: BodyComposition | null;
+  lifts: LiftStat[];
+}) {
   return (
     <div className="space-y-4">
       <Card className="p-4">
@@ -58,6 +81,46 @@ export function CharacterSheet({ character, name }: { character: Character; name
           </div>
         ))}
       </Card>
+
+      {(bodyComp || lifts.length > 0) && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {bodyComp && (
+            <Card className="p-0">
+              <div className="px-4 pt-3 text-xs uppercase tracking-wide text-muted-foreground">
+                Body composition
+              </div>
+              <div className="mt-1 divide-y divide-border">
+                <DetailRow label="Lean mass" value={`${trimNum(bodyComp.leanMassKg)} kg`} />
+                {bodyComp.fatMassKg != null && (
+                  <DetailRow label="Fat mass" value={`${trimNum(bodyComp.fatMassKg)} kg`} />
+                )}
+                {bodyComp.ffmi != null && (
+                  <DetailRow label="FFMI" value={`${trimNum(bodyComp.ffmi)} kg/m²`} />
+                )}
+                {bodyComp.metabolicAge != null && (
+                  <DetailRow label="Metabolic age (est.)" value={`${bodyComp.metabolicAge} yr`} />
+                )}
+              </div>
+            </Card>
+          )}
+          {lifts.length > 0 && (
+            <Card className="p-0">
+              <div className="px-4 pt-3 text-xs uppercase tracking-wide text-muted-foreground">
+                Personal records (est. 1RM)
+              </div>
+              <div className="mt-1 divide-y divide-border">
+                {lifts.map((l) => (
+                  <DetailRow
+                    key={l.exercise}
+                    label={EXERCISE_LABELS[l.exercise as Exercise] ?? l.exercise}
+                    value={`${l.best1RM} kg`}
+                  />
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
 
       <Card className="p-4">
         <div className="text-xs uppercase tracking-wide text-muted-foreground">Notes from the DM</div>

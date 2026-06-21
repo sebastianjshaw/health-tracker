@@ -3,11 +3,11 @@ import { CharacterSheet } from "@/components/character/CharacterSheet";
 import { getCharacterSheet } from "@/lib/character-data";
 
 export default async function CharacterPage() {
-  const { character, name } = await getCharacterSheet();
+  const { character, name, bodyComp, lifts } = await getCharacterSheet();
   return (
     <div className="space-y-4">
       <PageHeader title="Character Sheet" subtitle="Your stats, rolled into a class" />
-      <CharacterSheet character={character} name={name} />
+      <CharacterSheet character={character} name={name} bodyComp={bodyComp} lifts={lifts} />
     </div>
   );
 }
