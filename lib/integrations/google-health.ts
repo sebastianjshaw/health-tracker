@@ -24,6 +24,11 @@ export const DATA_TYPES = {
   restingHr: "daily-resting-heart-rate",
   steps: "steps",
   distance: "distance",
+  // Instantaneous body-composition measurements (smart scale → Health Connect).
+  // We only ingest the SCALE-sourced points; the same endpoints also carry years
+  // of legacy provider weight we don't want to re-import over manual history.
+  weight: "weight",
+  bodyFat: "body-fat",
 } as const;
 
 const TOKENS_KEY = "googleHealth";

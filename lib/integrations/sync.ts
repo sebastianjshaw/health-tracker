@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, isNotNull } from "drizzle-orm";
+import { desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { bodyMetrics, cardioSessions, dailyActivity, heartRateDaily, sleepSessions } from "@/db/schema";
@@ -33,6 +33,53 @@ const durationToMin = (v: unknown): number | null => {
 const dateOf = (iso: unknown): string | null =>
   typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : null;
 
+// ---- scale measurement helpers (weight, body fat) ----
+type SampleTime = {
+  physicalTime?: string;
+  civilTime?: { date?: { year?: number; month?: number; day?: number } };
+};
+type MeasureNode = { sampleTime?: SampleTime } & Record<string, unknown>;
+
+/** Local calendar day of a sample (civilTime preferred, else the UTC slice). */
+function sampleDate(st?: SampleTime): string | null {
+  const d = st?.civilTime?.date;
+  if (d?.year && d?.month && d?.day) {
+    return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+  }
+  return dateOf(st?.physicalTime);
+}
+
+/**
+ * Latest SCALE-sourced reading per local day for a measurement data type, from
+ * `since` onward. Non-scale points (legacy provider weight history) are ignored
+ * so we never re-import over manual entries; within a day the most recent
+ * sampleTime wins.
+ */
+function scaleLatestPerDay(
+  points: { dataSource?: unknown; [k: string]: unknown }[],
+  field: string,
+  since: string,
+  valueOf: (node: MeasureNode) => number | null,
+): Map<string, number> {
+  const byDate = new Map<string, { at: string; value: number }>();
+  for (const dp of points) {
+    const ds = dp.dataSource as { device?: { formFactor?: string } } | undefined;
+    if (ds?.device?.formFactor !== "SCALE") continue;
+    const node = dp[field] as MeasureNode | undefined;
+    if (!node) continue;
+    const date = sampleDate(node.sampleTime);
+    if (!date || date < since) continue;
+    const value = valueOf(node);
+    if (value == null) continue;
+    const at = node.sampleTime?.physicalTime ?? "";
+    const cur = byDate.get(date);
+    if (!cur || at > cur.at) byDate.set(date, { at, value });
+  }
+  const out = new Map<string, number>();
+  for (const [date, v] of byDate) out.set(date, v.value);
+  return out;
+}
+
 function exerciseToCardio(exerciseType?: string): CardioType {
   switch ((exerciseType ?? "").toUpperCase()) {
     case "RUNNING":
@@ -64,6 +111,7 @@ export type SyncSummary = {
   sleep: number;
   restingHr: number;
   activeDays: number;
+  body: number;
 };
 
 type SqliteBatchItem = BatchItem<"sqlite">;
@@ -98,6 +146,7 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     sleep: 0,
     restingHr: 0,
     activeDays: 0,
+    body: 0,
   };
 
   // ---- Exercise → cardioSessions ----
@@ -286,6 +335,63 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
     summary.activeDays++;
   }
   await runBatched(activityStmts);
+
+  // ---- Body composition (weight, body fat) from a smart scale → bodyMetrics ----
+  // Withings/Health-Connect scales report weight & body-fat as instantaneous
+  // measurements. We ONLY ingest SCALE-sourced points (the same endpoints also
+  // carry years of legacy provider weight we must not re-import over manual
+  // history), keep the latest reading per local day, and fold it into that day's
+  // single bodyMetrics row — so it merges with manual measurements rather than
+  // duplicating them. The scale's spot heart-rate is deliberately skipped: it's
+  // a standing pulse, not resting HR, and would corrupt the resting-HR series.
+  const [weightPts, bodyFatPts] = await Promise.all([
+    listDataPoints(token, DATA_TYPES.weight),
+    listDataPoints(token, DATA_TYPES.bodyFat),
+  ]);
+  const weightByDay = scaleLatestPerDay(weightPts, "weight", start, (n) => {
+    const g = num(n.weightGrams);
+    return g != null ? Math.round((g / 1000) * 10) / 10 : null;
+  });
+  const bodyFatByDay = scaleLatestPerDay(bodyFatPts, "bodyFat", start, (n) => {
+    const p = num(n.percentage);
+    return p != null ? Math.round(p * 10) / 10 : null;
+  });
+
+  const bodyDates = [...new Set([...weightByDay.keys(), ...bodyFatByDay.keys()])];
+  if (bodyDates.length) {
+    const existing = await db
+      .select()
+      .from(bodyMetrics)
+      .where(inArray(bodyMetrics.date, bodyDates))
+      .all();
+    // One row per date (newest id wins) — mirrors logBody's merge semantics.
+    const rowByDate = new Map<string, (typeof existing)[number]>();
+    for (const r of existing) {
+      const prev = rowByDate.get(r.date);
+      if (!prev || r.id > prev.id) rowByDate.set(r.date, r);
+    }
+
+    const bodyStmts: SqliteBatchItem[] = [];
+    for (const date of bodyDates) {
+      const w = weightByDay.get(date) ?? null;
+      const bf = bodyFatByDay.get(date) ?? null;
+      const ex = rowByDate.get(date);
+      if (ex) {
+        // The scale is the measuring device, so it wins where it has a reading;
+        // other fields (waist, notes, resting HR) are preserved untouched.
+        bodyStmts.push(
+          db
+            .update(bodyMetrics)
+            .set({ weightKg: w ?? ex.weightKg, bodyFatPct: bf ?? ex.bodyFatPct })
+            .where(eq(bodyMetrics.id, ex.id)),
+        );
+      } else {
+        bodyStmts.push(db.insert(bodyMetrics).values({ date, weightKg: w, bodyFatPct: bf }));
+      }
+      summary.body++;
+    }
+    await runBatched(bodyStmts);
+  }
 
   await setCursor(today);
   return summary;

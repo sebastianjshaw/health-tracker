@@ -12,7 +12,7 @@ export async function syncNow(): Promise<ActionResult> {
     const s = await syncGoogleHealth();
     revalidatePaths("/", "/stats", "/activity", "/settings");
     return actionOk(
-      `Synced ${s.exercise} activities, ${s.activeDays} movement days, ${s.sleep} sleep nights, ${s.restingHr} HR days.`,
+      `Synced ${s.exercise} activities, ${s.activeDays} movement days, ${s.sleep} sleep nights, ${s.restingHr} HR days, ${s.body} body-comp days.`,
     );
   } catch (e) {
     return actionFail(e instanceof Error ? e.message : "Sync failed");
