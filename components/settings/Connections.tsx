@@ -17,10 +17,10 @@ export function Connections({
   const [msg, setMsg] = React.useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  function doSync() {
-    setMsg(null);
+  function doSync(full = false) {
+    setMsg(full ? "Full resync running…" : null);
     start(async () => {
-      const r = await syncNow();
+      const r = await syncNow(full);
       setMsg(r.ok ? (r.message ?? "Synced.") : r.error);
     });
   }
@@ -58,14 +58,22 @@ export function Connections({
           Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable this.
         </p>
       ) : connected ? (
-        <div className="mt-3 flex gap-2">
-          <Button onClick={doSync} disabled={pending} className="flex-1">
-            {pending ? "Syncing…" : "Sync now"}
-          </Button>
-          <Button variant="outline" onClick={doDisconnect} disabled={pending}>
-            Disconnect
-          </Button>
-        </div>
+        <>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button onClick={() => doSync(false)} disabled={pending} className="flex-1">
+              {pending ? "Syncing…" : "Sync now"}
+            </Button>
+            <Button variant="outline" onClick={() => doSync(true)} disabled={pending}>
+              Full resync
+            </Button>
+            <Button variant="outline" onClick={doDisconnect} disabled={pending}>
+              Disconnect
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Sync pulls the recent window; a full resync re-imports the entire history.
+          </p>
+        </>
       ) : (
         <a href="/api/integrations/google/start" className="mt-3 block">
           <Button className="w-full">Connect Google Health</Button>

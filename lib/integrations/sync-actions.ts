@@ -6,11 +6,11 @@ import { revalidatePaths } from "@/lib/revalidate";
 import { disconnect } from "./google-health";
 import { syncGoogleHealth } from "./sync";
 
-export async function syncNow(): Promise<ActionResult> {
+export async function syncNow(full = false): Promise<ActionResult> {
   await requireAuth();
   try {
-    const s = await syncGoogleHealth();
-    revalidatePaths("/", "/stats", "/activity", "/settings");
+    const s = await syncGoogleHealth({ full });
+    revalidatePaths("/", "/stats", "/activity", "/settings", "/report");
     return actionOk(
       `Synced ${s.exercise} activities, ${s.activeDays} movement days, ${s.sleep} sleep nights, ${s.restingHr} HR days, ${s.body} body-comp days.`,
     );

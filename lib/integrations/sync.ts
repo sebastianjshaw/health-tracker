@@ -8,10 +8,12 @@ import { estimateCardioKcal } from "@/lib/cardio-calories";
 import { addDays, todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
+  type DataPoint,
   fetchDailyTotals,
   getAccessToken,
   getCursor,
   listDataPoints,
+  listDataPointsSince,
   setCursor,
 } from "./google-health";
 
@@ -128,7 +130,8 @@ async function runBatched(stmts: SqliteBatchItem[], size = 100): Promise<void> {
   }
 }
 
-export async function syncGoogleHealth(): Promise<SyncSummary> {
+export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncSummary> {
+  const full = opts?.full ?? false;
   const token = await getAccessToken();
   if (!token) throw new Error("Google Health is not connected.");
 
@@ -137,8 +140,13 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   // with a lookback so data that lands in Google Health late (Fit/Health Connect
   // sync with a delay) isn't skipped forever once the cursor moves past its date.
   // Re-importing recent days is safe: rows upsert on (source, externalId).
-  const cursor = await getCursor();
+  // A full resync ignores the cursor and re-pulls the entire history.
+  const cursor = full ? null : await getCursor();
   const start = cursor ? addDays(cursor, -LOOKBACK_DAYS) : "2015-01-01";
+  // Granular measurement types (passive steps/distance, scale weight/body-fat)
+  // are bounded to ~90 days on a normal sync so we don't page years of points;
+  // a full resync lifts the bound.
+  const boundedSince = full || start >= addDays(today, -90) ? start : addDays(today, -90);
   const summary: SyncSummary = {
     from: start,
     to: today,
@@ -312,12 +320,11 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   await runBatched(hrStmts);
 
   // ---- Passive steps & distance → dailyActivity ----
-  // Granular measurement types: aggregated per local day. Bounded to ~90 days
-  // even on a first sync so we don't page through years of per-minute data.
-  const passiveSince = start < addDays(today, -90) ? addDays(today, -90) : start;
+  // Granular measurement types: aggregated per local day, bounded to the recent
+  // window (see boundedSince) so we don't page through years of per-minute data.
   const [stepsByDay, distByDay] = await Promise.all([
-    fetchDailyTotals(token, DATA_TYPES.steps, (n) => Number(n.count ?? 0), passiveSince),
-    fetchDailyTotals(token, DATA_TYPES.distance, (n) => Number(n.millimeters ?? 0), passiveSince),
+    fetchDailyTotals(token, DATA_TYPES.steps, (n) => Number(n.count ?? 0), boundedSince),
+    fetchDailyTotals(token, DATA_TYPES.distance, (n) => Number(n.millimeters ?? 0), boundedSince),
   ]);
   const activityStmts: SqliteBatchItem[] = [];
   for (const date of new Set([...stepsByDay.keys(), ...distByDay.keys()])) {
@@ -344,15 +351,17 @@ export async function syncGoogleHealth(): Promise<SyncSummary> {
   // single bodyMetrics row — so it merges with manual measurements rather than
   // duplicating them. The scale's spot heart-rate is deliberately skipped: it's
   // a standing pulse, not resting HR, and would corrupt the resting-HR series.
+  const measureDate = (field: string) => (dp: DataPoint) =>
+    sampleDate((dp[field] as MeasureNode | undefined)?.sampleTime);
   const [weightPts, bodyFatPts] = await Promise.all([
-    listDataPoints(token, DATA_TYPES.weight),
-    listDataPoints(token, DATA_TYPES.bodyFat),
+    listDataPointsSince(token, DATA_TYPES.weight, boundedSince, measureDate("weight")),
+    listDataPointsSince(token, DATA_TYPES.bodyFat, boundedSince, measureDate("bodyFat")),
   ]);
-  const weightByDay = scaleLatestPerDay(weightPts, "weight", start, (n) => {
+  const weightByDay = scaleLatestPerDay(weightPts, "weight", boundedSince, (n) => {
     const g = num(n.weightGrams);
     return g != null ? Math.round((g / 1000) * 10) / 10 : null;
   });
-  const bodyFatByDay = scaleLatestPerDay(bodyFatPts, "bodyFat", start, (n) => {
+  const bodyFatByDay = scaleLatestPerDay(bodyFatPts, "bodyFat", boundedSince, (n) => {
     const p = num(n.percentage);
     return p != null ? Math.round(p * 10) / 10 : null;
   });

@@ -22,21 +22,34 @@ import { getContingency, getProfile, getTargetHistory } from "./settings";
 import { targetForDate } from "./targets";
 import { predictWeights, type WeightPrediction } from "./weight-prediction";
 
-export async function getBodyMetrics() {
+/** All body-metric rows, newest-first. Optionally bounded to an inclusive
+ * [from, to] date range (so the report only loads its window). */
+export async function getBodyMetrics(from?: string, to?: string) {
+  const conds = [
+    from ? gte(bodyMetrics.date, from) : undefined,
+    to ? lte(bodyMetrics.date, to) : undefined,
+  ].filter((c) => c != null);
   return db
     .select()
     .from(bodyMetrics)
+    .where(conds.length ? and(...conds) : undefined)
     .orderBy(desc(bodyMetrics.date), desc(bodyMetrics.id))
     .all();
 }
 
 export type WeightPoint = { date: string; weight: number; bodyFat: number | null };
 
-export async function getWeightSeries(): Promise<WeightPoint[]> {
+/** Weigh-ins ascending. Optionally bounded to an inclusive [from, to] range. */
+export async function getWeightSeries(from?: string, to?: string): Promise<WeightPoint[]> {
+  const conds = [
+    isNotNull(bodyMetrics.weightKg),
+    from ? gte(bodyMetrics.date, from) : undefined,
+    to ? lte(bodyMetrics.date, to) : undefined,
+  ].filter((c) => c != null);
   const rows = await db
     .select()
     .from(bodyMetrics)
-    .where(isNotNull(bodyMetrics.weightKg))
+    .where(and(...conds))
     .orderBy(asc(bodyMetrics.date))
     .all();
   return rows.map((r) => ({

@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, type ButtonProps } from "@/components/ui";
 import { SyncIcon } from "@/components/icons";
 import { syncNow } from "@/lib/integrations/sync-actions";
 
-/** Small green icon button that pulls the latest Google Health data. */
-export function SyncButton() {
+/** Small icon button that pulls the latest Google Health data and refreshes. */
+export function SyncButton({ variant }: { variant?: ButtonProps["variant"] }) {
   const router = useRouter();
   const [pending, start] = React.useTransition();
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -27,6 +27,7 @@ export function SyncButton() {
     <div className="flex flex-col items-end gap-1">
       <Button
         size="icon"
+        variant={variant}
         className="h-9 w-9"
         onClick={doSync}
         disabled={pending}

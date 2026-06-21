@@ -50,3 +50,37 @@ export function metabolicAge(opts: {
     (10 * opts.weightKg + 6.25 * opts.heightCm + sexAdjustment(opts.sex) - km) / 5;
   return Math.round(Math.max(18, Math.min(80, age)));
 }
+
+export type BodyComposition = {
+  /** The date of the reading these figures derive from. */
+  date: string;
+  leanMassKg: number;
+  metabolicAge: number | null;
+};
+
+/**
+ * Lean mass + metabolic age from the most recent reading that has BOTH a weight
+ * and a body-fat figure, so the two numbers are always derived from the same
+ * measurement (never a fresh weight paired with a stale body-fat reading).
+ * `readings` must be newest-first. Null if no reading carries both.
+ */
+export function latestBodyComposition(
+  readings: { date: string; weightKg: number | null; bodyFatPct: number | null }[],
+  profile: { heightCm: number | null; sex: string },
+): BodyComposition | null {
+  for (const r of readings) {
+    const lean = leanBodyMass(r.weightKg, r.bodyFatPct);
+    if (lean == null) continue; // needs both weight and a valid body-fat %
+    return {
+      date: r.date,
+      leanMassKg: lean,
+      metabolicAge: metabolicAge({
+        weightKg: r.weightKg,
+        heightCm: profile.heightCm,
+        bodyFatPct: r.bodyFatPct,
+        sex: profile.sex,
+      }),
+    };
+  }
+  return null;
+}

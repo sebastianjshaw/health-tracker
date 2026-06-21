@@ -147,6 +147,7 @@ export default async function ReportPage({
                 <td className="py-1.5 text-muted-foreground">Lean mass</td>
                 <td className="py-1.5 text-right">
                   {v.leanMassKg != null ? `${trimNum(v.leanMassKg)} kg` : "—"}
+                  {v.bodyCompDate ? ` (as of ${prettyDate(v.bodyCompDate)})` : ""}
                 </td>
               </tr>
               <tr>

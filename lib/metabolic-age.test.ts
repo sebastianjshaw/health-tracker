@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { leanBodyMass, metabolicAge } from "./metabolic-age";
+import { latestBodyComposition, leanBodyMass, metabolicAge } from "./metabolic-age";
 
 describe("leanBodyMass", () => {
   it("subtracts fat mass", () => {
@@ -35,5 +35,47 @@ describe("metabolicAge", () => {
   it("needs height and a body-fat reading", () => {
     assert.equal(metabolicAge({ ...base, bodyFatPct: null }), null);
     assert.equal(metabolicAge({ weightKg: 112, heightCm: null, sex: "male", bodyFatPct: 25 }), null);
+  });
+});
+
+describe("latestBodyComposition", () => {
+  const profile = { heightCm: 180, sex: "male" };
+
+  it("uses the latest reading that has BOTH weight and body fat", () => {
+    // newest-first; the newest row lacks body fat, so it must skip to 06-19.
+    const bc = latestBodyComposition(
+      [
+        { date: "2026-06-21", weightKg: 112, bodyFatPct: null },
+        { date: "2026-06-19", weightKg: 110, bodyFatPct: 30 },
+        { date: "2026-06-10", weightKg: 113, bodyFatPct: 32 },
+      ],
+      profile,
+    )!;
+    assert.equal(bc.date, "2026-06-19");
+    assert.equal(bc.leanMassKg, 77); // 110 × 0.70
+    assert.ok(bc.metabolicAge != null);
+  });
+
+  it("derives lean mass and metabolic age from the same row", () => {
+    const row = { date: "2026-06-19", weightKg: 110, bodyFatPct: 30 };
+    const bc = latestBodyComposition([row], profile)!;
+    assert.equal(bc.leanMassKg, leanBodyMass(row.weightKg, row.bodyFatPct));
+    assert.equal(
+      bc.metabolicAge,
+      metabolicAge({ weightKg: row.weightKg, heightCm: 180, bodyFatPct: row.bodyFatPct, sex: "male" }),
+    );
+  });
+
+  it("is null when no reading carries both figures", () => {
+    assert.equal(
+      latestBodyComposition(
+        [
+          { date: "2026-06-21", weightKg: 112, bodyFatPct: null },
+          { date: "2026-06-19", weightKg: null, bodyFatPct: 30 },
+        ],
+        profile,
+      ),
+      null,
+    );
   });
 });

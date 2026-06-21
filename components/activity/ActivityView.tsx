@@ -3,7 +3,7 @@
 import * as React from "react";
 import { cn } from "@/lib/cn";
 import { DateNav } from "@/components/DateNav";
-import { SyncButton } from "./SyncButton";
+import { SyncButton } from "@/components/integrations/SyncButton";
 import { CardioForm } from "./CardioForm";
 import { CardioList } from "./CardioList";
 import { LiftTracker } from "./LiftTracker";

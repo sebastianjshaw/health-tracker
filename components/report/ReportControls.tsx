@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input } from "@/components/ui";
-import { SyncButton } from "@/components/activity/SyncButton";
+import { SyncButton } from "@/components/integrations/SyncButton";
 
 export function ReportControls({ from, to }: { from: string; to: string }) {
   const router = useRouter();
@@ -26,7 +26,7 @@ export function ReportControls({ from, to }: { from: string; to: string }) {
       </Button>
       <Button onClick={() => window.print()}>Print / Save as PDF</Button>
       {/* Pull the latest weight/body-fat & vitals from Google Health, then refresh. */}
-      <SyncButton />
+      <SyncButton variant="outline" />
     </div>
   );
 }

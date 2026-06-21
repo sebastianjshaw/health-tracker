@@ -191,6 +191,44 @@ export async function listDataPoints(
   return out;
 }
 
+/**
+ * List measurement data points newest-first, stopping once a point predates
+ * `since` (YYYY-MM-DD). Measurement types (weight, body-fat) come back
+ * newest-first and reject server-side member filters, so we bound client-side —
+ * the normal sync only pages back over its recent window instead of the whole
+ * history. `dateOf` reads a point's local day; points without a readable date
+ * are kept (they can't be windowed).
+ */
+export async function listDataPointsSince(
+  accessToken: string,
+  dataType: string,
+  since: string,
+  dateOf: (dp: DataPoint) => string | null,
+): Promise<DataPoint[]> {
+  const out: DataPoint[] = [];
+  let pageToken: string | undefined;
+  let pages = 0;
+  let done = false;
+  do {
+    const url = new URL(`${API_BASE}/${dataType}/dataPoints`);
+    url.searchParams.set("pageSize", "1000");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) throw new Error(`Google Health ${dataType} fetch failed (${res.status})`);
+    const data = (await res.json()) as { dataPoints?: DataPoint[]; nextPageToken?: string };
+    for (const dp of data.dataPoints ?? []) {
+      const d = dateOf(dp);
+      if (d && d < since) {
+        done = true;
+        break;
+      }
+      out.push(dp);
+    }
+    pageToken = data.nextPageToken || undefined;
+  } while (pageToken && !done && ++pages < MAX_PAGES);
+  return out;
+}
+
 type MeasureNode = {
   interval?: { civilStartTime?: { date?: { year?: number; month?: number; day?: number } } };
   count?: string | number;

@@ -21,7 +21,7 @@ export function CardBody({ className, ...props }: React.HTMLAttributes<HTMLDivEl
   return <div className={cn("px-4 pb-4", className)} {...props} />;
 }
 
-type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger" | "outline";
   size?: "sm" | "md" | "lg" | "icon";
 };

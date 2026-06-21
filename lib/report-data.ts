@@ -8,9 +8,10 @@ import {
   EXERCISE_LABELS,
   Exercise,
 } from "./constants";
-import { parseISO, todayISO } from "./date";
+import { todayISO } from "./date";
 import { ageFrom, bmi, bmiClass } from "./health";
-import { leanBodyMass, metabolicAge } from "./metabolic-age";
+import { latestBodyComposition } from "./metabolic-age";
+import { summariseWeights } from "./report-summary";
 import { getBloodPanels, markerStatus, type BloodPanel } from "./blood-data";
 import {
   calorieSeriesRange,
@@ -63,6 +64,7 @@ export type ReportData = {
     latestRestingHr: { value: number; date: string } | null;
     leanMassKg: number | null;
     metabolicAge: number | null;
+    bodyCompDate: string | null;
     bp: { systolic: number; diastolic: number; date: string } | null;
     inRange: BodyMetric[];
   };
@@ -156,8 +158,8 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
       getProfile(),
       getTargets(),
       getGoalWeight(),
-      getWeightSeries(), // all-time, ascending
-      getBodyMetrics(), // all-time, newest-first
+      getWeightSeries(from, to), // range, ascending
+      getBodyMetrics(from, to), // range, newest-first
       getBloodPanels(), // newest-first
       calorieSeriesRange(from, to),
       getLiftProgression(),
@@ -169,35 +171,27 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
         .all(),
     ]);
 
-  // Scope weight + body metrics to the report's date range (calorie/cardio are
-  // already range-queried above), so the chart and vitals match the Period.
-  const rangeWeights = weights.filter((w) => w.date >= from && w.date <= to);
-  const rangeBody = allBody.filter((m) => m.date >= from && m.date <= to); // newest-first
-
   // ---- summary (baseline → current within the range) ----
-  const baseline = rangeWeights[0]
-    ? { weight: rangeWeights[0].weight, date: rangeWeights[0].date }
-    : null;
-  const last = rangeWeights[rangeWeights.length - 1];
-  const current = last ? { weight: last.weight, date: last.date } : null;
-
-  let changeKg: number | null = null;
-  let changePct: number | null = null;
-  let kgPerWeek: number | null = null;
-  if (baseline && current) {
-    changeKg = Math.round((current.weight - baseline.weight) * 10) / 10;
-    changePct = baseline.weight
-      ? Math.round((changeKg / baseline.weight) * 1000) / 10
-      : null;
-    const weeks =
-      (parseISO(current.date).getTime() - parseISO(baseline.date).getTime()) /
-      (7 * 86400000);
-    kgPerWeek = weeks > 0 ? Math.round((changeKg / weeks) * 100) / 100 : null;
-  }
+  // weights/allBody are already range-queried; summariseWeights re-clamps as a
+  // safety net so a dropped query bound can't silently re-show the full series.
+  const rangeBody = allBody; // newest-first, within range
+  const {
+    series: rangeWeights,
+    baseline,
+    current,
+    changeKg,
+    changePct,
+    kgPerWeek,
+  } = summariseWeights(weights, from, to);
 
   const baselineBmi = baseline ? bmi(baseline.weight, profile.heightCm) : null;
   const currentBmi = current ? bmi(current.weight, profile.heightCm) : null;
   const latestBodyFat = latestWith(rangeBody, (m) => m.bodyFatPct);
+  // Lean mass + metabolic age from a single reading that has both (see helper).
+  const bodyComp = latestBodyComposition(rangeBody, {
+    heightCm: profile.heightCm,
+    sex: profile.sex,
+  });
 
   // ---- nutrition (range) ----
   const logged = calorie.filter((c) => c.kcal > 0);
@@ -266,14 +260,10 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
       baselineWaist: earliestWith(rangeBody, (m) => m.waistCm),
       latestBodyFat,
       latestRestingHr: latestWith(rangeBody, (m) => m.restingHr),
-      // Derived from the latest weight + body-fat (estimates, not measurements).
-      leanMassKg: leanBodyMass(current?.weight ?? null, latestBodyFat?.value ?? null),
-      metabolicAge: metabolicAge({
-        weightKg: current?.weight ?? null,
-        heightCm: profile.heightCm,
-        bodyFatPct: latestBodyFat?.value ?? null,
-        sex: profile.sex,
-      }),
+      // Derived (estimates, not measurements), both from the same reading.
+      leanMassKg: bodyComp?.leanMassKg ?? null,
+      metabolicAge: bodyComp?.metabolicAge ?? null,
+      bodyCompDate: bodyComp?.date ?? null,
       bp: bpFromPanels(panels),
       inRange: rangeBody,
     },
