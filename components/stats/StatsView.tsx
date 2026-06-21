@@ -34,7 +34,19 @@ import type {
   WeightPoint,
   WeightPrediction,
 } from "@/lib/stats-data";
-import type { HealthStatus } from "@/lib/constants";
+import { EXERCISE_LABELS, type Exercise, type HealthStatus } from "@/lib/constants";
+import type { BodyComposition } from "@/lib/metabolic-age";
+import type { TdeeEstimate } from "@/lib/tdee";
+import type { YearlyAverage } from "@/lib/seasonal";
+import type { LiftStat } from "@/lib/strength";
+import { trimNum } from "@/lib/format";
+
+export type StatsInsights = {
+  tdee: TdeeEstimate | null;
+  bodyComp: BodyComposition | null;
+  yearly: YearlyAverage[];
+  prs: LiftStat[];
+};
 
 type Tone = "good" | "bad" | "even" | "none";
 const TONE: Record<Tone, string> = {
@@ -79,6 +91,7 @@ export function StatsView({
   targets,
   goalWeight,
   mealSplit,
+  insights,
 }: {
   today: string;
   weight: WeightPoint[];
@@ -93,6 +106,7 @@ export function StatsView({
   targets: { kcal: number };
   goalWeight: number | null;
   mealSplit: Record<Meal, number>;
+  insights: StatsInsights;
 }) {
   const [range, setRange] = React.useState<Range>("30d");
   const cutoff = cutoffFor(range, today);
@@ -210,6 +224,82 @@ export function StatsView({
         />
         <Metric label="Days ill" value={`${illDays}`} sub={illSub} tone={illTone} />
       </Card>
+
+      {/* Range-independent insights derived from the full history. */}
+      <Section title="Insights">
+        <Card className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-3">
+          <Metric
+            label="Maintenance (measured)"
+            value={insights.tdee != null ? `${insights.tdee.tdee}` : "—"}
+            sub={insights.tdee != null ? `kcal · ${insights.tdee.confidence} conf.` : "needs ~2wk of logs"}
+            tone="none"
+          />
+          <Metric
+            label="Lean mass"
+            value={insights.bodyComp != null ? `${trimNum(insights.bodyComp.leanMassKg)} kg` : "—"}
+            sub={
+              insights.bodyComp?.fatMassKg != null
+                ? `${trimNum(insights.bodyComp.fatMassKg)} kg fat`
+                : "needs body fat"
+            }
+            tone="none"
+          />
+          <Metric
+            label="FFMI"
+            value={insights.bodyComp?.ffmi != null ? `${trimNum(insights.bodyComp.ffmi)}` : "—"}
+            sub="lean ÷ height²"
+            tone="none"
+          />
+          <Metric
+            label="Metabolic age"
+            value={insights.bodyComp?.metabolicAge != null ? `${insights.bodyComp.metabolicAge} yr` : "—"}
+            sub="estimated"
+            tone="none"
+          />
+        </Card>
+
+        {insights.prs.length > 0 && (
+          <Card className="p-0">
+            <div className="px-4 pt-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Personal records (est. 1RM)
+            </div>
+            <div className="mt-1 divide-y divide-border">
+              {insights.prs.map((l) => (
+                <div key={l.exercise} className="flex items-baseline justify-between px-4 py-2.5">
+                  <span className="text-sm">{EXERCISE_LABELS[l.exercise as Exercise] ?? l.exercise}</span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {l.best1RM} kg
+                    {l.latest1RM < l.best1RM && (
+                      <span className="ml-2 text-xs text-muted-foreground">now {l.latest1RM}</span>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {insights.yearly.length > 1 && (
+          <Card className="p-0">
+            <div className="px-4 pt-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Weight by year
+            </div>
+            <div className="mt-1 divide-y divide-border">
+              {insights.yearly.map((y) => (
+                <div key={y.year} className="flex items-baseline justify-between px-4 py-2 text-sm">
+                  <span className="tabular-nums text-muted-foreground">{y.year}</span>
+                  <span className="tabular-nums">
+                    <span className="font-medium">{trimNum(y.avgWeight)} kg</span>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {trimNum(y.min)}–{trimNum(y.max)}
+                    </span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+      </Section>
 
       <Section title="Body">
         <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} today={today} />

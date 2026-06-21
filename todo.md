@@ -3,25 +3,24 @@
 Data-driven features approved from the data review. Built in tranches; pure
 computation libs first (tested), then surfaced in report / stats / character / MCP.
 
-## In progress / approved
+## Done
 
-- [ ] **Measured (adaptive) TDEE** — fit logged intake + cardio + weight change to
-  solve for real maintenance kcal (`lib/tdee.ts`). Surface in report & stats;
-  optionally feed the suggested-target logic.
-- [ ] **Fat-mass vs lean-mass trends + FFMI** — split weight by body-fat %; FFMI =
-  lean ÷ height² as the muscularity counterpart to BMI. Surface in report,
-  stats, character.
-- [ ] **Plateau / diet-break detection** — flag a flat 7-day average over N weeks
-  despite a deficit; suggest recalc (using measured TDEE) or a diet break.
-- [ ] **Waist-to-height ratio (WHtR)** — uses logged waist; better central-adiposity
-  marker than BMI. Report.
-- [ ] **Strength analytics** — estimated 1RM (Epley) per lift, total tonnage, PR
-  detection from `lift_sets` (weight × reps). Stats/character.
-- [ ] **Bloodwork × weight overlay** — lipids/HbA1c etc. against weight on a timeline.
-- [ ] **Streaks / consistency** — logging streak, weigh-in cadence, adherence streak.
-- [ ] **Year-over-year & seasonal (by-month) weight** — uses the 14-year history.
-- [ ] **Surface lean mass / metabolic age / FFMI on Stats & Character** (not Today).
-- [ ] **MCP freshness check** — warn when latest synced activity/HR/sleep is > N days stale.
+- [x] **Measured (adaptive) TDEE** — `lib/tdee.ts`; shown in report summary & stats Insights.
+- [x] **Fat-mass vs lean-mass + FFMI** — `lib/metabolic-age.ts`; report vitals, stats, character.
+- [x] **Plateau / diet-break detection** — `lib/plateau.ts`; warning note in the report.
+- [x] **Waist-to-height ratio (WHtR)** — `lib/health.ts`; report vitals.
+- [x] **Strength analytics** — `lib/strength.ts` (Epley e1RM, tonnage, PRs); character + stats PR cards.
+- [x] **Streaks / consistency** — `lib/streaks.ts` (current/longest). _Built; not yet surfaced in UI._
+- [x] **Year-over-year & seasonal weight** — `lib/seasonal.ts`; "Weight by year" in stats Insights.
+- [x] **Lean mass / metabolic age / FFMI on Stats & Character.**
+- [x] **MCP freshness check** — `get_sync_freshness` tool.
+
+## Remaining
+
+- [ ] **Bloodwork × weight overlay** — lipids/HbA1c etc. against weight on a timeline
+  (needs a dual-axis chart component — the one chart-heavy item left).
+- [ ] **Surface streaks** — `lib/streaks.ts` is built & tested but not yet shown (e.g. a
+  logging-streak tile on stats). Monthly (by-month) seasonal view also still text-only.
 
 ## Held until Fitbit arrives (~2026-06-22)
 
