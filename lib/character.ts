@@ -158,13 +158,23 @@ export function buildCharacter(input: CharacterInput): Character {
   }
 
   // ---- CHA: physical presence, proxied by body composition (measurable).
-  // 10 ≈ an average build; leaner climbs, higher body fat / BMI eases off.
-  // Body fat % is preferred (sex-aware), with BMI as the fallback.
+  // Anchored so 10 = population-average body fat and 18 = stage-lean "peak
+  // human". The two sides use different slopes on purpose: there are only ~20
+  // body-fat points between average and essential-fat, so the lean side must be
+  // steeper to span 10→18 — a single gentle slope would make 18 (and even 16)
+  // need impossible sub-zero body fat. The heavy side stays gentle. Sex-aware;
+  // BMI is the fallback when body fat isn't measured.
   let cha: number;
   let chaBasis: string;
   if (input.bodyFatPct != null) {
-    const avgBf = input.sex === "female" ? 27 : 20; // rough average body-fat % by sex
-    cha = clamp(r(10 + (avgBf - input.bodyFatPct) * 0.3), 3, 18);
+    const avgBf = input.sex === "female" ? 27 : 20; // average body-fat % → CHA 10
+    const leanBf = input.sex === "female" ? 14 : 6; // stage-lean "peak human" → CHA 18
+    const bf = input.bodyFatPct;
+    const raw =
+      bf <= avgBf
+        ? 10 + (avgBf - bf) * (8 / (avgBf - leanBf)) // lean side: reaches 18 at leanBf
+        : 10 - (bf - avgBf) * 0.3; // heavy side: gentle, hits 3 near morbid obesity
+    cha = clamp(r(raw), 3, 18);
     chaBasis = `body fat ${input.bodyFatPct}%`;
   } else if (input.bmi != null) {
     let s = 10 + (24 - input.bmi) * 0.5; // ~24 BMI ≈ average build

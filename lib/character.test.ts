@@ -79,6 +79,17 @@ describe("buildCharacter", () => {
     assert.ok(cha({ bmi: 22, bodyFatPct: null }) >= 10);
   });
 
+  it("Charisma scale reaches the top at stage-lean body fat (male)", () => {
+    const cha = (bf: number) =>
+      buildCharacter({ ...base, sex: "male", bodyFatPct: bf }).abilities.find((a) => a.key === "cha")!
+        .score;
+    assert.equal(cha(20), 10); // average → midpoint
+    assert.equal(cha(6), 18); // stage-lean → max (was unreachable before)
+    assert.equal(cha(13), 14);
+    // monotonic: leaner never scores lower
+    assert.ok(cha(6) > cha(10) && cha(10) > cha(16) && cha(16) > cha(30));
+  });
+
   it("names a standout and a dump stat", () => {
     assert.match(buildCharacter(base).dmNote, /Standout stat:.*Dump stat:/);
   });
