@@ -27,6 +27,45 @@ export function katchMcArdleBmr(leanKg: number): number {
   return 370 + 21.6 * leanKg;
 }
 
+/** Fat mass (kg). Null if weight or a valid body-fat % is missing. */
+export function fatMass(weightKg: number | null, bodyFatPct: number | null): number | null {
+  const lean = leanBodyMass(weightKg, bodyFatPct);
+  if (lean == null || weightKg == null) return null;
+  return Math.round((weightKg - lean) * 10) / 10;
+}
+
+/**
+ * Fat-Free Mass Index = lean mass (kg) / height (m)² — the muscularity
+ * counterpart to BMI (which can't tell muscle from fat). Natural lifters tend
+ * to top out around 22–25. Null without lean mass + height.
+ */
+export function ffmi(
+  weightKg: number | null,
+  bodyFatPct: number | null,
+  heightCm: number | null,
+): number | null {
+  const lean = leanBodyMass(weightKg, bodyFatPct);
+  if (lean == null || !heightCm || heightCm <= 0) return null;
+  const m = heightCm / 100;
+  return Math.round((lean / (m * m)) * 10) / 10;
+}
+
+export type BodyCompPoint = { date: string; fatKg: number; leanKg: number };
+
+/** Fat/lean mass split per weigh-in that has both weight and body-fat (others
+ * are skipped). Ascending in → ascending out. */
+export function bodyCompSeries(
+  weighIns: { date: string; weight: number; bodyFat: number | null }[],
+): BodyCompPoint[] {
+  const out: BodyCompPoint[] = [];
+  for (const w of weighIns) {
+    const lean = leanBodyMass(w.weight, w.bodyFat);
+    if (lean == null) continue;
+    out.push({ date: w.date, fatKg: Math.round((w.weight - lean) * 10) / 10, leanKg: lean });
+  }
+  return out;
+}
+
 /**
  * Estimated "metabolic age": the chronological age at which the population-
  * average (Mifflin-St Jeor) basal metabolic rate equals your body-composition-

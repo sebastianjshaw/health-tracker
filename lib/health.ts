@@ -5,6 +5,22 @@ export function bmi(weightKg: number, heightCm: number | null): number | null {
   return Math.round((weightKg / (m * m)) * 10) / 10;
 }
 
+/** Waist-to-height ratio — a central-adiposity marker that, unlike BMI, isn't
+ * fooled by muscle. Null without both measurements. */
+export function waistToHeight(waistCm: number | null, heightCm: number | null): number | null {
+  if (!waistCm || waistCm <= 0 || !heightCm || heightCm <= 0) return null;
+  return Math.round((waistCm / heightCm) * 100) / 100;
+}
+
+/** Risk band for waist-to-height ratio (the widely-used "keep it under 0.5"). */
+export function whtrClass(r: number | null): string {
+  if (r == null) return "";
+  if (r < 0.4) return "Lean";
+  if (r < 0.5) return "Healthy";
+  if (r < 0.6) return "Increased risk";
+  return "High risk";
+}
+
 export function bmiClass(b: number | null): string {
   if (b == null) return "";
   if (b < 18.5) return "Underweight";

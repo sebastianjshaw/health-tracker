@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { latestBodyComposition, leanBodyMass, metabolicAge } from "./metabolic-age";
+import {
+  bodyCompSeries,
+  fatMass,
+  ffmi,
+  latestBodyComposition,
+  leanBodyMass,
+  metabolicAge,
+} from "./metabolic-age";
 
 describe("leanBodyMass", () => {
   it("subtracts fat mass", () => {
@@ -35,6 +42,29 @@ describe("metabolicAge", () => {
   it("needs height and a body-fat reading", () => {
     assert.equal(metabolicAge({ ...base, bodyFatPct: null }), null);
     assert.equal(metabolicAge({ weightKg: 112, heightCm: null, sex: "male", bodyFatPct: 25 }), null);
+  });
+});
+
+describe("fatMass / ffmi", () => {
+  it("fat mass is weight minus lean", () => {
+    assert.equal(fatMass(100, 25), 25);
+    assert.equal(fatMass(100, null), null);
+  });
+  it("FFMI = lean / height² (kg/m²)", () => {
+    // lean 80 kg at 2.0 m → 20.0
+    assert.equal(ffmi(100, 20, 200), 20);
+    assert.equal(ffmi(100, 20, null), null);
+  });
+});
+
+describe("bodyCompSeries", () => {
+  it("emits fat/lean split only for readings with both figures", () => {
+    const s = bodyCompSeries([
+      { date: "2026-06-01", weight: 100, bodyFat: 25 },
+      { date: "2026-06-02", weight: 99, bodyFat: null }, // skipped
+    ]);
+    assert.equal(s.length, 1);
+    assert.deepEqual(s[0], { date: "2026-06-01", fatKg: 25, leanKg: 75 });
   });
 });
 
