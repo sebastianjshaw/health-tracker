@@ -4,11 +4,32 @@ import * as React from "react";
 import { useTransition } from "react";
 import { Button, Card, Field, Input } from "@/components/ui";
 import { DeleteButton } from "@/components/DeleteButton";
+import { MarkerWeightChart } from "@/components/stats/charts-lazy";
 import { prettyDate, todayISO } from "@/lib/date";
 import { nullableNum, trimNum } from "@/lib/format";
 import { addBloodMarker, deleteBloodMarker } from "@/lib/blood-actions";
 import type { BloodMarker } from "@/db/schema";
 import type { BloodPanel } from "@/lib/blood-data";
+
+type MarkerSeries = { name: string; unit: string; points: { date: string; value: number }[] };
+
+/** Distinct markers that have ≥2 dated results (worth charting a trend for),
+ * each as an ascending time series. */
+function chartableMarkers(panels: BloodPanel[]): MarkerSeries[] {
+  const byName = new Map<string, MarkerSeries>();
+  for (const panel of panels) {
+    for (const m of panel.markers) {
+      const s = byName.get(m.marker) ?? { name: m.marker, unit: m.unit ?? "", points: [] };
+      s.points.push({ date: panel.date, value: m.value });
+      if (!s.unit && m.unit) s.unit = m.unit;
+      byName.set(m.marker, s);
+    }
+  }
+  return [...byName.values()]
+    .map((s) => ({ ...s, points: s.points.sort((a, b) => a.date.localeCompare(b.date)) }))
+    .filter((s) => s.points.length >= 2)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 function statusOf(m: BloodMarker): "low" | "high" | "ok" | "unknown" {
   if (m.refLow == null && m.refHigh == null) return "unknown";
@@ -24,11 +45,21 @@ const STATUS_CLASS: Record<string, string> = {
   unknown: "",
 };
 
-export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
+export function Bloodwork({
+  panels,
+  weight,
+}: {
+  panels: BloodPanel[];
+  weight: { date: string; weight: number }[];
+}) {
   const [open, setOpen] = React.useState(false);
   const formRef = React.useRef<HTMLFormElement>(null);
   const [pending, start] = useTransition();
   const [error, setError] = React.useState<string | null>(null);
+
+  const series = React.useMemo(() => chartableMarkers(panels), [panels]);
+  const [selected, setSelected] = React.useState<string | null>(null);
+  const active = series.find((s) => s.name === selected) ?? series[0] ?? null;
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -105,6 +136,32 @@ export function Bloodwork({ panels }: { panels: BloodPanel[] }) {
           </form>
         )}
       </Card>
+
+      {active && weight.length > 0 && (
+        <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 className="font-semibold">Marker vs body weight</h3>
+            <select
+              value={active.name}
+              onChange={(e) => setSelected(e.target.value)}
+              aria-label="Choose a marker to chart"
+              className="rounded-lg border border-border bg-card px-2 py-1 text-sm"
+            >
+              {series.map((s) => (
+                <option key={s.name} value={s.name}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <MarkerWeightChart
+            markerName={active.name}
+            unit={active.unit}
+            marker={active.points}
+            weight={weight}
+          />
+        </Card>
+      )}
 
       {panels.map((panel) => (
         <Card key={panel.date} className="p-4">

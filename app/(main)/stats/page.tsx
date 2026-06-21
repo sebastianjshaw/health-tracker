@@ -3,7 +3,8 @@ import { StatsView } from "@/components/stats/StatsView";
 import { getHealthSeries } from "@/lib/day-data";
 import { addDays, todayISO } from "@/lib/date";
 import { latestBodyComposition } from "@/lib/metabolic-age";
-import { yearlyAverages } from "@/lib/seasonal";
+import { monthlyAverages, yearlyAverages } from "@/lib/seasonal";
+import { currentStreak } from "@/lib/streaks";
 import { liftStats } from "@/lib/strength";
 import { measuredTdee } from "@/lib/tdee";
 import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
@@ -51,7 +52,18 @@ export default async function StatsPage() {
       { heightCm: profile.heightCm, sex: profile.sex },
     ),
     yearly: yearlyAverages(weight.map((w) => ({ date: w.date, weight: w.weight }))),
+    monthly: monthlyAverages(weight.map((w) => ({ date: w.date, weight: w.weight }))),
     prs: liftStats(liftSetRows).slice(0, 5),
+    streak: {
+      logging: currentStreak(
+        calories.map((c) => ({ date: c.date, value: c.kcal > 0 })),
+        today,
+      ),
+      onTarget: currentStreak(
+        calories.map((c) => ({ date: c.date, value: c.kcal > 0 && c.kcal <= c.targetKcal })),
+        today,
+      ),
+    },
   };
 
   return (

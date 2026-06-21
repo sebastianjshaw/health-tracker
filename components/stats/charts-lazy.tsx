@@ -15,6 +15,11 @@ export const WeightChart = dynamic(
   { ssr: false, loading: ChartSkeleton },
 );
 
+export const MarkerWeightChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.MarkerWeightChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 export const CalorieChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.CalorieChart })),
   { ssr: false, loading: ChartSkeleton },

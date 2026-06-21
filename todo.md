@@ -15,12 +15,14 @@ computation libs first (tested), then surfaced in report / stats / character / M
 - [x] **Lean mass / metabolic age / FFMI on Stats & Character.**
 - [x] **MCP freshness check** — `get_sync_freshness` tool.
 
+- [x] **Bloodwork × weight overlay** — `MarkerWeightChart` (dual-axis) on the bloodwork
+  page with a marker selector; weight line scoped to the marker's date range.
+- [x] **Surface streaks + monthly seasonality** — logging/on-target streak tile and a
+  "weight by month" bar view in the stats Insights section.
+
 ## Remaining
 
-- [ ] **Bloodwork × weight overlay** — lipids/HbA1c etc. against weight on a timeline
-  (needs a dual-axis chart component — the one chart-heavy item left).
-- [ ] **Surface streaks** — `lib/streaks.ts` is built & tested but not yet shown (e.g. a
-  logging-streak tile on stats). Monthly (by-month) seasonal view also still text-only.
+_All approved items shipped. Next up are the Fitbit-gated ones below._
 
 ## Held until Fitbit arrives (~2026-06-22)
 

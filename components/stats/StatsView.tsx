@@ -37,7 +37,7 @@ import type {
 import { EXERCISE_LABELS, type Exercise, type HealthStatus } from "@/lib/constants";
 import type { BodyComposition } from "@/lib/metabolic-age";
 import type { TdeeEstimate } from "@/lib/tdee";
-import type { YearlyAverage } from "@/lib/seasonal";
+import type { MonthlyAverage, YearlyAverage } from "@/lib/seasonal";
 import type { LiftStat } from "@/lib/strength";
 import { trimNum } from "@/lib/format";
 
@@ -45,7 +45,9 @@ export type StatsInsights = {
   tdee: TdeeEstimate | null;
   bodyComp: BodyComposition | null;
   yearly: YearlyAverage[];
+  monthly: MonthlyAverage[];
   prs: LiftStat[];
+  streak: { logging: number; onTarget: number };
 };
 
 type Tone = "good" | "bad" | "even" | "none";
@@ -64,6 +66,30 @@ function Metric({ label, value, sub, tone }: { label: string; value: string; sub
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={cn("text-lg font-semibold tabular-nums", TONE[tone])}>{value}</div>
       {sub && <div className={cn("text-xs", tone === "none" ? "text-muted-foreground" : TONE[tone])}>{sub}</div>}
+    </div>
+  );
+}
+
+/** Compact CSS bars of mean weight per calendar month (no chart lib needed). */
+function SeasonalBars({ months }: { months: { label: string; avgWeight: number; count: number }[] }) {
+  const avgs = months.map((m) => m.avgWeight);
+  const lo = Math.min(...avgs);
+  const hi = Math.max(...avgs);
+  const span = hi - lo || 1;
+  return (
+    <div className="space-y-1">
+      {months.map((m) => (
+        <div key={m.label} className="flex items-center gap-2 text-xs">
+          <span className="w-8 shrink-0 text-muted-foreground">{m.label}</span>
+          <div className="h-2.5 flex-1 rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-accent"
+              style={{ width: `${20 + ((m.avgWeight - lo) / span) * 80}%` }}
+            />
+          </div>
+          <span className="w-12 shrink-0 text-right tabular-nums">{r1(m.avgWeight)}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -256,6 +282,12 @@ export function StatsView({
             sub="estimated"
             tone="none"
           />
+          <Metric
+            label="Logging streak"
+            value={insights.streak.logging > 0 ? `${insights.streak.logging} d` : "—"}
+            sub={insights.streak.onTarget > 0 ? `${insights.streak.onTarget} d on target` : "current run"}
+            tone={insights.streak.logging >= 3 ? "good" : "none"}
+          />
         </Card>
 
         {insights.prs.length > 0 && (
@@ -297,6 +329,15 @@ export function StatsView({
                 </div>
               ))}
             </div>
+          </Card>
+        )}
+
+        {insights.monthly.length >= 6 && (
+          <Card className="p-3">
+            <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Weight by month (seasonality)
+            </div>
+            <SeasonalBars months={insights.monthly} />
           </Card>
         )}
       </Section>

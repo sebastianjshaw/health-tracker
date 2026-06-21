@@ -267,6 +267,92 @@ function Swatch({ color, label }: { color: string; label: string }) {
   );
 }
 
+const MARKER_COLOR = "#a855f7";
+
+/** A blood/lab marker over time overlaid on body weight (dual y-axis), to see
+ * whether weight change tracked a marker — e.g. "did losing weight move LDL?". */
+export function MarkerWeightChart({
+  markerName,
+  unit,
+  marker,
+  weight,
+}: {
+  markerName: string;
+  unit: string;
+  marker: { date: string; value: number }[];
+  weight: { date: string; weight: number }[];
+}) {
+  // Span the weight line over the marker's own date range, so a couple of recent
+  // labs aren't lost against 14 years of weigh-ins.
+  const first = marker[0]?.date ?? "";
+  const last = marker[marker.length - 1]?.date ?? "";
+  const byDate = new Map<string, { date: string; marker?: number; weight?: number }>();
+  for (const m of marker) byDate.set(m.date, { ...(byDate.get(m.date) ?? { date: m.date }), marker: m.value });
+  for (const w of weight) {
+    if (w.date < first || w.date > last) continue;
+    byDate.set(w.date, { ...(byDate.get(w.date) ?? { date: w.date }), weight: w.weight });
+  }
+  const data = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+
+  if (marker.length < 2) {
+    return (
+      <EmptyState>Need at least two dated {markerName} results to chart a trend.</EmptyState>
+    );
+  }
+
+  return (
+    <div role="img" aria-label={`${markerName} vs body weight over time`}>
+      <ResponsiveContainer width="100%" height={220}>
+        <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+          <CartesianGrid stroke={GRID} vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+          <YAxis yAxisId="marker" stroke={MARKER_COLOR} fontSize={11} width={44} />
+          <YAxis
+            yAxisId="weight"
+            orientation="right"
+            stroke={ACTUAL_COLOR}
+            fontSize={11}
+            width={40}
+            domain={["dataMin - 1", "dataMax + 1"]}
+            allowDecimals={false}
+          />
+          <Tooltip
+            contentStyle={tooltipStyle}
+            labelFormatter={(label) => longDate(String(label))}
+            formatter={(value, name) =>
+              value == null ? ["—", name] : [`${value}${name === "weight" ? " kg" : ` ${unit}`}`, name]
+            }
+          />
+          <Line
+            yAxisId="weight"
+            type="monotone"
+            dataKey="weight"
+            stroke={ACTUAL_COLOR}
+            strokeWidth={1.5}
+            dot={false}
+            connectNulls
+            name="weight"
+          />
+          <Line
+            yAxisId="marker"
+            type="monotone"
+            dataKey="marker"
+            stroke={MARKER_COLOR}
+            strokeWidth={2.5}
+            dot={{ r: 3, fill: MARKER_COLOR }}
+            connectNulls
+            name={markerName}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+      <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
+        <Swatch color={MARKER_COLOR} label={`${markerName}${unit ? ` (${unit})` : ""}`} />
+        <Swatch color={ACTUAL_COLOR} label="Body weight (kg)" />
+      </div>
+    </div>
+  );
+}
+
 export function CalorieChart({
   data,
   target,
