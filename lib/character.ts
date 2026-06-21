@@ -102,11 +102,19 @@ export function buildCharacter(input: CharacterInput): Character {
   }
 
   // ---- DEX: running pace, else cardio volume ----
-  // 10 ≈ an average mover (~7:30/km best effort); faster climbs (~5:00/km ≈ 14).
+  // 10 ≈ an average mover (~7:30/km best effort). Two slopes: slower than
+  // average drops gently, faster climbs steeply so an elite *sustained* pace
+  // (~3:00/km) reaches 20 — a single gentle slope put 18–20 past any human
+  // (DEX 20 used to need a physically impossible 0:50/km).
   let dex: number;
   let dexBasis: string;
   if (input.bestRunPace != null) {
-    dex = clamp(r(10 + (7.5 - input.bestRunPace) * 1.5), 3, 20);
+    const pace = input.bestRunPace;
+    const raw =
+      pace <= 7.5
+        ? 10 + (7.5 - pace) * (10 / 4.5) // fast side: 20 at ~3:00/km (elite)
+        : 10 + (7.5 - pace) * 1.5; // slow side: unchanged
+    dex = clamp(r(raw), 3, 20);
     dexBasis = `best pace ${input.bestRunPace.toFixed(1)} min/km`;
     if (input.weeklyKm != null) dexBasis += `, ~${r(input.weeklyKm)} km/wk`;
   } else if (input.weeklyKm != null && input.weeklyKm > 0) {
@@ -136,7 +144,9 @@ export function buildCharacter(input: CharacterInput): Character {
 
   // ---- INT: self-knowledge = tracking breadth + consistency ----
   // Mostly upside: minimal tracking sits near average (~9); thoroughness climbs.
-  const int = clamp(r(9 + input.trackingPct * 0.04 + input.domainsCovered * 0.8), 3, 20);
+  // Capped at 18: full logging across all six domains is the practical ceiling
+  // of self-knowledge — there's no "superhuman" tracking, so 19–20 stay unused.
+  const int = clamp(r(9 + input.trackingPct * 0.04 + input.domainsCovered * 0.8), 3, 18);
   const intBasis = `${r(input.trackingPct)}% of days logged, ${input.domainsCovered}/6 data domains`;
 
   // ---- WIS: discipline = adherence to targets ----
@@ -147,7 +157,11 @@ export function buildCharacter(input: CharacterInput): Character {
   );
   if (adh.length) {
     const a = adh.reduce((s, x) => s + x, 0) / adh.length;
-    wis = clamp(r(10 + (a - 55) * 0.12), 3, 20); // ~55% adherence ≈ average
+    // ~55% adherence ≈ average (10). Above that climbs steeply so flawless
+    // discipline (100%) reaches 20; below stays gentle so existing sub-average
+    // readings don't move. A single 0.12 slope capped out at WIS 15.
+    const raw = a >= 55 ? 10 + (a - 55) * (10 / 45) : 10 + (a - 55) * 0.12;
+    wis = clamp(r(raw), 3, 20);
 
     wisBasis =
       `${input.calorieAdherencePct != null ? `${r(input.calorieAdherencePct)}% on calories` : ""}` +

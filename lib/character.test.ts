@@ -90,6 +90,32 @@ describe("buildCharacter", () => {
     assert.ok(cha(6) > cha(10) && cha(10) > cha(16) && cha(16) > cha(30));
   });
 
+  it("Dexterity reaches the top at an elite sustained pace, not a superhuman one", () => {
+    const dex = (pace: number) =>
+      buildCharacter({ ...base, bestRunPace: pace }).abilities.find((a) => a.key === "dex")!.score;
+    assert.equal(dex(7.5), 10); // average mover
+    assert.equal(dex(3.0), 20); // ~3:00/km elite → max (was impossible before)
+    assert.equal(dex(10.05), 6); // a slow pace is unchanged from the old curve
+    assert.ok(dex(3.0) > dex(4.0) && dex(4.0) > dex(7.5)); // monotonic
+  });
+
+  it("Wisdom reaches 20 at flawless adherence; sub-average unchanged", () => {
+    const wis = (pct: number) =>
+      buildCharacter({ ...base, calorieAdherencePct: pct, proteinAdherencePct: pct }).abilities.find(
+        (a) => a.key === "wis",
+      )!.score;
+    assert.equal(wis(55), 10);
+    assert.equal(wis(100), 20); // perfect discipline → max (capped at 15 before)
+    assert.equal(wis(42), 8); // below average matches the old gentle slope
+  });
+
+  it("Intelligence caps at 18 (full logging across all domains)", () => {
+    const int = buildCharacter({ ...base, trackingPct: 100, domainsCovered: 6 }).abilities.find(
+      (a) => a.key === "int",
+    )!.score;
+    assert.equal(int, 18);
+  });
+
   it("names a standout and a dump stat", () => {
     assert.match(buildCharacter(base).dmNote, /Standout stat:.*Dump stat:/);
   });
