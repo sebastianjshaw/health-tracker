@@ -66,14 +66,28 @@ export function bodyCompSeries(
   return out;
 }
 
+/** Midpoint of a healthy body-fat range by sex (%). Excess fat above this ages
+ * the metabolic-age estimate. */
+function healthyBodyFat(sex: string): number {
+  return sex === "male" ? 15 : sex === "female" ? 23 : 19;
+}
+
+/** Years added to metabolic age per body-fat point above the healthy midpoint.
+ * Adiposity is the dominant driver of cardiometabolic mortality risk, so it has
+ * to bite — a pure lean-mass/BMR model reads obese-but-heavy people as young
+ * because absolute lean mass scales with bodyweight. */
+const FAT_PENALTY_PER_POINT = 0.8;
+
 /**
- * Estimated "metabolic age": the chronological age at which the population-
- * average (Mifflin-St Jeor) basal metabolic rate equals your body-composition-
- * based (Katch-McArdle) BMR. Carrying more lean mass than average for your size
- * reads younger; higher body fat reads older. Mirrors how smart scales surface
- * the figure (their exact algorithm is proprietary). Clamped to a sane 18–80.
+ * Estimated "metabolic age". Two signals:
+ *  1. A lean-mass base — the age at which the population-average (Mifflin-St
+ *     Jeor) BMR equals your body-composition (Katch-McArdle) BMR. More muscle
+ *     for your size reads younger.
+ *  2. A fat penalty — years added for body fat above a healthy level, so
+ *     carrying excess fat ages the number even when lean mass is high (which it
+ *     is for anyone heavy). Without this, the base alone flatters obesity.
  *
- * Needs weight, height and a body-fat reading; returns null otherwise.
+ * Clamped to a sane 18–80. Needs weight, height and a body-fat reading.
  */
 export function metabolicAge(opts: {
   weightKg: number | null;
@@ -83,11 +97,13 @@ export function metabolicAge(opts: {
 }): number | null {
   const lbm = leanBodyMass(opts.weightKg, opts.bodyFatPct);
   if (lbm == null || !opts.heightCm || opts.heightCm <= 0 || !opts.weightKg) return null;
+  const bf = opts.bodyFatPct ?? 0; // non-null here (leanBodyMass would've returned null)
   const km = katchMcArdleBmr(lbm);
   // Mifflin: BMR = 10w + 6.25h - 5·age + s  ⇒  age = (10w + 6.25h + s - BMR) / 5
-  const age =
+  const leanBase =
     (10 * opts.weightKg + 6.25 * opts.heightCm + sexAdjustment(opts.sex) - km) / 5;
-  return Math.round(Math.max(18, Math.min(80, age)));
+  const fatPenalty = Math.max(0, bf - healthyBodyFat(opts.sex)) * FAT_PENALTY_PER_POINT;
+  return Math.round(Math.max(18, Math.min(80, leanBase + fatPenalty)));
 }
 
 export type BodyComposition = {

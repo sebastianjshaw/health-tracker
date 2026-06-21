@@ -1,8 +1,9 @@
 {
   "crons": [
     {
+      "comment": "06:30 UTC = 08:30 Stockholm (CEST, summer); 07:30 local in winter (CET). Picked to run just after the morning weigh-in; the 7-day sync lookback backfills anything that lands late.",
       "path": "/api/cron/sync",
-      "schedule": "0 6 * * *"
+      "schedule": "30 6 * * *"
     }
   ]
 }

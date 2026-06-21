@@ -29,9 +29,17 @@ describe("metabolicAge", () => {
     assert.ok(fat > lean, `expected ${fat} > ${lean}`);
   });
 
-  it("returns a plausible figure for real inputs", () => {
-    const age = metabolicAge({ ...base, bodyFatPct: 31.1 })!;
-    assert.ok(age >= 35 && age <= 50, `got ${age}`);
+  it("ages an obese reading past chronological (fat penalty bites)", () => {
+    // 112.4 kg / 31.1% bf / 180 cm male: lean base ~42, + fat penalty ~13 ⇒ mid-50s.
+    const age = metabolicAge({ ...base, weightKg: 112.4, bodyFatPct: 31.1 })!;
+    assert.ok(age >= 52 && age <= 60, `got ${age}`);
+  });
+
+  it("does not penalise a healthy body fat", () => {
+    // at/under the healthy midpoint, only the lean base applies
+    const lean = metabolicAge({ weightKg: 80, heightCm: 180, sex: "male", bodyFatPct: 14 })!;
+    const fatter = metabolicAge({ weightKg: 80, heightCm: 180, sex: "male", bodyFatPct: 28 })!;
+    assert.ok(fatter > lean + 5, `expected the fat penalty to add years: ${lean} → ${fatter}`);
   });
 
   it("clamps to the 18–80 range", () => {

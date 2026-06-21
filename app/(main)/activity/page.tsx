@@ -1,11 +1,14 @@
 import { PageHeader } from "@/components/PageHeader";
 import { ActivityView } from "@/components/activity/ActivityView";
+import { StrengthPRs } from "@/components/activity/StrengthPRs";
 import { isValidISO, todayISO } from "@/lib/date";
 import {
   getNextLiftWorkout,
   getRecentCardio,
   getRecentLiftSessions,
 } from "@/lib/activity-data";
+import { getLiftSets } from "@/lib/stats-data";
+import { liftStats } from "@/lib/strength";
 import { isConfigured, isConnected } from "@/lib/integrations/google-health";
 
 // The manual "Sync now" server action runs on this route; the first full sync
@@ -20,13 +23,15 @@ export default async function ActivityPage({
   const { d } = await searchParams;
   const date = d && isValidISO(d) ? d : todayISO();
 
-  const [cardio, nextWorkout, liftHistory, connected] = await Promise.all([
+  const [cardio, nextWorkout, liftHistory, connected, liftSetRows] = await Promise.all([
     getRecentCardio(),
     getNextLiftWorkout(),
     getRecentLiftSessions(),
     isConnected(),
+    getLiftSets(),
   ]);
   const canSync = isConfigured() && connected;
+  const prs = liftStats(liftSetRows).slice(0, 5);
 
   return (
     <>
@@ -38,6 +43,9 @@ export default async function ActivityPage({
         liftHistory={liftHistory}
         canSync={canSync}
       />
+      <div className="mt-4">
+        <StrengthPRs lifts={prs} />
+      </div>
     </>
   );
 }

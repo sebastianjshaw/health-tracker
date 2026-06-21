@@ -2,18 +2,14 @@ import { PageHeader } from "@/components/PageHeader";
 import { StatsView } from "@/components/stats/StatsView";
 import { getHealthSeries } from "@/lib/day-data";
 import { addDays, todayISO } from "@/lib/date";
-import { latestBodyComposition } from "@/lib/metabolic-age";
-import { monthlyAverages, yearlyAverages } from "@/lib/seasonal";
 import { currentStreak } from "@/lib/streaks";
-import { liftStats } from "@/lib/strength";
 import { measuredTdee } from "@/lib/tdee";
-import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
+import { getGoalWeight, getMealSplit, getTargets } from "@/lib/settings";
 import {
   getCalorieSeries,
   getCardioDistances,
   getDailyActivity,
   getLiftProgression,
-  getLiftSets,
   getRestingHrSeries,
   getSleepSeries,
   getWeightPredictions,
@@ -22,17 +18,15 @@ import {
 
 export default async function StatsPage() {
   const today = todayISO();
-  const [targets, goalWeight, mealSplit, profile, weight, predictions, calories, lifts, liftSetRows, distances, activity, sleep, restingHr, health] =
+  const [targets, goalWeight, mealSplit, weight, predictions, calories, lifts, distances, activity, sleep, restingHr, health] =
     await Promise.all([
       getTargets(),
       getGoalWeight(),
       getMealSplit(),
-      getProfile(),
       getWeightSeries(),
       getWeightPredictions(),
       getCalorieSeries(365), // bounded; the range control filters client-side
       getLiftProgression(),
-      getLiftSets(),
       getCardioDistances(),
       getDailyActivity(),
       getSleepSeries(),
@@ -40,20 +34,14 @@ export default async function StatsPage() {
       getHealthSeries(addDays(today, -363), today),
     ]);
 
-  // Range-independent insights (latest / lifetime), computed once server-side.
+  // Behaviour / energy-balance insights that belong with trends. (Body
+  // composition + strength PRs moved to Measurements / Activity respectively.)
   const insights = {
     tdee: measuredTdee({
       weighIns: weight.map((w) => ({ date: w.date, weight: w.weight })),
       intakeByDate: new Map(calories.map((c) => [c.date, c.kcal])),
       today,
     }),
-    bodyComp: latestBodyComposition(
-      [...weight].reverse().map((w) => ({ date: w.date, weightKg: w.weight, bodyFatPct: w.bodyFat })),
-      { heightCm: profile.heightCm, sex: profile.sex },
-    ),
-    yearly: yearlyAverages(weight.map((w) => ({ date: w.date, weight: w.weight }))),
-    monthly: monthlyAverages(weight.map((w) => ({ date: w.date, weight: w.weight }))),
-    prs: liftStats(liftSetRows).slice(0, 5),
     streak: {
       logging: currentStreak(
         calories.map((c) => ({ date: c.date, value: c.kcal > 0 })),
