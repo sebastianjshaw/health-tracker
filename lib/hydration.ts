@@ -38,24 +38,35 @@ export function waterSourceOf(e: WaterEntry): WaterSource {
 
 /** Drinks are ~95% water (covers coffee, tea, squash, milk, soda, etc.). */
 const DRINK_WATER_FRACTION = 0.95;
-/** Assumed volume for a drink logged without a g/ml mass. */
+/** Assumed volume for a drink logged without a g/ml mass, by serving unit. */
 const DEFAULT_DRINK_ML = 250;
-const CAN_ML = 330;
+const DRINK_VOLUME_ML: Record<string, number> = {
+  can: 330,
+  cans: 330,
+  bottle: 500,
+  bottles: 500,
+  glass: 250,
+  glasses: 250,
+  cup: 240,
+  cups: 240,
+};
 
 /** Estimated water (mL) contributed by one logged entry. */
 export function estimateWaterMl(e: WaterEntry): number {
   const unit = (e.servingUnit ?? "").trim().toLowerCase();
   const qty = e.quantity || 0;
 
-  if (unit === "g" || unit === "ml") {
-    const mass = (e.servingSize || 0) * qty;
+  // Mass-based units (g, ml, and litres which are 1000× ml).
+  const litre = unit === "l" || unit === "litre" || unit === "liter";
+  if (unit === "g" || unit === "ml" || litre) {
+    const grams = (e.servingSize || 0) * qty * (litre ? 1000 : 1);
     const dry = (e.protein + e.carbs + e.fat) * qty;
-    return Math.max(0, Math.round(mass - dry));
+    return Math.max(0, Math.round(grams - dry));
   }
 
   // No usable mass — only drinks get a volume-based fallback.
   if ((e.category ?? "").toLowerCase() === "drink") {
-    const perServing = unit === "can" ? CAN_ML : DEFAULT_DRINK_ML;
+    const perServing = DRINK_VOLUME_ML[unit] ?? DEFAULT_DRINK_ML;
     return Math.round(perServing * qty * DRINK_WATER_FRACTION);
   }
   return 0;

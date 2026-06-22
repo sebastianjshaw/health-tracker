@@ -6,7 +6,13 @@ import { bloodMarkers } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
+import { isFiniteNum, isFiniteOrNull } from "./validate";
 import { revalidatePaths } from "./revalidate";
+
+/** A marker's value must be a real number; reference bounds must be finite if given. */
+function markerNumbersValid(m: MarkerInput): boolean {
+  return isFiniteNum(m.value) && isFiniteOrNull(m.refLow) && isFiniteOrNull(m.refHigh);
+}
 
 export type MarkerInput = {
   marker: string;
@@ -23,6 +29,7 @@ export async function addBloodMarker(
   await requireAuth();
   if (!isValidISO(input.date)) return actionFail("Invalid date");
   if (!input.marker.trim()) return actionFail("Marker name is required");
+  if (!markerNumbersValid(input)) return actionFail("Marker value must be a number");
   await db.insert(bloodMarkers).values({
     date: input.date,
     marker: input.marker.trim(),
@@ -47,6 +54,7 @@ export async function addBloodPanel(input: {
   if (!isValidISO(input.date)) return actionFail("Invalid date");
   const markers = input.markers.filter((m) => m.marker.trim() !== "");
   if (markers.length === 0) return actionFail("Add at least one marker");
+  if (!markers.every(markerNumbersValid)) return actionFail("Marker values must be numbers");
   await db.insert(bloodMarkers).values(
     markers.map((m) => ({
       date: input.date,

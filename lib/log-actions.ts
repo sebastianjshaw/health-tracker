@@ -5,8 +5,9 @@ import { db } from "@/db";
 import { foodLog, foods } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
-import { EVOLUTIONS, Evolution, Meal } from "./constants";
+import { EVOLUTIONS, Evolution, MEALS, Meal } from "./constants";
 import { addDays, isValidISO } from "./date";
+import { isFiniteNum } from "./validate";
 import { foodLogSnapshot } from "./food-snapshot";
 import { hideRecurringOnDate } from "./recurring-materialize";
 import { revalidatePaths } from "./revalidate";
@@ -28,6 +29,8 @@ export async function addLogEntry(
 ): Promise<ActionResult> {
   await requireAuth();
   if (!isValidISO(date)) return actionFail("Invalid date");
+  if (!MEALS.includes(meal)) return actionFail("Invalid meal");
+  if (!isFiniteNum(quantity) || quantity <= 0) return actionFail("Invalid quantity");
   const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
   if (!food) return actionFail("Food not found");
 
@@ -94,6 +97,7 @@ export async function setLogQuantity(
   quantity: number,
 ): Promise<ActionResult> {
   await requireAuth();
+  if (!isFiniteNum(quantity)) return actionFail("Invalid quantity");
   const row = await db.select().from(foodLog).where(eq(foodLog.id, logId)).get();
   if (!row) return actionFail("Entry not found");
 

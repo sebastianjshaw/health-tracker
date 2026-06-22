@@ -5,8 +5,9 @@ import { db } from "@/db";
 import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
-import { CardioType, Exercise, EXERCISES } from "./constants";
+import { CARDIO_TYPES, CardioType, Exercise, EXERCISES } from "./constants";
 import { isValidISO } from "./date";
+import { isFiniteOrNull } from "./validate";
 import { exerciseSucceeded, nextWeight } from "./lifts";
 import {
   getLiftFails,
@@ -28,9 +29,16 @@ export type CardioInput = {
   notes?: string | null;
 };
 
+/** Optional numeric cardio fields that must be finite when present. */
+function cardioNumbersValid(c: { durationMin?: number | null; distanceKm?: number | null; avgHr?: number | null; kcal?: number | null }): boolean {
+  return [c.durationMin, c.distanceKm, c.avgHr, c.kcal].every(isFiniteOrNull);
+}
+
 export async function logCardio(input: CardioInput): Promise<ActionResult> {
   await requireAuth();
   if (!isValidISO(input.date)) return actionFail("Invalid date");
+  if (!CARDIO_TYPES.includes(input.type)) return actionFail("Invalid cardio type");
+  if (!cardioNumbersValid(input)) return actionFail("Cardio values must be numbers");
   await db.insert(cardioSessions).values({
     date: input.date,
     type: input.type,
@@ -69,6 +77,10 @@ export async function updateCardio(input: CardioUpdate): Promise<ActionResult> {
     .where(eq(cardioSessions.id, input.id))
     .get();
   if (!existing) return actionFail("Session not found");
+  if (input.type != null && !CARDIO_TYPES.includes(input.type)) {
+    return actionFail("Invalid cardio type");
+  }
+  if (!cardioNumbersValid(input)) return actionFail("Cardio values must be numbers");
 
   if (existing.source !== "manual") {
     await db

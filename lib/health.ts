@@ -1,3 +1,5 @@
+import { isValidISO } from "./date";
+
 /** Body Mass Index from weight (kg) and height (cm). Null if no height. */
 export function bmi(weightKg: number, heightCm: number | null): number | null {
   if (!heightCm || heightCm <= 0) return null;
@@ -94,9 +96,10 @@ export function maintenanceCalories(opts: {
   return b == null ? null : Math.round(b * ACTIVITY_FACTOR);
 }
 
-/** Whole-years age from a YYYY-MM-DD date of birth. */
+/** Whole-years age from a YYYY-MM-DD date of birth. Rejects impossible dates
+ * (isValidISO round-trips, so "2026-02-30" doesn't silently roll to March). */
 export function ageFrom(dob: string): number | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(dob)) return null;
+  if (!isValidISO(dob)) return null;
   const [y, m, d] = dob.split("-").map(Number);
   const birth = new Date(y, m - 1, d);
   if (Number.isNaN(birth.getTime())) return null;

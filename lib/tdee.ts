@@ -1,4 +1,5 @@
 import { addDays } from "./date";
+import { daysBetween, slopePerDay } from "./regression";
 import { KCAL_PER_KG } from "./weight-prediction";
 
 /**
@@ -29,27 +30,6 @@ export type TdeeEstimate = {
 const MIN_SPAN_DAYS = 14; // shorter windows are dominated by water-weight noise
 const MIN_COVERAGE = 0.5; // at least half the days logged
 
-function daysBetween(from: string, to: string): number {
-  return Math.round(
-    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000,
-  );
-}
-
-/** Least-squares slope of weight (kg) per day over the weigh-ins. */
-function weightSlopePerDay(weighIns: { date: string; weight: number }[]): number {
-  const x0 = weighIns[0].date;
-  const xs = weighIns.map((w) => daysBetween(x0, w.date));
-  const ys = weighIns.map((w) => w.weight);
-  const n = xs.length;
-  const sx = xs.reduce((a, b) => a + b, 0);
-  const sy = ys.reduce((a, b) => a + b, 0);
-  const sxx = xs.reduce((a, b) => a + b * b, 0);
-  const sxy = xs.reduce((a, b, i) => a + b * ys[i], 0);
-  const denom = n * sxx - sx * sx;
-  if (denom === 0) return 0;
-  return (n * sxy - sx * sy) / denom;
-}
-
 export function measuredTdee(opts: {
   weighIns: { date: string; weight: number }[]; // ascending by date
   intakeByDate: Map<string, number>; // contingency-adjusted kcal; absent/0 = unlogged
@@ -73,7 +53,7 @@ export function measuredTdee(opts: {
   if (intakes.length / (spanDays + 1) < MIN_COVERAGE) return null;
   const meanIntake = Math.round(intakes.reduce((a, b) => a + b, 0) / intakes.length);
 
-  const slope = weightSlopePerDay(w); // kg/day
+  const slope = slopePerDay(w.map((p) => ({ date: p.date, value: p.weight }))); // kg/day
   const tdee = Math.round((meanIntake - slope * KCAL_PER_KG) / 10) * 10;
 
   const coverage = intakes.length / (spanDays + 1);

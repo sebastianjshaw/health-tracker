@@ -6,6 +6,7 @@ import { bodyMetrics } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
 import { isValidISO } from "./date";
+import { isFiniteNum, isFiniteOrNull } from "./validate";
 import { MEALS } from "./constants";
 import { revalidatePaths } from "./revalidate";
 import {
@@ -48,6 +49,13 @@ export async function logBody(input: BodyInput): Promise<ActionResult> {
   await requireAuth();
   if (!isValidISO(input.date)) return actionFail("Invalid date");
   if (!hasBodyInput(input)) return actionFail("Enter at least one measurement");
+  if (
+    ![input.weightKg, input.bodyFatPct, input.waistCm, input.chestCm, input.hipsCm, input.restingHr].every(
+      isFiniteOrNull,
+    )
+  ) {
+    return actionFail("Measurements must be numbers");
+  }
 
   const values = {
     weightKg: input.weightKg ?? null,
@@ -116,7 +124,15 @@ export async function saveGoals(input: {
   mealSplit: MealSplit;
 }): Promise<ActionResult> {
   await requireAuth();
-  if (mealSplitSum(input.mealSplit) !== 100) {
+  if (!isFiniteNum(input.kcal) || !isFiniteNum(input.protein)) {
+    return actionFail("Targets must be numbers");
+  }
+  if (MEALS.some((m) => !isFiniteNum(input.mealSplit[m]) || input.mealSplit[m] < 0)) {
+    return actionFail("Meal split percentages must be non-negative numbers");
+  }
+  // Tolerance, not strict equality: integer splits sum cleanly, but any
+  // non-integer entry can land on 100.00000001 with floating-point.
+  if (Math.abs(mealSplitSum(input.mealSplit) - 100) > 0.5) {
     return actionFail("Meal split must sum to 100%");
   }
   await setTargets(input.kcal, input.protein);

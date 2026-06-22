@@ -1,6 +1,18 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { waistToHeight, whtrClass } from "./health";
+import { ageFrom, waistToHeight, whtrClass } from "./health";
+
+describe("ageFrom", () => {
+  it("rejects impossible dates instead of silently rolling them forward", () => {
+    assert.equal(ageFrom("2026-02-30"), null); // Feb 30 used to roll to Mar 2
+    assert.equal(ageFrom("2026-13-01"), null);
+    assert.equal(ageFrom("not-a-date"), null);
+  });
+  it("computes a plausible age for a valid dob", () => {
+    const age = ageFrom("1980-01-01");
+    assert.ok(age != null && age >= 40 && age < 60);
+  });
+});
 
 describe("waistToHeight", () => {
   it("computes the ratio", () => {

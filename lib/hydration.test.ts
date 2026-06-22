@@ -4,6 +4,25 @@ import { estimateWaterMl, totalWaterMl, waterSourceOf } from "./hydration";
 
 const base = { protein: 0, carbs: 0, fat: 0, category: "food" as string | null };
 
+describe("estimateWaterMl units", () => {
+  it("treats litres as 1000× ml in the mass calc", () => {
+    // 1.5 L water → 1500 mL
+    assert.equal(
+      estimateWaterMl({ ...base, servingSize: 1.5, servingUnit: "L", quantity: 1, category: "drink" }),
+      1500,
+    );
+  });
+  it("uses sensible per-serving volumes for can/bottle/glass drinks", () => {
+    const drink = (unit: string) =>
+      estimateWaterMl({ ...base, servingSize: 0, servingUnit: unit, quantity: 1, category: "drink" });
+    assert.equal(drink("can"), Math.round(330 * 0.95));
+    assert.equal(drink("cans"), Math.round(330 * 0.95));
+    assert.equal(drink("bottle"), Math.round(500 * 0.95));
+    assert.equal(drink("glass"), Math.round(250 * 0.95));
+    assert.equal(drink("cup"), Math.round(240 * 0.95));
+  });
+});
+
 describe("estimateWaterMl", () => {
   it("water = mass − dry macros for a g entry", () => {
     // 100 g chicken, 30 g protein → 70 mL water
