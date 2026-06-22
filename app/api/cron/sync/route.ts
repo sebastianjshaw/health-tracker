@@ -6,11 +6,13 @@ import { syncGoogleHealth } from "@/lib/integrations/sync";
 export const maxDuration = 60;
 
 /**
- * Daily Vercel cron (see vercel.json: `30 6 * * *`) — authenticates with
- * CRON_SECRET, not a session. 06:30 UTC = 08:30 Stockholm in summer (CEST),
- * 07:30 in winter (CET); chosen to run just after the morning weigh-in. Crons
- * are UTC-only so the local time drifts with DST, but the 7-day sync lookback
- * backfills any reading that lands after the run, so nothing is lost.
+ * Vercel cron (see vercel.json) — authenticates with CRON_SECRET, not a session.
+ * Two runs/day (the Hobby-plan limit): 06:30 UTC after the morning weigh-in and
+ * 12:00 UTC ~an hour after the main midday workout. In Stockholm that's 08:30 &
+ * 14:00 in summer (CEST), an hour earlier in winter (CET) — crons are UTC-only
+ * so local time drifts with DST. Hobby crons also fire within the hour, not on
+ * the exact minute. None of that loses data: the 7-day sync lookback backfills
+ * anything that lands after a run, on the next run.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
