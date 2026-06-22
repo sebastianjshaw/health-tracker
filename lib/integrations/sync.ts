@@ -1,10 +1,11 @@
 import "server-only";
-import { desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { bodyMetrics, cardioSessions, dailyActivity, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
 import { estimateCardioKcal } from "@/lib/cardio-calories";
+import { dedupeSessions, type DedupSession } from "@/lib/cardio-dedup";
 import { addDays, todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
@@ -172,7 +173,16 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
   // exercise is a session type — it rejects time filters, so fetch all and
   // window client-side by start date.
   const exPoints = await listDataPoints(token, DATA_TYPES.exercise);
-  const cardioStmts: SqliteBatchItem[] = [];
+
+  // Two apps (Google Fit + Withings) both write the same session into Health
+  // Connect, so the feed double-counts. Build candidates across ALL history,
+  // dedupe overlapping ones, then keep the winners (and drop the redundant
+  // copies — including ones imported by older syncs, anywhere in time).
+  type ExCandidate = DedupSession & {
+    date: string;
+    row: typeof cardioSessions.$inferInsert;
+  };
+  const candidates: ExCandidate[] = [];
   for (const dp of exPoints) {
     const ex = dp.exercise as
       | {
@@ -188,7 +198,7 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
       | undefined;
     const date = dateOf(ex?.interval?.startTime);
     const externalId = typeof dp.name === "string" ? dp.name : null;
-    if (!ex || !date || !externalId || date < start) continue;
+    if (!ex || !date || !externalId) continue;
 
     const m = ex.metricsSummary ?? {};
     const durationMin = durationToMin(ex.activeDuration);
@@ -201,34 +211,59 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     }
 
     const type = exerciseToCardio(ex.exerciseType);
-    const row = {
+    const startMs = Date.parse(ex.interval?.startTime ?? "");
+    const endMs = Date.parse(ex.interval?.endTime ?? "");
+    candidates.push({
+      externalId,
+      startMs: Number.isFinite(startMs) ? startMs : 0,
+      endMs: Number.isFinite(endMs) ? endMs : startMs + (durationMin ?? 0) * 60_000,
+      hasDistance: distanceKm != null && distanceKm > 0,
+      durationMin: durationMin ?? 0,
       date,
-      type,
-      startedAt: ex.interval?.startTime ?? null,
-      durationMin,
-      distanceKm,
-      avgHr: num(m.averageHeartRateBeatsPerMinute),
-      // Prefer the provider's measured calories; fall back to a MET estimate so
-      // synced workouts still count toward energy expenditure (and don't skew
-      // the weight prediction by reading as zero burn). Google Health reports 0
-      // (not null) for many walk sessions, so treat ≤0 as "not measured" too.
-      kcal:
-        m.caloriesKcal != null && m.caloriesKcal > 0
-          ? Math.round(m.caloriesKcal)
-          : estimateCardioKcal(type, durationMin, weightKg),
-    };
+      row: {
+        date,
+        type,
+        startedAt: ex.interval?.startTime ?? null,
+        durationMin,
+        distanceKm,
+        avgHr: num(m.averageHeartRateBeatsPerMinute),
+        // Prefer the provider's measured calories; fall back to a MET estimate so
+        // synced workouts still count toward energy expenditure (and don't skew
+        // the weight prediction by reading as zero burn). Google Health reports 0
+        // (not null) for many walk sessions, so treat ≤0 as "not measured" too.
+        kcal:
+          m.caloriesKcal != null && m.caloriesKcal > 0
+            ? Math.round(m.caloriesKcal)
+            : estimateCardioKcal(type, durationMin, weightKg),
+      },
+    });
+  }
+
+  const { winners, loserIds } = dedupeSessions(candidates);
+  const cardioStmts: SqliteBatchItem[] = [];
+  for (const w of winners) {
+    if (w.date < start) continue; // outside the window — already imported
     cardioStmts.push(
       db
         .insert(cardioSessions)
-        .values({ ...row, source: SOURCE, externalId })
+        .values({ ...w.row, source: SOURCE, externalId: w.externalId })
         .onConflictDoUpdate({
           target: [cardioSessions.source, cardioSessions.externalId],
-          set: row,
+          set: w.row,
         }),
     );
     summary.exercise++;
   }
   await runBatched(cardioStmts);
+
+  // Drop the redundant duplicate copies (any date — cleans dupes from older
+  // syncs too). Only ever touches synced rows, never manually-logged cardio.
+  for (let i = 0; i < loserIds.length; i += 100) {
+    const chunk = loserIds.slice(i, i + 100);
+    await db
+      .delete(cardioSessions)
+      .where(and(eq(cardioSessions.source, SOURCE), inArray(cardioSessions.externalId, chunk)));
+  }
 
   // ---- Sleep → sleepSessions ---- (session type: fetch all, window client-side)
   const sleepPoints = await listDataPoints(token, DATA_TYPES.sleep);
