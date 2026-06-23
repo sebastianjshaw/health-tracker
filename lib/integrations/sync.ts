@@ -170,14 +170,18 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     .get();
   const weightKg = latestWeight?.weight ?? null;
 
-  // exercise is a session type — it rejects time filters, so fetch all and
-  // window client-side by start date.
-  const exPoints = await listDataPoints(token, DATA_TYPES.exercise);
+  // Exercise is a session type — it rejects server-side time filters, but comes
+  // back newest-first, so we page only back to the recent window (boundedSince)
+  // and stop, instead of pulling the whole history every run.
+  const exDateOf = (dp: DataPoint) =>
+    dateOf((dp.exercise as { interval?: Interval } | undefined)?.interval?.startTime);
+  const exPoints = await listDataPointsSince(token, DATA_TYPES.exercise, boundedSince, exDateOf);
 
   // Two apps (Google Fit + Withings) both write the same session into Health
-  // Connect, so the feed double-counts. Build candidates across ALL history,
-  // dedupe overlapping ones, then keep the winners (and drop the redundant
-  // copies — including ones imported by older syncs, anywhere in time).
+  // Connect, so the feed double-counts. Build candidates from the fetched window,
+  // dedupe overlapping ones, keep the winners, and drop the redundant copies.
+  // (Historical dupes outside the window were already cleaned; a full resync
+  // re-fetches everything and re-dedupes the lot.)
   type ExCandidate = DedupSession & {
     date: string;
     row: typeof cardioSessions.$inferInsert;
@@ -256,8 +260,8 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
   }
   await runBatched(cardioStmts);
 
-  // Drop the redundant duplicate copies (any date — cleans dupes from older
-  // syncs too). Only ever touches synced rows, never manually-logged cardio.
+  // Drop the redundant duplicate copies found in this window. Only ever touches
+  // synced rows, never manually-logged cardio.
   for (let i = 0; i < loserIds.length; i += 100) {
     const chunk = loserIds.slice(i, i + 100);
     await db
@@ -265,8 +269,11 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
       .where(and(eq(cardioSessions.source, SOURCE), inArray(cardioSessions.externalId, chunk)));
   }
 
-  // ---- Sleep → sleepSessions ---- (session type: fetch all, window client-side)
-  const sleepPoints = await listDataPoints(token, DATA_TYPES.sleep);
+  // ---- Sleep → sleepSessions ---- (session type, newest-first: page back only
+  // to the recent window via boundedSince rather than the whole history)
+  const sleepDateOf = (dp: DataPoint) =>
+    dateOf((dp.sleep as { interval?: Interval } | undefined)?.interval?.startTime);
+  const sleepPoints = await listDataPointsSince(token, DATA_TYPES.sleep, boundedSince, sleepDateOf);
   const sleepStmts: SqliteBatchItem[] = [];
   for (const dp of sleepPoints) {
     const sl = dp.sleep as
