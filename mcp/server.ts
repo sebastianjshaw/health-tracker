@@ -241,7 +241,7 @@ const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, and the logged health status (healthy/unwell/injured).",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, and the logged health status (healthy/unwell/injured/vacation).",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
@@ -838,7 +838,7 @@ server.tool(
 
 server.tool(
   "get_health_status",
-  "Days flagged unwell or injured over the last N days (default 30) — context for dips in training, appetite or weight. Healthy days are omitted.",
+  "Days flagged unwell, injured or on vacation over the last N days (default 30) — context for dips (or changes) in training, appetite or weight. Healthy days are omitted.",
   { days: z.number().optional() },
   async ({ days }) => {
     const n = Math.max(1, Math.min(days ?? 30, 365));
@@ -857,6 +857,7 @@ server.tool(
           rangeDays: n,
           unwellDays: flagged.filter((r) => r.status === "unwell").length,
           injuredDays: flagged.filter((r) => r.status === "injured").length,
+          vacationDays: flagged.filter((r) => r.status === "vacation").length,
           days: flagged.map((r) => ({ date: r.date, status: r.status })),
         },
         null,

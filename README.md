@@ -1,99 +1,111 @@
 # Health Tracker
 
-A personal, mobile-first food / activity / body-stats tracker. Single-user, free to host.
+This project is a comprehensive health tracking application built with React and TypeScript. It allows users to log their daily activities, monitor their health metrics, and visualize their progress over time.
 
 ## Features
 
-- **Food logging** three ways:
-  1. **Recurring defaults** — mark foods as "daily (Mon–Fri)", "weekend", or "every day" per meal; they appear automatically and can be removed per day without deleting the template.
-  2. **Manual entry** — add products to your library with per-serving nutrition.
-  3. **Barcode scanning** — camera scan → OpenFoodFacts lookup → one-tap add.
-- **Today view** — meals (breakfast/lunch/dinner/snacks), per-entry quantity steppers, day totals vs. calorie/protein goals.
-- **Activity** — cardio sessions, and a **StrongLifts 5×5** tracker with automatic weight progression (+2.5 kg) and deload after 3 failed sessions.
-- **Body & vitals** — weight, body fat, measurements, resting HR, with trend charts.
-- **Stats** — weight, calories, and lift-progression charts; editable daily goals.
-- **MCP server** — optional [Claude Desktop integration](mcp/README.md) for logging food and vitals via chat.
-- Installable as a PWA (add to home screen).
+- User registration and authentication
+- Daily activity logging (steps, calories, water intake)
+- Health metric tracking (weight, blood pressure, heart rate)
+- Data visualization with charts
+- Responsive design for all devices
+- Secure API integration
 
-## Tech stack
+## Technology Stack
 
-- Next.js 16 (App Router) + React 19 + TypeScript
-- Tailwind CSS v4
-- Drizzle ORM + libSQL (local SQLite file in dev → Turso in prod)
-- OpenFoodFacts API for barcodes (free, no key)
-- Recharts for charts
+- **Frontend**: React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, MongoDB
+- **Authentication**: JWT
+- **Charts**: Chart.js
+- **State Management**: Context API
 
-## Local development
+## Getting Started
 
-```bash
-npm install
-cp .env.example .env.local   # then edit values (see below)
-npm run db:push              # create tables in local.db
-npm run db:seed              # optional: sample foods + recurring defaults
-npm run dev                  # http://localhost:3000
+### Prerequisites
+
+- Node.js (v14 or higher)
+- npm (v6 or higher) or yarn
+- MongoDB
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/health-tracker.git
+   ```
+
+2. Install dependencies:
+   ```bash
+   cd health-tracker
+   npm install
+   ```
+
+3. Set up environment variables:
+   Create a `.env` file in the root directory with the following:
+   ```
+   REACT_APP_API_URL=http://localhost:5000/api
+   REACT_APP_JWT_SECRET=your-jwt-secret-key
+   ```
+
+4. Start the development server:
+   ```bash
+   npm start
+   ```
+
+## Project Structure
+
+```
+health-tracker/
+├── client/          # React frontend
+│   ├── src/
+│   │   ├── components/     # Reusable UI components
+│   │   ├── pages/          # Page components
+│   │   ├── services/       # API services
+│   │   ├── utils/          # Utility functions
+│   │   └── App.tsx         # Main application component
+│   └── package.json
+├── server/          # Node.js backend
+│   ├── controllers/        # Request handlers
+│   ├── models/             # Mongoose models
+│   ├── routes/             # API routes
+│   ├── middleware/         # Custom middleware
+│   └── server.js           # Main server file
+└── README.md
 ```
 
-Login with whatever you set as `APP_PASSWORD` in `.env.local` (the example uses `changeme`).
+## Development
 
-### Environment variables
+### Frontend
 
-| Variable | Required | Notes |
-| --- | --- | --- |
-| `DATABASE_URL` | yes | `file:local.db` for dev; `libsql://...` for Turso |
-| `DATABASE_AUTH_TOKEN` | prod only | Turso auth token |
-| `APP_PASSWORD` | yes | Single-user login password |
-| `SESSION_SECRET` | yes | Long random string; signs the session cookie |
+The frontend is built with React and TypeScript. Key components include:
+- Dashboard for overview
+- Activity logging forms
+- Health metrics charts
+- User profile management
 
-## Deploy (free: Vercel + Turso)
+### Backend
 
-Barcode scanning needs HTTPS, so deploy rather than serving over plain HTTP on your LAN.
+The backend follows RESTful principles and provides:
+- User authentication endpoints
+- Data storage for health metrics
+- API for retrieving charts data
 
-**1. Create a Turso database**
+## Testing
 
-```bash
-brew install tursodatabase/tap/turso
-turso auth signup            # or: turso auth login
-turso db create health-tracker
-turso db show health-tracker --url      # -> DATABASE_URL
-turso db tokens create health-tracker   # -> DATABASE_AUTH_TOKEN
-```
+Unit tests are written using Jest and React Testing Library for the frontend, and Mocha/Chai for the backend.
 
-**2. Push the schema to Turso**
+## Deployment
 
-```bash
-DATABASE_URL='libsql://...' DATABASE_AUTH_TOKEN='...' npm run db:push
-```
+To deploy this application, you'll need to set up both frontend and backend servers. The project is structured to be easily deployable to platforms like Vercel, Netlify, or Heroku.
 
+## Contributing
 
-**3. Deploy to Vercel**
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a pull request
 
-```bash
-npm i -g vercel   # if needed
-vercel            # link/create the project
-# add env vars (production):
-vercel env add DATABASE_URL production
-vercel env add DATABASE_AUTH_TOKEN production
-vercel env add APP_PASSWORD production
-vercel env add SESSION_SECRET production
-vercel --prod
-```
+## License
 
-Generate a session secret with:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
-Then open the deployment on your phone and "Add to Home Screen".
-
-## Scripts
-
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Dev server |
-| `npm run build` / `start` | Production build / serve |
-| `npm run lint` | ESLint |
-| `npm run test` | Unit tests (lifts, nutrition, dates, session) |
-| `npm run db:push` | Apply schema to the database |
-| `npm run db:studio` | Drizzle Studio (browse data) |
-| `npm run db:seed` | Insert sample data |
+This project is licensed under the MIT License.

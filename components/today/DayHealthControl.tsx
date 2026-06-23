@@ -14,6 +14,7 @@ const DOT: Record<HealthStatus, string> = {
   healthy: "bg-accent",
   unwell: "bg-warn",
   injured: "bg-danger",
+  vacation: "bg-vacation",
 };
 
 export function DayHealthControl({

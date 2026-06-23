@@ -76,13 +76,14 @@ export function contingencyMultiplier(evolution: string, c: Contingency): number
   return 1; // commodity, measured → exact, no uplift
 }
 
-export const HEALTH_STATUSES = ["healthy", "unwell", "injured"] as const;
+export const HEALTH_STATUSES = ["healthy", "unwell", "injured", "vacation"] as const;
 export type HealthStatus = (typeof HEALTH_STATUSES)[number];
 
 export const HEALTH_STATUS_LABELS: Record<HealthStatus, string> = {
   healthy: "Healthy",
   unwell: "Unwell",
   injured: "Injured",
+  vacation: "Vacation",
 };
 
 export const SCHEDULES = ["everyday", "weekday", "weekend"] as const;

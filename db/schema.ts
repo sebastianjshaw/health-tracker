@@ -107,8 +107,8 @@ export const bodyMetrics = sqliteTable("body_metrics", {
   createdAt: createdAt(),
 }, (t) => [index("body_metrics_date_idx").on(t.date)]);
 
-/** Per-day health status (healthy/unwell/injured). One row per date; only
- * non-default ('unwell'/'injured') days are stored, so the table stays sparse. */
+/** Per-day health status (healthy/unwell/injured/vacation). One row per date; only
+ * non-default ('unwell'/'injured'/'vacation') days are stored, so the table stays sparse. */
 export const dayHealth = sqliteTable("day_health", {
   date: text("date").primaryKey(),
   status: text("status").notNull().default("healthy"),
