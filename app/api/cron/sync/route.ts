@@ -6,13 +6,11 @@ import { syncGoogleHealth } from "@/lib/integrations/sync";
 export const maxDuration = 60;
 
 /**
- * Vercel cron (see vercel.json) — authenticates with CRON_SECRET, not a session.
- * Two runs/day (the Hobby-plan limit): 06:30 UTC after the morning weigh-in and
- * 12:00 UTC ~an hour after the main midday workout. In Stockholm that's 08:30 &
- * 14:00 in summer (CEST), an hour earlier in winter (CET) — crons are UTC-only
- * so local time drifts with DST. Hobby crons also fire within the hour, not on
- * the exact minute. None of that loses data: the 7-day sync lookback backfills
- * anything that lands after a run, on the next run.
+ * Sync trigger — authenticates with CRON_SECRET, not a session. Primary caller
+ * is the GitHub Actions poller (.github/workflows/sync.yml), every 30 min during
+ * waking hours; the Vercel cron in vercel.json (12:00 UTC daily) is a fallback
+ * for if Actions is ever throttled or auto-disabled. Idempotent + bounded, and
+ * the 7-day sync lookback backfills anything that lands between runs.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;

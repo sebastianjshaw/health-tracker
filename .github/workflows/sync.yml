@@ -1,0 +1,31 @@
+name: Sync Google Health
+
+# Primary sync trigger: polls the app's /api/cron/sync endpoint every 30 minutes
+# during waking hours, so a scale/workout reading lands within ~30-60 min of
+# propagating to Google. Vercel cron (vercel.json) stays as a once-daily fallback.
+on:
+  schedule:
+    # Every 30 min, 05:00-22:59 UTC — covers ~07:00-23:00 Stockholm in both
+    # seasons (UTC+2 summer -> 07:00-00:59; UTC+1 winter -> 06:00-23:59).
+    - cron: "*/30 5-22 * * *"
+  workflow_dispatch: {} # manual "Run workflow" button
+
+concurrency:
+  group: gh-sync # never stack overlapping runs
+  cancel-in-progress: false
+
+permissions: {} # only curls an external URL; needs no repo-token scopes
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger sync endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          body=$(curl -fsS --max-time 90 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://health-tracker-sage-two.vercel.app/api/cron/sync")
+          echo "$body"
+          echo "$body" | grep -q '"ok":true' # fail the job on ok:false / errors
