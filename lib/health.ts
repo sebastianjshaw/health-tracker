@@ -1,4 +1,5 @@
 import { isValidISO } from "./date";
+import { leanBodyMass } from "./metabolic-age";
 
 /** Body Mass Index from weight (kg) and height (cm). Null if no height. */
 export function bmi(weightKg: number, heightCm: number | null): number | null {
@@ -79,9 +80,27 @@ export function suggestedCalorieTarget(opts: {
  * mass in a deficit (the classic "1 g per lb" ≈ 2.2 g/kg); we use 2.0 g/kg as a
  * sensible middle, rounded to the nearest 5 g. Null without a weight.
  */
-export function suggestedProtein(currentWeightKg: number | null): number | null {
+const PROTEIN_PER_KG_LEAN = 2.2; // ≈1 g/lb of lean mass — the standard "general rule"
+
+/**
+ * Suggested daily protein (g), rounded to 5 g. Preferred basis is LEAN mass
+ * (2.2 g/kg ≈ 1 g/lb lean): per-bodyweight over-prescribes when there's a lot of
+ * fat to lose. When body fat isn't known, fall back to bodyweight — easing to
+ * ~1.3 g/kg for an obese BMI (≈0.6 g/lb, the simplified high-body-fat rule) and
+ * 2.0 g/kg otherwise. Null without a weight.
+ */
+export function suggestedProtein(
+  currentWeightKg: number | null,
+  bodyFatPct: number | null = null,
+  heightCm: number | null = null,
+): number | null {
   if (!currentWeightKg || currentWeightKg <= 0) return null;
-  return Math.round((currentWeightKg * 2.0) / 5) * 5;
+  const round5 = (g: number) => Math.round(g / 5) * 5;
+  const lean = leanBodyMass(currentWeightKg, bodyFatPct);
+  if (lean != null) return round5(lean * PROTEIN_PER_KG_LEAN);
+  const b = bmi(currentWeightKg, heightCm);
+  if (b != null && b >= 30) return round5(currentWeightKg * 1.3); // obese proxy for high body fat
+  return round5(currentWeightKg * 2.0);
 }
 
 /** Maintenance calories (TDEE) = BMR × the sedentary-to-light activity factor.

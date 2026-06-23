@@ -6,6 +6,7 @@ import { bodyMetrics, cardioSessions, dailyActivity, heartRateDaily, sleepSessio
 import { CardioType } from "@/lib/constants";
 import { estimateCardioKcal } from "@/lib/cardio-calories";
 import { dedupeSessions, type DedupSession } from "@/lib/cardio-dedup";
+import { maybeUpdateProteinTarget } from "@/lib/protein-target";
 import { addDays, todayISO } from "@/lib/date";
 import {
   DATA_TYPES,
@@ -442,6 +443,15 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
       summary.body++;
     }
     await runBatched(bodyStmts);
+  }
+
+  // Nudge the lean-mass protein target now that body composition may have moved
+  // (dated + append-only, so it never re-grades past days). Best-effort: a target
+  // hiccup must not fail the sync or block the cursor.
+  try {
+    await maybeUpdateProteinTarget();
+  } catch {
+    /* non-fatal */
   }
 
   await setCursor(today);

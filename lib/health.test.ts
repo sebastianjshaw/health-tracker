@@ -1,6 +1,24 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ageFrom, waistToHeight, whtrClass } from "./health";
+import { ageFrom, suggestedProtein, waistToHeight, whtrClass } from "./health";
+
+describe("suggestedProtein", () => {
+  it("uses lean mass (2.2 g/kg) when body fat is known", () => {
+    // 112 kg @ 31% bf → lean 77.3 kg × 2.2 ≈ 170 g (not the ~225 g per-bodyweight gives)
+    assert.equal(suggestedProtein(112, 31, 180), 170);
+  });
+  it("eases off for an obese BMI when body fat is unknown (~0.6 g/lb)", () => {
+    // no bf, BMI 34.6 → 112 × 1.3 ≈ 145 g
+    assert.equal(suggestedProtein(112, null, 180), 145);
+  });
+  it("uses 2.0 g/kg bodyweight for a normal BMI without body fat", () => {
+    assert.equal(suggestedProtein(80, null, 180), 160); // BMI ~24.7
+  });
+  it("is null without a weight", () => {
+    assert.equal(suggestedProtein(null), null);
+    assert.equal(suggestedProtein(0), null);
+  });
+});
 
 describe("ageFrom", () => {
   it("rejects impossible dates instead of silently rolling them forward", () => {

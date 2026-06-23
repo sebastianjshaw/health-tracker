@@ -23,6 +23,7 @@ export default async function ProfilePage() {
   ]);
 
   const currentWeight = weight.length ? weight[weight.length - 1].weight : null;
+  const latestBodyFat = [...weight].reverse().find((w) => w.bodyFat != null)?.bodyFat ?? null;
   const age = profile.dob ? ageFrom(profile.dob) : null;
   const suggestedKcal = suggestedCalorieTarget({
     currentWeightKg: currentWeight,
@@ -31,7 +32,7 @@ export default async function ProfilePage() {
     sex: profile.sex,
     goalWeightKg: goalWeight,
   });
-  const suggestedProteinG = suggestedProtein(currentWeight);
+  const suggestedProteinG = suggestedProtein(currentWeight, latestBodyFat, profile.heightCm);
   const maintenanceKcal = maintenanceCalories({
     currentWeightKg: currentWeight,
     heightCm: profile.heightCm,
