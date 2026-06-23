@@ -4,6 +4,7 @@ import * as React from "react";
 import { Card } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { Meal } from "@/lib/constants";
+import { bmi, bmiClass } from "@/lib/health";
 import {
   CalorieChart,
   DistanceChart,
@@ -85,6 +86,7 @@ export function StatsView({
   targets,
   goalWeight,
   mealSplit,
+  heightCm,
   insights,
 }: {
   today: string;
@@ -100,6 +102,7 @@ export function StatsView({
   targets: { kcal: number };
   goalWeight: number | null;
   mealSplit: Record<Meal, number>;
+  heightCm: number | null;
   insights: StatsInsights;
 }) {
   const [range, setRange] = React.useState<Range>("30d");
@@ -123,6 +126,11 @@ export function StatsView({
   const wantLoss = goalWeight == null || (wLast ?? 0) >= goalWeight;
   const weightTone: Tone =
     wDelta == null ? "none" : Math.abs(wDelta) < 0.2 ? "even" : wantLoss === wDelta < 0 ? "good" : "bad";
+
+  // BMI from the range's latest weight, so it tracks the Weight tile + range control.
+  const bmiVal = wLast != null ? bmi(wLast, heightCm) : null;
+  const bmiTone: Tone =
+    bmiVal == null ? "none" : bmiVal < 18.5 ? "even" : bmiVal < 25 ? "good" : bmiVal < 30 ? "even" : "bad";
 
   const logged = fCalories.filter((d) => d.kcal > 0);
   const avgCal = logged.length
@@ -191,6 +199,12 @@ export function StatsView({
           value={wLast != null ? `${wLast} kg` : "—"}
           sub={wDelta != null ? signed(wDelta, "kg") : undefined}
           tone={weightTone}
+        />
+        <Metric
+          label="BMI"
+          value={bmiVal != null ? `${bmiVal}` : "—"}
+          sub={bmiVal != null ? bmiClass(bmiVal) : heightCm ? undefined : "set height"}
+          tone={bmiTone}
         />
         <Metric
           label="Calories / day"
