@@ -1,7 +1,7 @@
 import "server-only";
 import { desc, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
+import { cardioSessions, freeformLifts, liftSessions, liftSets } from "@/db/schema";
 import {
   Exercise,
   SETS_FOR,
@@ -69,4 +69,32 @@ export async function getRecentLiftSessions(limit = 8): Promise<LiftHistoryEntry
         repsDone: st.repsDone,
       })),
   }));
+}
+
+export type FreeformLift = {
+  id: number;
+  date: string;
+  exercise: string;
+  sets: number | null;
+  repsPerSet: number | null;
+  weightKg: number | null;
+};
+
+/** Free-form / historical strength entries (e.g. the MyFitnessPal import) that
+ * sit outside the 5×5 program — newest first, for the read-only "Past lifts"
+ * list on the Activity page. */
+export async function getFreeformLifts(limit = 200): Promise<FreeformLift[]> {
+  return db
+    .select({
+      id: freeformLifts.id,
+      date: freeformLifts.date,
+      exercise: freeformLifts.exercise,
+      sets: freeformLifts.sets,
+      repsPerSet: freeformLifts.repsPerSet,
+      weightKg: freeformLifts.weightKg,
+    })
+    .from(freeformLifts)
+    .orderBy(desc(freeformLifts.date), desc(freeformLifts.id))
+    .limit(limit)
+    .all();
 }

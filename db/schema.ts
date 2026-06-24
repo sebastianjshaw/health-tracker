@@ -209,6 +209,22 @@ export const liftSets = sqliteTable("lift_sets", {
   repsDone: integer("reps_done"), // null until logged
 }, (t) => [index("lift_sets_session_idx").on(t.sessionId)]);
 
+/** Free-form / historical strength entries that don't fit the 5×5 program
+ * (arbitrary movements with aggregated sets/reps/weight) — kept separate from
+ * lift_sets so program PRs/progression stay clean. Mostly the MyFitnessPal
+ * import (source='mfp'); read-only "Past lifts" history. */
+export const freeformLifts = sqliteTable("freeform_lifts", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // YYYY-MM-DD (local)
+  exercise: text("exercise").notNull(),
+  sets: integer("sets"),
+  repsPerSet: integer("reps_per_set"),
+  weightKg: real("weight_kg"),
+  source: text("source").notNull().default("manual"),
+  notes: text("notes"),
+  createdAt: createdAt(),
+}, (t) => [index("freeform_lifts_date_idx").on(t.date)]);
+
 /** Blood / lab biomarker readings — one row per marker per dated test. */
 export const bloodMarkers = sqliteTable("blood_markers", {
   id: integer("id").primaryKey({ autoIncrement: true }),

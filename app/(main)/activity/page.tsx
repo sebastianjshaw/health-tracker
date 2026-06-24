@@ -1,9 +1,11 @@
 import { PageHeader } from "@/components/PageHeader";
 import { ActivityView } from "@/components/activity/ActivityView";
 import { ActivityTrends } from "@/components/activity/ActivityTrends";
+import { PastLifts } from "@/components/activity/PastLifts";
 import { StrengthPRs } from "@/components/activity/StrengthPRs";
 import { isValidISO, todayISO } from "@/lib/date";
 import {
+  getFreeformLifts,
   getNextLiftWorkout,
   getRecentCardio,
   getRecentLiftSessions,
@@ -30,7 +32,7 @@ export default async function ActivityPage({
   const date = d && isValidISO(d) ? d : todayISO();
   const today = todayISO();
 
-  const [cardio, nextWorkout, liftHistory, connected, liftSetRows, liftProgression, activity, distances] =
+  const [cardio, nextWorkout, liftHistory, connected, liftSetRows, liftProgression, activity, distances, pastLifts] =
     await Promise.all([
       getRecentCardio(),
       getNextLiftWorkout(),
@@ -40,6 +42,7 @@ export default async function ActivityPage({
       getLiftProgression(),
       getDailyActivity(),
       getCardioDistances(),
+      getFreeformLifts(),
     ]);
   const canSync = isConfigured() && connected;
   const prs = liftStats(liftSetRows).slice(0, 5);
@@ -56,6 +59,7 @@ export default async function ActivityPage({
       />
       <div className="mt-4 space-y-4">
         <StrengthPRs lifts={prs} />
+        <PastLifts lifts={pastLifts} />
         <ActivityTrends today={today} lifts={liftProgression} activity={activity} distances={distances} />
       </div>
     </>
