@@ -81,6 +81,15 @@ export function suggestedCalorieTarget(opts: {
  * sensible middle, rounded to the nearest 5 g. Null without a weight.
  */
 const PROTEIN_PER_KG_LEAN = 2.2; // ≈1 g/lb of lean mass — the standard "general rule"
+const round5 = (g: number) => Math.round(g / 5) * 5;
+
+/** Protein (g, rounded to 5) for a known lean mass (kg) at 2.2 g/kg. The single
+ * source of truth for the lean-mass rule; prefer a scale-MEASURED lean mass over
+ * the weight×(1−bf) estimate when one is available. Null without a lean mass. */
+export function proteinForLeanMass(leanKg: number | null): number | null {
+  if (leanKg == null || leanKg <= 0) return null;
+  return round5(leanKg * PROTEIN_PER_KG_LEAN);
+}
 
 /**
  * Suggested daily protein (g), rounded to 5 g. Preferred basis is LEAN mass
@@ -95,9 +104,8 @@ export function suggestedProtein(
   heightCm: number | null = null,
 ): number | null {
   if (!currentWeightKg || currentWeightKg <= 0) return null;
-  const round5 = (g: number) => Math.round(g / 5) * 5;
-  const lean = leanBodyMass(currentWeightKg, bodyFatPct);
-  if (lean != null) return round5(lean * PROTEIN_PER_KG_LEAN);
+  const fromLean = proteinForLeanMass(leanBodyMass(currentWeightKg, bodyFatPct));
+  if (fromLean != null) return fromLean;
   const b = bmi(currentWeightKg, heightCm);
   if (b != null && b >= 30) return round5(currentWeightKg * 1.3); // obese proxy for high body fat
   return round5(currentWeightKg * 2.0);

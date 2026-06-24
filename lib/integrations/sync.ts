@@ -18,6 +18,12 @@ import {
   listDataPointsSince,
   setCursor,
 } from "./google-health";
+import {
+  getAccessToken as getWithingsToken,
+  getCursor as getWithingsCursor,
+  getMeasures,
+  setCursor as setWithingsCursor,
+} from "./withings";
 
 const SOURCE = "google-health";
 const MIN_EXERCISE_MIN = 10; // below this, with no distance, treat as auto-detected noise
@@ -36,53 +42,6 @@ const durationToMin = (v: unknown): number | null => {
 };
 const dateOf = (iso: unknown): string | null =>
   typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : null;
-
-// ---- scale measurement helpers (weight, body fat) ----
-type SampleTime = {
-  physicalTime?: string;
-  civilTime?: { date?: { year?: number; month?: number; day?: number } };
-};
-type MeasureNode = { sampleTime?: SampleTime } & Record<string, unknown>;
-
-/** Local calendar day of a sample (civilTime preferred, else the UTC slice). */
-function sampleDate(st?: SampleTime): string | null {
-  const d = st?.civilTime?.date;
-  if (d?.year && d?.month && d?.day) {
-    return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
-  }
-  return dateOf(st?.physicalTime);
-}
-
-/**
- * Latest SCALE-sourced reading per local day for a measurement data type, from
- * `since` onward. Non-scale points (legacy provider weight history) are ignored
- * so we never re-import over manual entries; within a day the most recent
- * sampleTime wins.
- */
-function scaleLatestPerDay(
-  points: { dataSource?: unknown; [k: string]: unknown }[],
-  field: string,
-  since: string,
-  valueOf: (node: MeasureNode) => number | null,
-): Map<string, number> {
-  const byDate = new Map<string, { at: string; value: number }>();
-  for (const dp of points) {
-    const ds = dp.dataSource as { device?: { formFactor?: string } } | undefined;
-    if (ds?.device?.formFactor !== "SCALE") continue;
-    const node = dp[field] as MeasureNode | undefined;
-    if (!node) continue;
-    const date = sampleDate(node.sampleTime);
-    if (!date || date < since) continue;
-    const value = valueOf(node);
-    if (value == null) continue;
-    const at = node.sampleTime?.physicalTime ?? "";
-    const cur = byDate.get(date);
-    if (!cur || at > cur.at) byDate.set(date, { at, value });
-  }
-  const out = new Map<string, number>();
-  for (const [date, v] of byDate) out.set(date, v.value);
-  return out;
-}
 
 function exerciseToCardio(exerciseType?: string): CardioType {
   switch ((exerciseType ?? "").toUpperCase()) {
@@ -115,7 +74,6 @@ export type SyncSummary = {
   sleep: number;
   restingHr: number;
   activeDays: number;
-  body: number;
 };
 
 type SqliteBatchItem = BatchItem<"sqlite">;
@@ -156,7 +114,6 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     sleep: 0,
     restingHr: 0,
     activeDays: 0,
-    body: 0,
   };
 
   // ---- Exercise → cardioSessions ----
@@ -386,35 +343,45 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
   }
   await runBatched(activityStmts);
 
-  // ---- Body composition (weight, body fat) from a smart scale → bodyMetrics ----
-  // Withings/Health-Connect scales report weight & body-fat as instantaneous
-  // measurements. We ONLY ingest SCALE-sourced points (the same endpoints also
-  // carry years of legacy provider weight we must not re-import over manual
-  // history), keep the latest reading per local day, and fold it into that day's
-  // single bodyMetrics row — so it merges with manual measurements rather than
-  // duplicating them. The scale's spot heart-rate is deliberately skipped: it's
-  // a standing pulse, not resting HR, and would corrupt the resting-HR series.
-  const measureDate = (field: string) => (dp: DataPoint) =>
-    sampleDate((dp[field] as MeasureNode | undefined)?.sampleTime);
-  const [weightPts, bodyFatPts] = await Promise.all([
-    listDataPointsSince(token, DATA_TYPES.weight, boundedSince, measureDate("weight")),
-    listDataPointsSince(token, DATA_TYPES.bodyFat, boundedSince, measureDate("bodyFat")),
-  ]);
-  const weightByDay = scaleLatestPerDay(weightPts, "weight", boundedSince, (n) => {
-    const g = num(n.weightGrams);
-    return g != null ? Math.round((g / 1000) * 10) / 10 : null;
-  });
-  const bodyFatByDay = scaleLatestPerDay(bodyFatPts, "bodyFat", boundedSince, (n) => {
-    const p = num(n.percentage);
-    return p != null ? Math.round(p * 10) / 10 : null;
-  });
+  // Body composition (weight, body-fat, lean/muscle/bone/water) is no longer
+  // read here — it comes directly from the Withings cloud (syncWithings), which
+  // doesn't depend on the phone's Health-Connect bridge. Google Health keeps
+  // activities, sleep and resting HR.
 
-  const bodyDates = [...new Set([...weightByDay.keys(), ...bodyFatByDay.keys()])];
-  if (bodyDates.length) {
+  await setCursor(today);
+  return summary;
+}
+
+export type WithingsSyncSummary = { days: number; latest: string | null };
+
+// Re-check this many seconds before the cursor so a measure edited/re-uploaded
+// after we last synced (Withings keys `lastupdate` off modification time) still
+// gets picked up rather than skipped forever.
+const WITHINGS_LOOKBACK_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Pull body composition from the Withings cloud into bodyMetrics. The scale is
+ * the measuring device, so its readings win where present; manual fields (waist,
+ * notes, resting HR) on the same day are preserved untouched, and days Withings
+ * has no reading for (manual + legacy history) are never overwritten. Idempotent
+ * — one row per date, merged like logBody. A full resync re-pulls all history.
+ */
+export async function syncWithings(opts?: { full?: boolean }): Promise<WithingsSyncSummary> {
+  const full = opts?.full ?? false;
+  const token = await getWithingsToken();
+  if (!token) throw new Error("Withings is not connected.");
+
+  const cursor = full ? null : await getWithingsCursor();
+  const since = cursor != null ? Math.max(0, cursor - WITHINGS_LOOKBACK_SECONDS) : null;
+  const { readings, updatetime } = await getMeasures(token, since);
+
+  let latest: string | null = null;
+  if (readings.length) {
+    const dates = readings.map((r) => r.date);
     const existing = await db
       .select()
       .from(bodyMetrics)
-      .where(inArray(bodyMetrics.date, bodyDates))
+      .where(inArray(bodyMetrics.date, dates))
       .all();
     // One row per date (newest id wins) — mirrors logBody's merge semantics.
     const rowByDate = new Map<string, (typeof existing)[number]>();
@@ -423,37 +390,53 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
       if (!prev || r.id > prev.id) rowByDate.set(r.date, r);
     }
 
-    const bodyStmts: SqliteBatchItem[] = [];
-    for (const date of bodyDates) {
-      const w = weightByDay.get(date) ?? null;
-      const bf = bodyFatByDay.get(date) ?? null;
-      const ex = rowByDate.get(date);
+    const stmts: SqliteBatchItem[] = [];
+    for (const r of readings) {
+      // Scale fields win where it has a reading; keep the prior value otherwise.
+      const set = (next: number | null, prev: number | null | undefined) => next ?? prev ?? null;
+      const ex = rowByDate.get(r.date);
       if (ex) {
-        // The scale is the measuring device, so it wins where it has a reading;
-        // other fields (waist, notes, resting HR) are preserved untouched.
-        bodyStmts.push(
+        stmts.push(
           db
             .update(bodyMetrics)
-            .set({ weightKg: w ?? ex.weightKg, bodyFatPct: bf ?? ex.bodyFatPct })
+            .set({
+              weightKg: set(r.weightKg, ex.weightKg),
+              bodyFatPct: set(r.bodyFatPct, ex.bodyFatPct),
+              leanMassKg: set(r.leanMassKg, ex.leanMassKg),
+              muscleMassKg: set(r.muscleMassKg, ex.muscleMassKg),
+              boneMassKg: set(r.boneMassKg, ex.boneMassKg),
+              hydrationKg: set(r.hydrationKg, ex.hydrationKg),
+            })
             .where(eq(bodyMetrics.id, ex.id)),
         );
       } else {
-        bodyStmts.push(db.insert(bodyMetrics).values({ date, weightKg: w, bodyFatPct: bf }));
+        stmts.push(
+          db.insert(bodyMetrics).values({
+            date: r.date,
+            weightKg: r.weightKg,
+            bodyFatPct: r.bodyFatPct,
+            leanMassKg: r.leanMassKg,
+            muscleMassKg: r.muscleMassKg,
+            boneMassKg: r.boneMassKg,
+            hydrationKg: r.hydrationKg,
+          }),
+        );
       }
-      summary.body++;
+      if (latest == null || r.date > latest) latest = r.date;
     }
-    await runBatched(bodyStmts);
+    await runBatched(stmts);
+
+    // Body composition moved → nudge the lean-mass protein target (dated +
+    // append-only, so it never re-grades past days). Best-effort.
+    try {
+      await maybeUpdateProteinTarget();
+    } catch {
+      /* non-fatal */
+    }
   }
 
-  // Nudge the lean-mass protein target now that body composition may have moved
-  // (dated + append-only, so it never re-grades past days). Best-effort: a target
-  // hiccup must not fail the sync or block the cursor.
-  try {
-    await maybeUpdateProteinTarget();
-  } catch {
-    /* non-fatal */
-  }
-
-  await setCursor(today);
-  return summary;
+  // Advance the cursor to the response's updatetime so the next run only fetches
+  // newer measures. Fall back to the prior cursor if absent (nothing to move to).
+  if (updatetime != null) await setWithingsCursor(updatetime);
+  return { days: readings.length, latest };
 }

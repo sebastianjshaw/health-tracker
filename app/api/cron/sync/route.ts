@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isConnected } from "@/lib/integrations/google-health";
-import { syncGoogleHealth } from "@/lib/integrations/sync";
+import { isConnected as googleConnected } from "@/lib/integrations/google-health";
+import { isConnected as withingsConnected } from "@/lib/integrations/withings";
+import { syncGoogleHealth, syncWithings } from "@/lib/integrations/sync";
 
 // The first sync pulls years of history; give it room beyond the default ~10s.
 export const maxDuration = 60;
@@ -10,7 +11,12 @@ export const maxDuration = 60;
  * is the GitHub Actions poller (.github/workflows/sync.yml), every 30 min during
  * waking hours; the Vercel cron in vercel.json (12:00 UTC daily) is a fallback
  * for if Actions is ever throttled or auto-disabled. Idempotent + bounded, and
- * the 7-day sync lookback backfills anything that lands between runs.
+ * the lookback on each source backfills anything that lands between runs.
+ *
+ * Two sources run independently: Google Health (activities, sleep, resting HR)
+ * and Withings (body composition, straight from the scale's cloud — no phone
+ * bridge). One failing or being disconnected doesn't block the other; the job
+ * only reports HTTP 500 if a connected source actually errors.
  */
 export async function GET(request: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -18,16 +24,32 @@ export async function GET(request: NextRequest) {
   if (!secret || auth !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!(await isConnected())) {
+
+  const [google, withings] = await Promise.all([googleConnected(), withingsConnected()]);
+  if (!google && !withings) {
     return NextResponse.json({ ok: true, skipped: "not connected" });
   }
-  try {
-    const summary = await syncGoogleHealth();
-    return NextResponse.json({ ok: true, summary });
-  } catch (e) {
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "sync failed" },
-      { status: 500 },
-    );
+
+  const result: Record<string, unknown> = {};
+  const errors: string[] = [];
+
+  if (google) {
+    try {
+      result.google = await syncGoogleHealth();
+    } catch (e) {
+      errors.push(`google-health: ${e instanceof Error ? e.message : "failed"}`);
+    }
   }
+  if (withings) {
+    try {
+      result.withings = await syncWithings();
+    } catch (e) {
+      errors.push(`withings: ${e instanceof Error ? e.message : "failed"}`);
+    }
+  }
+
+  if (errors.length) {
+    return NextResponse.json({ ok: false, errors, ...result }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, ...result });
 }

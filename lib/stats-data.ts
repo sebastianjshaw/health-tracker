@@ -54,7 +54,15 @@ export async function getLiftSets(): Promise<
   return rows;
 }
 
-export type WeightPoint = { date: string; weight: number; bodyFat: number | null };
+export type WeightPoint = {
+  date: string;
+  weight: number;
+  bodyFat: number | null;
+  /** Scale-measured fat-free mass (kg), when available — preferred over the
+   * derived weight×(1−bf) estimate. Null/absent for manual/legacy entries and
+   * series built without it (e.g. the report's summarised weights). */
+  leanMass?: number | null;
+};
 
 /** Weigh-ins ascending. Optionally bounded to an inclusive [from, to] range. */
 export async function getWeightSeries(from?: string, to?: string): Promise<WeightPoint[]> {
@@ -73,6 +81,7 @@ export async function getWeightSeries(from?: string, to?: string): Promise<Weigh
     date: r.date,
     weight: r.weightKg as number,
     bodyFat: r.bodyFatPct ?? null,
+    leanMass: r.leanMassKg ?? null,
   }));
 }
 

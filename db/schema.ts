@@ -99,6 +99,13 @@ export const bodyMetrics = sqliteTable("body_metrics", {
   date: text("date").notNull(),
   weightKg: real("weight_kg"),
   bodyFatPct: real("body_fat_pct"),
+  // Measured body composition from a Withings scale (null when only weight/
+  // body-fat were recorded, or for manual/legacy entries). Lean mass here is the
+  // scale's measured fat-free mass — preferred over the derived estimate.
+  leanMassKg: real("lean_mass_kg"),
+  muscleMassKg: real("muscle_mass_kg"),
+  boneMassKg: real("bone_mass_kg"),
+  hydrationKg: real("hydration_kg"),
   waistCm: real("waist_cm"),
   chestCm: real("chest_cm"),
   hipsCm: real("hips_cm"),

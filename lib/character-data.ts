@@ -128,7 +128,9 @@ export async function getCharacterSheet(): Promise<{
 
   // Real derived body composition + strength (shown beside the playful stats).
   const bodyComp = latestBodyComposition(
-    [...weights].reverse().map((w) => ({ date: w.date, weightKg: w.weight, bodyFatPct: w.bodyFat })),
+    [...weights]
+      .reverse()
+      .map((w) => ({ date: w.date, weightKg: w.weight, bodyFatPct: w.bodyFat, leanMassKg: w.leanMass })),
     { heightCm: profile.heightCm, sex: profile.sex },
   );
   const liftPRs = liftStats(liftSetRows).slice(0, 5);

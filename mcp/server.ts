@@ -524,6 +524,10 @@ server.tool(
             date: r.date,
             weightKg: r.weightKg,
             bodyFatPct: r.bodyFatPct,
+            // Scale-measured composition (Withings); null on manual/legacy days.
+            leanMassKg: r.leanMassKg,
+            muscleMassKg: r.muscleMassKg,
+            boneMassKg: r.boneMassKg,
           })),
           predictions,
         },

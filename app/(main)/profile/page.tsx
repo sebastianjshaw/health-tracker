@@ -7,6 +7,7 @@ import {
   ageFrom,
   bmr,
   maintenanceCalories,
+  proteinForLeanMass,
   suggestedCalorieTarget,
   suggestedProtein,
 } from "@/lib/health";
@@ -24,6 +25,7 @@ export default async function ProfilePage() {
 
   const currentWeight = weight.length ? weight[weight.length - 1].weight : null;
   const latestBodyFat = [...weight].reverse().find((w) => w.bodyFat != null)?.bodyFat ?? null;
+  const latestLean = [...weight].reverse().find((w) => w.leanMass != null)?.leanMass ?? null;
   const age = profile.dob ? ageFrom(profile.dob) : null;
   const suggestedKcal = suggestedCalorieTarget({
     currentWeightKg: currentWeight,
@@ -32,7 +34,8 @@ export default async function ProfilePage() {
     sex: profile.sex,
     goalWeightKg: goalWeight,
   });
-  const suggestedProteinG = suggestedProtein(currentWeight, latestBodyFat, profile.heightCm);
+  const suggestedProteinG =
+    proteinForLeanMass(latestLean) ?? suggestedProtein(currentWeight, latestBodyFat, profile.heightCm);
   const maintenanceKcal = maintenanceCalories({
     currentWeightKg: currentWeight,
     heightCm: profile.heightCm,

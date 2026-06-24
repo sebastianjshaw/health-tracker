@@ -116,4 +116,29 @@ describe("latestBodyComposition", () => {
       null,
     );
   });
+
+  it("prefers a scale-measured lean mass over the bf-derived estimate", () => {
+    // Newest row has measured fat-free mass but NO body fat — still usable, and
+    // its measured lean (76) beats the older row's derived 77 (110×0.70).
+    const bc = latestBodyComposition(
+      [
+        { date: "2026-06-21", weightKg: 112, bodyFatPct: null, leanMassKg: 76, muscleMassKg: 72, boneMassKg: 3.2 },
+        { date: "2026-06-19", weightKg: 110, bodyFatPct: 30 },
+      ],
+      profile,
+    )!;
+    assert.equal(bc.date, "2026-06-21");
+    assert.equal(bc.leanMassKg, 76);
+    assert.equal(bc.fatMassKg, 36); // 112 − 76
+    assert.equal(bc.muscleMassKg, 72);
+    assert.equal(bc.boneMassKg, 3.2);
+    assert.equal(bc.measured, true);
+    assert.equal(bc.metabolicAge, null); // no body fat → can't compute the penalty
+  });
+
+  it("flags estimated lean (no measured value) as measured:false", () => {
+    const bc = latestBodyComposition([{ date: "2026-06-19", weightKg: 110, bodyFatPct: 30 }], profile)!;
+    assert.equal(bc.measured, false);
+    assert.equal(bc.muscleMassKg, null);
+  });
 });

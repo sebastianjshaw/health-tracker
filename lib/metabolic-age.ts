@@ -113,33 +113,57 @@ export type BodyComposition = {
   fatMassKg: number | null;
   ffmi: number | null;
   metabolicAge: number | null;
+  /** Scale-measured extras (Withings), null when not provided by the reading. */
+  muscleMassKg: number | null;
+  boneMassKg: number | null;
+  /** True when lean mass came from a scale measurement rather than weight×(1−bf). */
+  measured: boolean;
+};
+
+type BodyReading = {
+  date: string;
+  weightKg: number | null;
+  bodyFatPct: number | null;
+  /** Scale-measured fat-free mass (kg), preferred over the derived estimate. */
+  leanMassKg?: number | null;
+  muscleMassKg?: number | null;
+  boneMassKg?: number | null;
 };
 
 /**
- * Body-composition snapshot (lean mass, fat mass, FFMI, metabolic age) from the
- * most recent reading that has BOTH a weight and a body-fat figure, so every
- * number derives from the same measurement (never a fresh weight paired with a
- * stale body-fat reading). `readings` must be newest-first; null if none carries
- * both.
+ * Body-composition snapshot (lean mass, fat mass, FFMI, metabolic age, plus the
+ * scale's measured muscle/bone) from the most recent reading we can derive lean
+ * mass for — a scale-MEASURED fat-free mass if present, else weight×(1−bf) which
+ * needs both a weight and a body-fat figure. Preferring the same reading keeps
+ * every number off one measurement. `readings` must be newest-first; null if
+ * none yields a lean mass.
  */
 export function latestBodyComposition(
-  readings: { date: string; weightKg: number | null; bodyFatPct: number | null }[],
+  readings: BodyReading[],
   profile: { heightCm: number | null; sex: string },
 ): BodyComposition | null {
   for (const r of readings) {
-    const lean = leanBodyMass(r.weightKg, r.bodyFatPct);
-    if (lean == null) continue; // needs both weight and a valid body-fat %
+    const measuredLean = r.leanMassKg != null && r.leanMassKg > 0 ? r.leanMassKg : null;
+    const lean = measuredLean ?? leanBodyMass(r.weightKg, r.bodyFatPct);
+    if (lean == null || r.weightKg == null) continue;
+    const h = profile.heightCm;
     return {
       date: r.date,
-      leanMassKg: lean,
-      fatMassKg: fatMass(r.weightKg, r.bodyFatPct),
-      ffmi: ffmi(r.weightKg, r.bodyFatPct, profile.heightCm),
+      leanMassKg: Math.round(lean * 10) / 10,
+      // Measured lean → fat is the remainder; else fall back to the bf-derived split.
+      fatMassKg: measuredLean != null
+        ? Math.round((r.weightKg - measuredLean) * 10) / 10
+        : fatMass(r.weightKg, r.bodyFatPct),
+      ffmi: h && h > 0 ? Math.round((lean / ((h / 100) * (h / 100))) * 10) / 10 : null,
       metabolicAge: metabolicAge({
         weightKg: r.weightKg,
         heightCm: profile.heightCm,
         bodyFatPct: r.bodyFatPct,
         sex: profile.sex,
       }),
+      muscleMassKg: r.muscleMassKg ?? null,
+      boneMassKg: r.boneMassKg ?? null,
+      measured: measuredLean != null,
     };
   }
   return null;

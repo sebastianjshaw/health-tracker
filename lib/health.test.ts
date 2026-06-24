@@ -1,6 +1,23 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { ageFrom, suggestedProtein, waistToHeight, whtrClass } from "./health";
+import {
+  ageFrom,
+  proteinForLeanMass,
+  suggestedProtein,
+  waistToHeight,
+  whtrClass,
+} from "./health";
+
+describe("proteinForLeanMass", () => {
+  it("applies 2.2 g/kg lean, rounded to 5 g", () => {
+    assert.equal(proteinForLeanMass(77.3), 170); // 77.3 × 2.2 = 170.06 → 170
+    assert.equal(proteinForLeanMass(80), 175); // 176 → 175
+  });
+  it("is null without a positive lean mass", () => {
+    assert.equal(proteinForLeanMass(null), null);
+    assert.equal(proteinForLeanMass(0), null);
+  });
+});
 
 describe("suggestedProtein", () => {
   it("uses lean mass (2.2 g/kg) when body fat is known", () => {

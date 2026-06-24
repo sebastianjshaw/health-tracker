@@ -17,7 +17,14 @@ export default async function MeasurementsPage() {
 
   const bodyComp = latestBodyComposition(
     // metrics are newest-first already
-    metrics.map((m) => ({ date: m.date, weightKg: m.weightKg, bodyFatPct: m.bodyFatPct })),
+    metrics.map((m) => ({
+      date: m.date,
+      weightKg: m.weightKg,
+      bodyFatPct: m.bodyFatPct,
+      leanMassKg: m.leanMassKg,
+      muscleMassKg: m.muscleMassKg,
+      boneMassKg: m.boneMassKg,
+    })),
     { heightCm: profile.heightCm, sex: profile.sex },
   );
   const weighIns = weights.map((w) => ({ date: w.date, weight: w.weight }));

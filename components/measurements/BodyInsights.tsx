@@ -54,9 +54,19 @@ export function BodyInsights({
     <div className="space-y-4">
       {bodyComp && (
         <Card className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
-          <Tile label="Lean mass" value={`${trimNum(bodyComp.leanMassKg)} kg`} />
+          <Tile
+            label="Lean mass"
+            value={`${trimNum(bodyComp.leanMassKg)} kg`}
+            sub={bodyComp.measured ? "scale-measured" : "estimated"}
+          />
           {bodyComp.fatMassKg != null && (
             <Tile label="Fat mass" value={`${trimNum(bodyComp.fatMassKg)} kg`} />
+          )}
+          {bodyComp.muscleMassKg != null && (
+            <Tile label="Muscle mass" value={`${trimNum(bodyComp.muscleMassKg)} kg`} />
+          )}
+          {bodyComp.boneMassKg != null && (
+            <Tile label="Bone mass" value={`${trimNum(bodyComp.boneMassKg)} kg`} />
           )}
           {bodyComp.ffmi != null && (
             <Tile label="FFMI" value={`${trimNum(bodyComp.ffmi)}`} sub="lean ÷ height²" />
