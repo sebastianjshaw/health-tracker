@@ -8,14 +8,11 @@ import { bmi, bmiClass } from "@/lib/health";
 import {
   CalorieChart,
   CompositionChart,
-  DistanceChart,
   FiberChart,
   HeartRateChart,
   HydrationChart,
-  LiftChart,
   SatFatChart,
   SleepChart,
-  StepsChart,
   WeightChart,
 } from "@/components/stats/charts-lazy";
 import { HealthCalendar } from "@/components/stats/HealthCalendar";
@@ -30,10 +27,8 @@ import {
   withinRange,
 } from "@/lib/stats-range";
 import type {
-  ActivityPoint,
   CaloriePoint,
   DistancePoint,
-  LiftPoint,
   RestingHrPoint,
   SleepPoint,
   WeightPoint,
@@ -81,9 +76,7 @@ export function StatsView({
   weight,
   predictions,
   calories,
-  lifts,
   distances,
-  activity,
   sleep,
   restingHr,
   health,
@@ -101,9 +94,7 @@ export function StatsView({
   weight: WeightPoint[];
   predictions: WeightPrediction[];
   calories: CaloriePoint[];
-  lifts: LiftPoint[];
   distances: DistancePoint[];
-  activity: ActivityPoint[];
   sleep: SleepPoint[];
   restingHr: RestingHrPoint[];
   health: Record<string, HealthStatus>;
@@ -124,9 +115,7 @@ export function StatsView({
   const fWeight = withinRange(weight, cutoff);
   const fPredictions = withinRange(predictions, cutoff);
   const fCalories = withinRange(calories, cutoff);
-  const fLifts = withinRange(lifts, cutoff);
   const fDistances = withinRange(distances, cutoff);
-  const fActivity = withinRange(activity, cutoff);
   const fSleep = withinRange(sleep, cutoff);
   const fHr = withinRange(restingHr, cutoff);
   const startOf = (rows: { date: string }[]) => cutoff ?? rows[0]?.date ?? today;
@@ -270,17 +259,6 @@ export function StatsView({
         <FiberChart data={fCalories} />
         <SatFatChart data={fCalories} />
         <HydrationChart data={fCalories} />
-      </Section>
-
-      <Section title="Training">
-        <LiftChart data={fLifts} />
-        <StepsChart data={fActivity} />
-        <DistanceChart
-          data={fDistances}
-          start={startOf(fDistances)}
-          end={today}
-          granularity={granularity}
-        />
       </Section>
 
       <Section title="Wellbeing">

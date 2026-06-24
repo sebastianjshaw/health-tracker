@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/PageHeader";
 import { ActivityView } from "@/components/activity/ActivityView";
+import { ActivityTrends } from "@/components/activity/ActivityTrends";
 import { StrengthPRs } from "@/components/activity/StrengthPRs";
 import { isValidISO, todayISO } from "@/lib/date";
 import {
@@ -7,7 +8,12 @@ import {
   getRecentCardio,
   getRecentLiftSessions,
 } from "@/lib/activity-data";
-import { getLiftSets } from "@/lib/stats-data";
+import {
+  getCardioDistances,
+  getDailyActivity,
+  getLiftProgression,
+  getLiftSets,
+} from "@/lib/stats-data";
 import { liftStats } from "@/lib/strength";
 import { isConfigured, isConnected } from "@/lib/integrations/google-health";
 
@@ -22,14 +28,19 @@ export default async function ActivityPage({
 }) {
   const { d } = await searchParams;
   const date = d && isValidISO(d) ? d : todayISO();
+  const today = todayISO();
 
-  const [cardio, nextWorkout, liftHistory, connected, liftSetRows] = await Promise.all([
-    getRecentCardio(),
-    getNextLiftWorkout(),
-    getRecentLiftSessions(),
-    isConnected(),
-    getLiftSets(),
-  ]);
+  const [cardio, nextWorkout, liftHistory, connected, liftSetRows, liftProgression, activity, distances] =
+    await Promise.all([
+      getRecentCardio(),
+      getNextLiftWorkout(),
+      getRecentLiftSessions(),
+      isConnected(),
+      getLiftSets(),
+      getLiftProgression(),
+      getDailyActivity(),
+      getCardioDistances(),
+    ]);
   const canSync = isConfigured() && connected;
   const prs = liftStats(liftSetRows).slice(0, 5);
 
@@ -43,8 +54,9 @@ export default async function ActivityPage({
         liftHistory={liftHistory}
         canSync={canSync}
       />
-      <div className="mt-4">
+      <div className="mt-4 space-y-4">
         <StrengthPRs lifts={prs} />
+        <ActivityTrends today={today} lifts={liftProgression} activity={activity} distances={distances} />
       </div>
     </>
   );

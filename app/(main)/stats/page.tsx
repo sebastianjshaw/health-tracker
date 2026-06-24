@@ -12,8 +12,6 @@ import {
   getBodyMetrics,
   getCalorieSeries,
   getCardioDistances,
-  getDailyActivity,
-  getLiftProgression,
   getRestingHrSeries,
   getSleepSeries,
   getWeightPredictions,
@@ -22,7 +20,7 @@ import {
 
 export default async function StatsPage() {
   const today = todayISO();
-  const [targets, goalWeight, mealSplit, profile, metrics, weight, predictions, calories, lifts, distances, activity, sleep, restingHr, health] =
+  const [targets, goalWeight, mealSplit, profile, metrics, weight, predictions, calories, distances, sleep, restingHr, health] =
     await Promise.all([
       getTargets(),
       getGoalWeight(),
@@ -32,9 +30,7 @@ export default async function StatsPage() {
       getWeightSeries(),
       getWeightPredictions(),
       getCalorieSeries(365), // bounded; the range control filters client-side
-      getLiftProgression(),
-      getCardioDistances(),
-      getDailyActivity(),
+      getCardioDistances(), // for the at-a-glance Distance tile (charts live on /activity)
       getSleepSeries(),
       getRestingHrSeries(),
       getHealthSeries(addDays(today, -363), today),
@@ -83,9 +79,7 @@ export default async function StatsPage() {
         weight={weight}
         predictions={predictions}
         calories={calories}
-        lifts={lifts}
         distances={distances}
-        activity={activity}
         sleep={sleep}
         restingHr={restingHr}
         health={health}
