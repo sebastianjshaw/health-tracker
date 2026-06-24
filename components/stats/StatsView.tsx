@@ -250,8 +250,6 @@ export function StatsView({
         <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} today={today} />
         <CompositionChart data={fWeight} />
         <BodyInsights bodyComp={bodyComp} yearly={yearly} monthly={monthly} age={age} />
-        <HeartRateChart data={fHr} />
-        <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
       </Section>
 
       <Section title="Nutrition">
@@ -262,6 +260,8 @@ export function StatsView({
       </Section>
 
       <Section title="Wellbeing">
+        <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
+        <HeartRateChart data={fHr} />
         {/* Health calendar keeps its own year view, independent of the range above. */}
         <HealthCalendar statuses={health} end={today} />
       </Section>

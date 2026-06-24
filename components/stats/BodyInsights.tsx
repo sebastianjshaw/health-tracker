@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Card } from "@/components/ui";
 import { trimNum } from "@/lib/format";
 import type { BodyComposition } from "@/lib/metabolic-age";
@@ -10,6 +11,22 @@ function Tile({ label, value, sub }: { label: string; value: string; sub?: strin
       <div className="text-lg font-semibold tabular-nums">{value}</div>
       {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
     </div>
+  );
+}
+
+/** Card-styled native disclosure — closed by default, no client JS. The marker
+ * is hidden and replaced with a rotating chevron driven by [open]. */
+function Collapsible({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <details className="group rounded-2xl border border-border bg-card text-card-foreground shadow-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground [&::-webkit-details-marker]:hidden">
+        {title}
+        <span className="transition-transform group-open:rotate-90" aria-hidden>
+          ▸
+        </span>
+      </summary>
+      <div className="px-4 pb-3">{children}</div>
+    </details>
   );
 }
 
@@ -93,11 +110,8 @@ export function BodyInsights({
       )}
 
       {yearly.length > 1 && (
-        <Card className="p-0">
-          <div className="px-4 pt-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Weight by year
-          </div>
-          <div className="mt-1 divide-y divide-border">
+        <Collapsible title="Weight by year">
+          <div className="-mx-4 divide-y divide-border border-t border-border">
             {yearly.map((y) => (
               <div key={y.year} className="flex items-baseline justify-between px-4 py-2 text-sm">
                 <span className="tabular-nums text-muted-foreground">{y.year}</span>
@@ -110,16 +124,13 @@ export function BodyInsights({
               </div>
             ))}
           </div>
-        </Card>
+        </Collapsible>
       )}
 
       {monthly.length >= 6 && (
-        <Card className="p-3">
-          <div className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Weight by month (seasonality)
-          </div>
+        <Collapsible title="Weight by month (seasonality)">
           <SeasonalBars months={monthly} />
-        </Card>
+        </Collapsible>
       )}
     </div>
   );
