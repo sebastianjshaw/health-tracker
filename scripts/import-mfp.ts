@@ -134,7 +134,11 @@ async function main() {
         meal,
         foodId: null,
         name: r["description"] || "(unnamed)",
-        quantity: num(r["value"]) ?? 1,
+        // MFP's nutrition columns are the ENTRY TOTAL (the serving `value` is
+        // already applied), but our model computes day totals as kcal×quantity.
+        // So store the totals as the snapshot and pin quantity=1 — otherwise a
+        // "2500 ml beer" row (kcal already 787) would be multiplied by 2500.
+        quantity: 1,
         kcal: num(r["calories"]) ?? 0,
         protein: num(r["protein_g"]) ?? 0,
         carbs: num(r["carbs_g"]) ?? 0,
