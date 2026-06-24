@@ -3,8 +3,6 @@ import { db } from "@/db";
 import { bodyMetrics } from "@/db/schema";
 import { PageHeader } from "@/components/PageHeader";
 import { Connections } from "@/components/settings/Connections";
-import { ContingencyEditor } from "@/components/stats/ContingencyEditor";
-import { getContingency } from "@/lib/settings";
 import {
   getCursor as googleCursor,
   isConfigured as googleConfigured,
@@ -16,17 +14,15 @@ import {
 } from "@/lib/integrations/withings";
 
 export default async function SettingsPage() {
-  const [contingency, gConfigured, gConnected, gLastSync, wConfigured, wConnected, latestBody] =
-    await Promise.all([
-      getContingency(),
-      Promise.resolve(googleConfigured()),
-      googleConnected(),
-      googleCursor(),
-      Promise.resolve(withingsConfigured()),
-      withingsConnected(),
-      // Withings' cursor is an epoch; show its freshness as the latest body date.
-      db.select({ date: bodyMetrics.date }).from(bodyMetrics).orderBy(desc(bodyMetrics.date)).limit(1).get(),
-    ]);
+  const [gConfigured, gConnected, gLastSync, wConfigured, wConnected, latestBody] = await Promise.all([
+    Promise.resolve(googleConfigured()),
+    googleConnected(),
+    googleCursor(),
+    Promise.resolve(withingsConfigured()),
+    withingsConnected(),
+    // Withings' cursor is an epoch; show its freshness as the latest body date.
+    db.select({ date: bodyMetrics.date }).from(bodyMetrics).orderBy(desc(bodyMetrics.date)).limit(1).get(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -39,7 +35,6 @@ export default async function SettingsPage() {
           lastSync: latestBody?.date ?? null,
         }}
       />
-      <ContingencyEditor contingency={contingency} />
     </div>
   );
 }

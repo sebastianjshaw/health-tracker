@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui";
 import { GoalsEditor } from "@/components/stats/GoalsEditor";
+import { ContingencyEditor } from "@/components/stats/ContingencyEditor";
 import { ProfileEditor } from "@/components/profile/ProfileEditor";
 import {
   ageFrom,
@@ -11,16 +12,17 @@ import {
   suggestedCalorieTarget,
   suggestedProtein,
 } from "@/lib/health";
-import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
+import { getContingency, getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
 import { getWeightSeries } from "@/lib/stats-data";
 
 export default async function ProfilePage() {
-  const [profile, targets, goalWeight, mealSplit, weight] = await Promise.all([
+  const [profile, targets, goalWeight, mealSplit, weight, contingency] = await Promise.all([
     getProfile(),
     getTargets(),
     getGoalWeight(),
     getMealSplit(),
     getWeightSeries(),
+    getContingency(),
   ]);
 
   const currentWeight = weight.length ? weight[weight.length - 1].weight : null;
@@ -69,6 +71,7 @@ export default async function ProfilePage() {
         maintenanceKcal={maintenanceKcal}
         bmrKcal={bmrKcal != null ? Math.round(bmrKcal) : null}
       />
+      <ContingencyEditor contingency={contingency} />
     </div>
   );
 }
