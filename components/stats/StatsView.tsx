@@ -19,6 +19,9 @@ import {
   WeightChart,
 } from "@/components/stats/charts-lazy";
 import { HealthCalendar } from "@/components/stats/HealthCalendar";
+import { BodyInsights } from "@/components/stats/BodyInsights";
+import type { BodyComposition } from "@/lib/metabolic-age";
+import type { MonthlyAverage, YearlyAverage } from "@/lib/seasonal";
 import {
   RANGES,
   Range,
@@ -89,6 +92,10 @@ export function StatsView({
   mealSplit,
   heightCm,
   insights,
+  bodyComp,
+  yearly,
+  monthly,
+  age,
 }: {
   today: string;
   weight: WeightPoint[];
@@ -105,6 +112,10 @@ export function StatsView({
   mealSplit: Record<Meal, number>;
   heightCm: number | null;
   insights: StatsInsights;
+  bodyComp: BodyComposition | null;
+  yearly: YearlyAverage[];
+  monthly: MonthlyAverage[];
+  age: number | null;
 }) {
   const [range, setRange] = React.useState<Range>("30d");
   const cutoff = cutoffFor(range, today);
@@ -249,6 +260,7 @@ export function StatsView({
       <Section title="Body">
         <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} today={today} />
         <CompositionChart data={fWeight} />
+        <BodyInsights bodyComp={bodyComp} yearly={yearly} monthly={monthly} age={age} />
         <HeartRateChart data={fHr} />
         <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
       </Section>
