@@ -71,6 +71,31 @@ function parseJson(s: string | undefined): Record<string, unknown> {
   }
 }
 
+/**
+ * Drop physically-impossible macros from corrupt MFP rows (e.g. a 596 kcal
+ * "Baguette" logged with 3445 g fat / 7155 g sat-fat). A macro can't imply far
+ * more energy than the entry's calories: fat ~9 kcal/g, carbs/protein ~4. Values
+ * past that ceiling (plus slack) are data-entry errors → null/zero them; the kcal
+ * column itself is reliable and kept. sat-fat ≤ fat, fiber ≤ carbs.
+ */
+function sanitizeMacros(
+  kcal: number,
+  raw: { fat: number; satFat: number | null; carbs: number; protein: number; fiber: number | null },
+) {
+  const ceil = kcal + 50; // allow logging slack / rounding
+  const ok = (g: number, perGram: number) => g * perGram <= ceil;
+  const fat = ok(raw.fat, 9) ? raw.fat : 0;
+  const carbs = ok(raw.carbs, 4) ? raw.carbs : 0;
+  const protein = ok(raw.protein, 4) ? raw.protein : 0;
+  // sat-fat is a subset of fat: invalid if it implies too much energy or exceeds total fat.
+  const satFat =
+    raw.satFat == null ? null : !ok(raw.satFat, 9) || raw.satFat > fat ? (fat > 0 ? fat : null) : raw.satFat;
+  // fiber is a subset of carbs.
+  const fiber =
+    raw.fiber == null ? null : !ok(raw.fiber, 4) || raw.fiber > carbs ? (carbs > 0 ? carbs : null) : raw.fiber;
+  return { fat, carbs, protein, satFat, fiber };
+}
+
 const isDate = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const range = (ds: string[]) => (ds.length ? `${ds.reduce((a, b) => (a < b ? a : b))} → ${ds.reduce((a, b) => (a > b ? a : b))}` : "—");
 
@@ -125,9 +150,19 @@ async function main() {
   const foods = (byType.get("Foods") ?? []).filter((r) => isDate(r["date"]));
   const mealTally = new Map<string, number>();
   const foodStmts: Stmt[] = [];
+  let scrubbed = 0;
   for (const r of foods) {
     const meal = mapMeal((parseJson(r["details_json"])["meal"] as string) || "");
     mealTally.set(meal, (mealTally.get(meal) ?? 0) + 1);
+    const kcal = num(r["calories"]) ?? 0;
+    const macro = sanitizeMacros(kcal, {
+      fat: num(r["fat_g"]) ?? 0,
+      satFat: num(r["saturated_fat_g"]),
+      carbs: num(r["carbs_g"]) ?? 0,
+      protein: num(r["protein_g"]) ?? 0,
+      fiber: num(r["fiber_g"]),
+    });
+    if ((num(r["fat_g"]) ?? 0) !== macro.fat || (num(r["carbs_g"]) ?? 0) !== macro.carbs) scrubbed++;
     foodStmts.push(
       db.insert(foodLog).values({
         date: r["date"],
@@ -139,12 +174,12 @@ async function main() {
         // So store the totals as the snapshot and pin quantity=1 — otherwise a
         // "2500 ml beer" row (kcal already 787) would be multiplied by 2500.
         quantity: 1,
-        kcal: num(r["calories"]) ?? 0,
-        protein: num(r["protein_g"]) ?? 0,
-        carbs: num(r["carbs_g"]) ?? 0,
-        fat: num(r["fat_g"]) ?? 0,
-        fiber: num(r["fiber_g"]),
-        saturatedFat: num(r["saturated_fat_g"]),
+        kcal,
+        protein: macro.protein,
+        carbs: macro.carbs,
+        fat: macro.fat,
+        fiber: macro.fiber,
+        saturatedFat: macro.satFat,
         servingSize: 100,
         servingUnit: r["unit"] || "serving",
         source: SOURCE,
@@ -154,7 +189,8 @@ async function main() {
     );
   }
   console.log(`FOOD    ${foods.length} entries  (${range(foods.map((r) => r["date"]))})`);
-  console.log(`        meals: ${[...mealTally].map(([m, n]) => `${m} ${n}`).join(", ")}\n`);
+  console.log(`        meals: ${[...mealTally].map(([m, n]) => `${m} ${n}`).join(", ")}`);
+  console.log(`        scrubbed implausible macros on ${scrubbed} row(s)\n`);
 
   // ---- 3. Cardio → cardio_sessions ----
   const exercise = byType.get("Exercise") ?? [];
