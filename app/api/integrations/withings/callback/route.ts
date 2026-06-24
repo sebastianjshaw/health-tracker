@@ -7,13 +7,23 @@ const STATE_COOKIE = "withings_oauth_state";
 
 /** Withings OAuth redirect target: verify state, exchange code, store tokens. */
 export async function GET(request: NextRequest) {
-  if (!(await isAuthenticated())) {
-    return NextResponse.redirect(new URL("/login", request.url));
-  }
-
   const params = request.nextUrl.searchParams;
   const code = params.get("code");
   const state = params.get("state");
+
+  // Withings validates the registered URL by pinging it server-side (no OAuth
+  // params, no session). Answer that reachability check with a plain 200 — no
+  // token work happens without a code, so this exposes nothing.
+  if (!code) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // A real return carries code+state; gate the token exchange on the session
+  // (the user was logged in when they started the flow, so the cookie rides the
+  // top-level redirect back).
+  if (!(await isAuthenticated())) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
   const store = await cookies();
   const expected = store.get(STATE_COOKIE)?.value;
   store.delete(STATE_COOKIE);

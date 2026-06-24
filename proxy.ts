@@ -9,6 +9,11 @@ export async function proxy(request: NextRequest) {
   // Cron sync authenticates itself with CRON_SECRET (no session cookie).
   if (pathname.startsWith("/api/cron/")) return NextResponse.next();
 
+  // OAuth callbacks must be reachable without a prior session: the provider
+  // pings them to validate the URL (no cookie), and the real return is gated by
+  // the matching state cookie + session inside the handler itself.
+  if (pathname.endsWith("/integrations/withings/callback")) return NextResponse.next();
+
   const isLogin = pathname === "/login";
   const valid = await isValidToken(request.cookies.get(SESSION_COOKIE)?.value);
 
