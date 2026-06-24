@@ -24,6 +24,7 @@ export default async function MeasurementsPage() {
       leanMassKg: m.leanMassKg,
       muscleMassKg: m.muscleMassKg,
       boneMassKg: m.boneMassKg,
+      hydrationKg: m.hydrationKg,
     })),
     { heightCm: profile.heightCm, sex: profile.sex },
   );

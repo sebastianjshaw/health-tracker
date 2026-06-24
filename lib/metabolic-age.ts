@@ -109,6 +109,7 @@ export function metabolicAge(opts: {
 export type BodyComposition = {
   /** The date of the reading these figures derive from. */
   date: string;
+  weightKg: number;
   leanMassKg: number;
   fatMassKg: number | null;
   ffmi: number | null;
@@ -116,6 +117,7 @@ export type BodyComposition = {
   /** Scale-measured extras (Withings), null when not provided by the reading. */
   muscleMassKg: number | null;
   boneMassKg: number | null;
+  hydrationKg: number | null;
   /** True when lean mass came from a scale measurement rather than weight×(1−bf). */
   measured: boolean;
 };
@@ -128,6 +130,7 @@ type BodyReading = {
   leanMassKg?: number | null;
   muscleMassKg?: number | null;
   boneMassKg?: number | null;
+  hydrationKg?: number | null;
 };
 
 /**
@@ -149,6 +152,7 @@ export function latestBodyComposition(
     const h = profile.heightCm;
     return {
       date: r.date,
+      weightKg: r.weightKg,
       leanMassKg: Math.round(lean * 10) / 10,
       // Measured lean → fat is the remainder; else fall back to the bf-derived split.
       fatMassKg: measuredLean != null
@@ -163,6 +167,7 @@ export function latestBodyComposition(
       }),
       muscleMassKg: r.muscleMassKg ?? null,
       boneMassKg: r.boneMassKg ?? null,
+      hydrationKg: r.hydrationKg ?? null,
       measured: measuredLean != null,
     };
   }

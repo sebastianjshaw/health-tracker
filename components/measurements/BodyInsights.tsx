@@ -68,6 +68,17 @@ export function BodyInsights({
           {bodyComp.boneMassKg != null && (
             <Tile label="Bone mass" value={`${trimNum(bodyComp.boneMassKg)} kg`} />
           )}
+          {bodyComp.hydrationKg != null && (
+            <Tile
+              label="Hydration"
+              value={`${trimNum(bodyComp.hydrationKg)} kg`}
+              sub={
+                bodyComp.weightKg != null
+                  ? `${Math.round((bodyComp.hydrationKg / bodyComp.weightKg) * 100)}% of mass`
+                  : "total body water"
+              }
+            />
+          )}
           {bodyComp.ffmi != null && (
             <Tile label="FFMI" value={`${trimNum(bodyComp.ffmi)}`} sub="lean ÷ height²" />
           )}
