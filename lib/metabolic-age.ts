@@ -66,6 +66,44 @@ export function bodyCompSeries(
   return out;
 }
 
+export type CompositionBar = { date: string; fatKg: number; leanKg: number; boneKg: number };
+
+/**
+ * Per-weigh-in breakdown of bodyweight into fat / lean (soft) / bone, designed
+ * to STACK to total weight. Fat-free mass is the scale's measured value when
+ * present (else weight×(1−bf)); bone is split out of it when measured, leaving
+ * "lean" as the soft lean tissue (≈ Withings' muscle mass). Days with no fat/lean
+ * split (weight only) are skipped. Ascending in → ascending out.
+ *
+ * fat + lean + bone === weight by construction, so the stack height reads as
+ * bodyweight and the segments show how that weight is composed over time.
+ */
+export function compositionBars(
+  rows: {
+    date: string;
+    weight: number;
+    bodyFat: number | null;
+    leanMass?: number | null;
+    boneMass?: number | null;
+  }[],
+): CompositionBar[] {
+  const r1 = (n: number) => Math.round(n * 10) / 10;
+  const out: CompositionBar[] = [];
+  for (const r of rows) {
+    const measuredLean = r.leanMass != null && r.leanMass > 0 ? r.leanMass : null;
+    const fatFree = measuredLean ?? leanBodyMass(r.weight, r.bodyFat);
+    if (fatFree == null) continue; // need a fat/lean split
+    const bone = r.boneMass != null && r.boneMass > 0 ? Math.min(r.boneMass, fatFree) : 0;
+    out.push({
+      date: r.date,
+      fatKg: Math.max(0, r1(r.weight - fatFree)),
+      leanKg: Math.max(0, r1(fatFree - bone)),
+      boneKg: r1(bone),
+    });
+  }
+  return out;
+}
+
 /** Midpoint of a healthy body-fat range by sex (%). Excess fat above this ages
  * the metabolic-age estimate. */
 function healthyBodyFat(sex: string): number {

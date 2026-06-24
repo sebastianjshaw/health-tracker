@@ -2,12 +2,36 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   bodyCompSeries,
+  compositionBars,
   fatMass,
   ffmi,
   latestBodyComposition,
   leanBodyMass,
   metabolicAge,
 } from "./metabolic-age";
+
+describe("compositionBars", () => {
+  it("splits measured days into fat/lean/bone that sum to weight", () => {
+    const [bar] = compositionBars([
+      { date: "2026-06-24", weight: 112, bodyFat: 31.5, leanMass: 76.7, boneMass: 3.8 },
+    ]);
+    assert.equal(bar.fatKg, 35.3); // 112 − 76.7 fat-free
+    assert.equal(bar.leanKg, 72.9); // 76.7 fat-free − 3.8 bone
+    assert.equal(bar.boneKg, 3.8);
+    assert.equal(bar.fatKg + bar.leanKg + bar.boneKg, 112);
+  });
+
+  it("falls back to bf-derived fat-free with zero bone when only weight+bf", () => {
+    const [bar] = compositionBars([{ date: "2026-06-19", weight: 110, bodyFat: 30 }]);
+    assert.equal(bar.fatKg, 33); // 110 × 0.30
+    assert.equal(bar.leanKg, 77); // fat-free, no bone to split out
+    assert.equal(bar.boneKg, 0);
+  });
+
+  it("skips weigh-ins with no fat/lean split", () => {
+    assert.deepEqual(compositionBars([{ date: "2026-06-15", weight: 113, bodyFat: null }]), []);
+  });
+});
 
 describe("leanBodyMass", () => {
   it("subtracts fat mass", () => {

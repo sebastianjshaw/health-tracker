@@ -62,6 +62,9 @@ export type WeightPoint = {
    * derived weight×(1−bf) estimate. Null/absent for manual/legacy entries and
    * series built without it (e.g. the report's summarised weights). */
   leanMass?: number | null;
+  /** Scale-measured bone mass (kg), when available — used to split fat-free mass
+   * into lean (soft) + bone for the composition chart. */
+  boneMass?: number | null;
 };
 
 /** Weigh-ins ascending. Optionally bounded to an inclusive [from, to] range. */
@@ -82,6 +85,7 @@ export async function getWeightSeries(from?: string, to?: string): Promise<Weigh
     weight: r.weightKg as number,
     bodyFat: r.bodyFatPct ?? null,
     leanMass: r.leanMassKg ?? null,
+    boneMass: r.boneMassKg ?? null,
   }));
 }
 

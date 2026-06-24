@@ -17,6 +17,7 @@ import {
 import { Card, EmptyState } from "@/components/ui";
 import { LogWeightButton } from "@/components/stats/LogWeightButton";
 import { projectGoalEta } from "@/lib/goal-eta";
+import { compositionBars } from "@/lib/metabolic-age";
 import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
 import {
   Granularity,
@@ -609,6 +610,66 @@ export function HydrationChart({ data }: { data: CaloriePoint[] }) {
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
             Estimated from logged mass &amp; macros — directional, not exact.
+          </p>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+const COMP_COLORS = {
+  fat: "#f59e0b", // fat mass
+  lean: "#16a34a", // soft lean (≈ muscle) mass
+  bone: "#94a3b8", // bone mineral mass
+};
+
+/** Bodyweight stacked into fat / lean / bone per weigh-in, so the bar height is
+ * total weight and the segments show how composition shifts over time. Only days
+ * with a fat/lean split (scale body-fat or measured lean) appear. */
+export function CompositionChart({ data }: { data: WeightPoint[] }) {
+  const bars = React.useMemo(() => compositionBars(data), [data]);
+  const hasData = bars.length > 0;
+  const last = bars[bars.length - 1];
+  const first = bars[0];
+  const leanDelta =
+    first && last && bars.length > 1 ? Math.round((last.leanKg - first.leanKg) * 10) / 10 : null;
+  const summary = last
+    ? `Body composition: latest ${last.fatKg} kg fat, ${last.leanKg} kg lean, ${last.boneKg} kg bone.`
+    : "Body composition over time.";
+  return (
+    <ChartCard title="Body composition (kg)">
+      {!hasData ? (
+        <EmptyState>Weigh-ins with a body-fat reading will break weight into fat, lean &amp; bone here.</EmptyState>
+      ) : (
+        <>
+          <div role="img" aria-label={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={bars} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+                <YAxis stroke={AXIS} fontSize={11} width={40} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) => shortDate(String(label))}
+                  formatter={(value, name) => [`${value} kg`, name]}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                <Bar dataKey="fatKg" stackId="c" fill={COMP_COLORS.fat} name="Fat" />
+                <Bar dataKey="leanKg" stackId="c" fill={COMP_COLORS.lean} name="Lean" />
+                <Bar dataKey="boneKg" stackId="c" fill={COMP_COLORS.bone} name="Bone" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <Swatch color={COMP_COLORS.fat} label="Fat" />
+            <Swatch color={COMP_COLORS.lean} label="Lean" />
+            <Swatch color={COMP_COLORS.bone} label="Bone" />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Stacks to total weight. “Lean” is soft lean tissue (≈ muscle); bone splits out only when the
+            scale measures it.
+            {leanDelta != null && ` Lean ${leanDelta >= 0 ? "+" : ""}${leanDelta} kg over this range.`}
           </p>
         </>
       )}

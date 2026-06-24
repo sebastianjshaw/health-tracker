@@ -7,6 +7,7 @@ import { Meal } from "@/lib/constants";
 import { bmi, bmiClass } from "@/lib/health";
 import {
   CalorieChart,
+  CompositionChart,
   DistanceChart,
   FiberChart,
   HeartRateChart,
@@ -247,6 +248,7 @@ export function StatsView({
 
       <Section title="Body">
         <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} today={today} />
+        <CompositionChart data={fWeight} />
         <HeartRateChart data={fHr} />
         <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
       </Section>

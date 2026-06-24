@@ -40,6 +40,11 @@ export const HydrationChart = dynamic(
   { ssr: false, loading: ChartSkeleton },
 );
 
+export const CompositionChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.CompositionChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
 export const LiftChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.LiftChart })),
   { ssr: false, loading: ChartSkeleton },
