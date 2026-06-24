@@ -1,5 +1,5 @@
 import "server-only";
-import { desc, inArray } from "drizzle-orm";
+import { and, desc, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { cardioSessions, freeformLifts, liftSessions, liftSets } from "@/db/schema";
 import {
@@ -15,6 +15,17 @@ export async function getRecentCardio(limit = 15) {
     .from(cardioSessions)
     .orderBy(desc(cardioSessions.date), desc(cardioSessions.id))
     .limit(limit)
+    .all();
+}
+
+/** All cardio sessions within an inclusive [from, to] date range (for the
+ * year-scoped character sheet — pace/volume over a whole year). */
+export async function getCardioInRange(from: string, to: string) {
+  return db
+    .select()
+    .from(cardioSessions)
+    .where(and(gte(cardioSessions.date, from), lte(cardioSessions.date, to)))
+    .orderBy(desc(cardioSessions.date), desc(cardioSessions.id))
     .all();
 }
 
