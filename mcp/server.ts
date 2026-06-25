@@ -33,6 +33,7 @@ import {
   DEFAULT_TARGETS,
   EXERCISE_LABELS,
   Exercise,
+  HEALTH_STATUSES,
   contingencyMultiplier,
   evolutionForSource,
   type Contingency,
@@ -867,6 +868,38 @@ server.tool(
         null,
         2,
       ),
+    );
+  },
+);
+
+server.tool(
+  "set_day_status",
+  "Set a day's health status (healthy | unwell | injured | vacation). Defaults to today but accepts ANY date, including future ones — so you can mark a vacation or planned time off / injury in advance. 'healthy' is the default and clears any flag for that day.",
+  {
+    status: z.enum(HEALTH_STATUSES),
+    date: ISO.optional(),
+    // Convenience for ranges (e.g. a holiday week): apply to date..endDate inclusive.
+    endDate: ISO.optional(),
+  },
+  async ({ status, date, endDate }) => {
+    const start = date ?? todayISO();
+    const end = endDate && endDate >= start ? endDate : start;
+    const dates: string[] = [];
+    for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
+
+    if (status === "healthy") {
+      await db.delete(dayHealth).where(inArray(dayHealth.date, dates));
+    } else {
+      for (const d of dates) {
+        await db
+          .insert(dayHealth)
+          .values({ date: d, status })
+          .onConflictDoUpdate({ target: dayHealth.date, set: { status } });
+      }
+    }
+    const span = dates.length > 1 ? `${start} → ${end} (${dates.length} days)` : start;
+    return text(
+      status === "healthy" ? `Cleared status (set healthy) for ${span}.` : `Marked ${status} for ${span}.`,
     );
   },
 );

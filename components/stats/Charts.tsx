@@ -172,7 +172,7 @@ export function WeightChart({
       ) : (
         <div role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={chartData} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+          <LineChart data={chartData} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
             <YAxis
@@ -304,7 +304,7 @@ export function MarkerWeightChart({
   return (
     <div role="img" aria-label={`${markerName} vs body weight over time`}>
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+        <LineChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
           <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
           <YAxis yAxisId="marker" stroke={MARKER_COLOR} fontSize={11} width={44} />
@@ -393,7 +393,7 @@ export function CalorieChart({
         <>
           <div role="img" aria-label={summary}>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+            <BarChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
@@ -481,7 +481,7 @@ function NutrientBarChart({
       ) : (
         <div role="img" aria-label={summary}>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+            <BarChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
@@ -569,7 +569,7 @@ export function HydrationChart({ data }: { data: CaloriePoint[] }) {
         <>
           <div role="img" aria-label={summary}>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <BarChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
                 <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
                 <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
@@ -644,7 +644,7 @@ export function CompositionChart({ data }: { data: WeightPoint[] }) {
         <>
           <div role="img" aria-label={summary}>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={bars} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <BarChart data={bars} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
                 <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
@@ -859,7 +859,7 @@ export function DistanceChart({
         <>
           <div role="img" aria-label={summary}>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
                 <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
@@ -942,7 +942,7 @@ export function SleepChart({
         <>
           <div role="img" aria-label={summary}>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+              <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
                 <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke={AXIS} fontSize={11} width={40} unit="h" />
@@ -999,7 +999,7 @@ export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
       ) : (
         <div role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -8 }}>
+          <LineChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
             <YAxis stroke={AXIS} fontSize={11} width={40} domain={[lo, hi]} allowDecimals={false} />
