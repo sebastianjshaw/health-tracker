@@ -24,6 +24,7 @@ import {
   heartRateDaily,
   liftSessions,
   liftSets,
+  recurringFoods,
   settings,
   sleepSessions,
 } from "../db/schema";
@@ -153,7 +154,13 @@ type DayNutrition = {
 async function nutritionForRange(start: string, end: string): Promise<DayNutrition[]> {
   const dates: string[] = [];
   for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
-  await materializeRecurringForDates(db, dates);
+  // Recurring defaults only apply from their startDate (recent); materialising
+  // the whole range would build a huge IN(...) for dates that can't have one.
+  const recStart = (
+    await db.select({ d: sql<string>`min(${recurringFoods.startDate})` }).from(recurringFoods).get()
+  )?.d;
+  const matDates = recStart ? dates.filter((d) => d >= recStart) : [];
+  if (matDates.length) await materializeRecurringForDates(db, matDates);
   const contingency = await loadContingency();
   const history = await loadTargetHistory();
 
@@ -465,16 +472,27 @@ server.tool(
 
 server.tool(
   "get_weight_trend",
-  "Recent body weight (newest first) plus goal distance and an energy-balance PREDICTION per weigh-in: what weight the logged food (contingency-adjusted) and exercise imply, vs the actual measured weight. A persistent gap means logging/contingency is off — predicted above actual = losing faster than logs suggest (under-reported intake); below = the reverse.",
-  { limit: z.number().optional() },
-  async ({ limit }) => {
-    const rows = await db
-      .select()
+  "Body weight (newest first) plus goal distance and an energy-balance PREDICTION per weigh-in: what weight the logged food (contingency-adjusted) and exercise imply, vs the actual measured weight. A persistent gap means logging/contingency is off — predicted above actual = losing faster than logs suggest (under-reported intake); below = the reverse. Returns the most recent `limit` weigh-ins by default; the `coverage` field reports the TRUE full span (history can go back many years), and pass `from` (YYYY-MM-DD) to pull everything since a date for older analysis.",
+  { limit: z.number().optional(), from: ISO.optional() },
+  async ({ limit, from }) => {
+    // True extent of the data, independent of the returned slice, so callers
+    // never mistake the oldest returned row for the start of history.
+    const cov = await db
+      .select({
+        earliest: sql<string>`min(${bodyMetrics.date})`,
+        latest: sql<string>`max(${bodyMetrics.date})`,
+        count: sql<number>`count(*)`,
+      })
       .from(bodyMetrics)
       .where(isNotNull(bodyMetrics.weightKg))
-      .orderBy(desc(bodyMetrics.date))
-      .limit(limit ?? 30)
-      .all();
+      .get();
+    const coverage = { earliest: cov?.earliest ?? null, latest: cov?.latest ?? null, count: cov?.count ?? 0 };
+
+    const where = from
+      ? and(isNotNull(bodyMetrics.weightKg), gte(bodyMetrics.date, from))
+      : isNotNull(bodyMetrics.weightKg);
+    const base = db.select().from(bodyMetrics).where(where).orderBy(desc(bodyMetrics.date));
+    const rows = await (from ? base : base.limit(limit ?? 30)).all();
 
     const goalWeight = await getSetting<number | null>("goalWeight", null);
     const latest = rows[0]?.weightKg ?? null;
@@ -484,7 +502,14 @@ server.tool(
       .reverse()
       .map((r) => ({ date: r.date, weight: r.weightKg as number }));
     let predictions: ReturnType<typeof predictWeights> = [];
-    if (weighIns.length >= 2) {
+    // Predictions need a per-day nutrition+cardio scan over the span; skip it for
+    // very long pulls (e.g. a multi-year `from`) where it'd be heavy and isn't
+    // the point — the raw weigh-ins + coverage are what matter there.
+    const spanDays =
+      weighIns.length >= 2
+        ? (Date.parse(weighIns[weighIns.length - 1].date) - Date.parse(weighIns[0].date)) / 864e5
+        : 0;
+    if (weighIns.length >= 2 && spanDays <= 400) {
       const start = weighIns[0].date;
       const end = weighIns[weighIns.length - 1].date;
       const nut = await nutritionForRange(start, end);
@@ -516,6 +541,10 @@ server.tool(
     return text(
       JSON.stringify(
         {
+          // Full extent of the weight history (NOT just the returned slice). If
+          // `returned` < coverage.count, older weigh-ins exist — pass `from` to fetch them.
+          coverage,
+          returned: rows.length,
           goalWeight,
           toGoalKg:
             latest != null && goalWeight != null
@@ -713,28 +742,42 @@ server.tool(
 
 server.tool(
   "get_cardio",
-  "Recent cardio sessions (run/bike/row/walk/swim/other), newest first. Defaults to the last 30.",
-  { limit: z.number().optional() },
-  async ({ limit }) => {
-    const rows = await db
+  "Cardio sessions (run/bike/row/walk/swim/other), newest first. Returns the most recent `limit` (default 30); `coverage` reports the TRUE full span (history can go back years), and pass `from` (YYYY-MM-DD) to fetch everything since a date.",
+  { limit: z.number().optional(), from: ISO.optional() },
+  async ({ limit, from }) => {
+    const cov = await db
+      .select({
+        earliest: sql<string>`min(${cardioSessions.date})`,
+        latest: sql<string>`max(${cardioSessions.date})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(cardioSessions)
+      .get();
+    const coverage = { earliest: cov?.earliest ?? null, latest: cov?.latest ?? null, count: cov?.count ?? 0 };
+
+    const base = db
       .select()
       .from(cardioSessions)
-      .orderBy(desc(cardioSessions.date), desc(cardioSessions.id))
-      .limit(limit ?? 30)
-      .all();
+      .where(from ? gte(cardioSessions.date, from) : undefined)
+      .orderBy(desc(cardioSessions.date), desc(cardioSessions.id));
+    const rows = await (from ? base : base.limit(limit ?? 30)).all();
     return text(
       JSON.stringify(
-        rows.map((r) => ({
-          date: r.date,
-          startedAt: r.startedAt ?? undefined,
-          type: r.type,
-          durationMin: r.durationMin,
-          distanceKm: r.distanceKm,
-          avgHr: r.avgHr,
-          kcal: r.kcal,
-          source: r.source,
-          notes: r.notes ?? undefined,
-        })),
+        {
+          coverage,
+          returned: rows.length,
+          sessions: rows.map((r) => ({
+            date: r.date,
+            startedAt: r.startedAt ?? undefined,
+            type: r.type,
+            durationMin: r.durationMin,
+            distanceKm: r.distanceKm,
+            avgHr: r.avgHr,
+            kcal: r.kcal,
+            source: r.source,
+            notes: r.notes ?? undefined,
+          })),
+        },
         null,
         2,
       ),
@@ -818,13 +861,27 @@ server.tool(
 
 server.tool(
   "get_nutrition_trend",
-  "Daily nutrition & hydration over the last N days (default 30): per day the contingency-adjusted calories vs that day's effective target, protein, fiber, saturated fat, and estimated water (split by source). Includes averages and adherence counts — use this for weekly/period coaching, not single-day questions (use get_day for those).",
-  { days: z.number().optional() },
-  async ({ days }) => {
-    const n = Math.max(1, Math.min(days ?? 30, 365));
+  "Daily nutrition & hydration over a period: per day the contingency-adjusted calories vs that day's effective target, protein, fiber, saturated fat, and estimated water (split by source), with averages and adherence counts. Defaults to the last N days (default 30, max 365); pass `from` (YYYY-MM-DD) to analyse older history instead — the `coverage` field reports the TRUE span (logging can go back years). Use for weekly/period coaching, not single-day questions (use get_day).",
+  { days: z.number().optional(), from: ISO.optional() },
+  async ({ days, from }) => {
     const today = todayISO();
-    const series = await nutritionForRange(addDays(today, -(n - 1)), today);
-    const logged = series.filter((s) => s.loggedKcal > 0);
+    // True extent of logged food, so callers know history beyond the slice exists.
+    const cov = await db
+      .select({
+        earliest: sql<string>`min(${foodLog.date})`,
+        latest: sql<string>`max(${foodLog.date})`,
+        daysLogged: sql<number>`count(distinct ${foodLog.date})`,
+      })
+      .from(foodLog)
+      .get();
+    const coverage = { earliest: cov?.earliest ?? null, latest: cov?.latest ?? null, daysLogged: cov?.daysLogged ?? 0 };
+
+    const start = from ?? addDays(today, -(Math.max(1, Math.min(days ?? 30, 365)) - 1));
+    const full = await nutritionForRange(start, today);
+    // For long historical pulls, return only logged days to keep the payload sane.
+    const longPull = !!from && (Date.parse(today) - Date.parse(start)) / 864e5 > 400;
+    const series = longPull ? full.filter((s) => s.loggedKcal > 0) : full;
+    const logged = full.filter((s) => s.loggedKcal > 0);
     const avg = (sel: (s: DayNutrition) => number) =>
       logged.length ? Math.round(logged.reduce((a, s) => a + sel(s), 0) / logged.length) : 0;
     const summary = {
@@ -837,7 +894,7 @@ server.tool(
       daysAtOrUnderKcalTarget: logged.filter((s) => s.kcal <= s.targetKcal).length,
       daysHitProteinTarget: logged.filter((s) => s.protein >= s.targetProtein).length,
     };
-    return text(JSON.stringify({ rangeDays: n, summary, series }, null, 2));
+    return text(JSON.stringify({ coverage, range: { from: start, to: today }, summary, series }, null, 2));
   },
 );
 
