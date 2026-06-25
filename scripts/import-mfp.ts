@@ -96,6 +96,9 @@ function sanitizeMacros(
   return { fat, carbs, protein, satFat, fiber };
 }
 
+const milesToKm = (mi: number | null): number | null =>
+  mi == null ? null : Math.round(mi * 1.609344 * 1000) / 1000;
+
 const isDate = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const range = (ds: string[]) => (ds.length ? `${ds.reduce((a, b) => (a < b ? a : b))} → ${ds.reduce((a, b) => (a > b ? a : b))}` : "—");
 
@@ -203,7 +206,9 @@ async function main() {
         date: r["date"],
         type: mapCardioType(r["description"] || ""),
         durationMin: num(String(j["minutes"] ?? "")),
-        distanceKm: num(String(j["distance"] ?? "")), // km (per max-speed sanity check)
+        // MFP exports this distance in MILES (verified against the same runs in
+        // the Strava export: mfp×1.609 == strava km). Convert to km on import.
+        distanceKm: milesToKm(num(String(j["distance"] ?? ""))),
         kcal: num(r["value"]),
         startedAt: typeof j["start_time"] === "string" ? (j["start_time"] as string) : null,
         source: SOURCE,

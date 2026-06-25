@@ -130,6 +130,13 @@ export const cardioSessions = sqliteTable("cardio_sessions", {
   durationMin: real("duration_min"),
   distanceKm: real("distance_km"),
   avgHr: integer("avg_hr"),
+  // Richer per-session metrics, currently populated by the Strava import.
+  maxHr: integer("max_hr"),
+  elevationGainM: real("elevation_gain_m"),
+  relativeEffort: integer("relative_effort"),
+  // Google-encoded polyline (precision 5) of the GPS track, when one exists.
+  // Stored for later map/elevation views — no renderer consumes it yet.
+  gpsTrack: text("gps_track"),
   kcal: real("kcal"),
   notes: text("notes"),
   // ISO start time of the session (from the provider's interval, or set when
