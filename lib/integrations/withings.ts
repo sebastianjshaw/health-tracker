@@ -187,3 +187,43 @@ export async function getMeasures(
     updatetime: body.updatetime ?? null,
   };
 }
+
+// ---- Notify (webhook) ----
+// Withings pushes a notification the instant a measurement is recorded, so a
+// weigh-in syncs within seconds without depending on the (flaky) polling cron.
+const NOTIFY_URL = "https://wbsapi.withings.net/notify";
+const NOTIFY_APPLI = "1"; // 1 = new weight-related (smart-scale) data
+
+/** The Withings user id we're connected as — to verify inbound notifications. */
+export async function getUserId(): Promise<string | null> {
+  return (await getTokens())?.userId ?? null;
+}
+
+/**
+ * Subscribe `callbackUrl` to weight notifications (appli=1). Withings validates
+ * the URL by calling it during subscribe, so it must be publicly reachable and
+ * 200. Idempotent: re-subscribing the same URL is a no-op on Withings' side.
+ * Best-effort — returns false (rather than throwing) so a hiccup never blocks
+ * the OAuth connect flow.
+ */
+export async function subscribeNotifications(callbackUrl: string): Promise<boolean> {
+  const token = await getAccessToken();
+  if (!token) return false;
+  try {
+    await postForm(NOTIFY_URL, { action: "subscribe", callbackurl: callbackUrl, appli: NOTIFY_APPLI, comment: "Baseline" }, token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Remove a notification subscription (called on disconnect). Best-effort. */
+export async function revokeNotifications(callbackUrl: string): Promise<void> {
+  const token = await getAccessToken();
+  if (!token) return;
+  try {
+    await postForm(NOTIFY_URL, { action: "revoke", callbackurl: callbackUrl, appli: NOTIFY_APPLI }, token);
+  } catch {
+    /* best-effort */
+  }
+}

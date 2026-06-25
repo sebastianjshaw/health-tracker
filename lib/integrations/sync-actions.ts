@@ -1,10 +1,15 @@
 "use server";
 
+import { headers } from "next/headers";
 import { actionFail, actionOk, type ActionResult } from "@/lib/action-result";
 import { requireAuth } from "@/lib/auth";
 import { revalidatePaths } from "@/lib/revalidate";
 import { disconnect as disconnectGoogleHealth, isConnected as googleConnected } from "./google-health";
-import { disconnect as disconnectWithingsCloud, isConnected as withingsConnected } from "./withings";
+import {
+  disconnect as disconnectWithingsCloud,
+  isConnected as withingsConnected,
+  revokeNotifications,
+} from "./withings";
 import { syncGoogleHealth, syncWithings } from "./sync";
 
 const SYNC_PATHS = ["/", "/stats", "/activity", "/settings", "/report"] as const;
@@ -51,6 +56,15 @@ export async function disconnectGoogle(): Promise<ActionResult> {
 
 export async function disconnectWithings(): Promise<ActionResult> {
   await requireAuth();
+  // Revoke the push subscription first (needs the token), then clear it.
+  try {
+    const h = await headers();
+    const host = h.get("host");
+    const proto = h.get("x-forwarded-proto") ?? "https";
+    if (host) await revokeNotifications(`${proto}://${host}/api/integrations/withings/notify`);
+  } catch {
+    /* best-effort */
+  }
   await disconnectWithingsCloud();
   revalidatePaths("/settings");
   return actionOk();

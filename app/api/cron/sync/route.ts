@@ -37,14 +37,18 @@ export async function GET(request: NextRequest) {
     try {
       result.google = await syncGoogleHealth();
     } catch (e) {
-      errors.push(`google-health: ${e instanceof Error ? e.message : "failed"}`);
+      const msg = e instanceof Error ? e.message : "failed";
+      console.error("[cron/sync] google-health failed:", msg);
+      errors.push(`google-health: ${msg}`);
     }
   }
   if (withings) {
     try {
       result.withings = await syncWithings();
     } catch (e) {
-      errors.push(`withings: ${e instanceof Error ? e.message : "failed"}`);
+      const msg = e instanceof Error ? e.message : "failed";
+      console.error("[cron/sync] withings failed:", msg);
+      errors.push(`withings: ${msg}`);
     }
   }
 

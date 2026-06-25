@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { isAuthenticated } from "@/lib/auth";
-import { exchangeCode } from "@/lib/integrations/withings";
+import { exchangeCode, subscribeNotifications } from "@/lib/integrations/withings";
 
 const STATE_COOKIE = "withings_oauth_state";
 
@@ -34,6 +34,14 @@ export async function GET(request: NextRequest) {
 
   const redirectUri = new URL("/api/integrations/withings/callback", request.url).toString();
   const ok = await exchangeCode(code, redirectUri);
+
+  // Now that we hold a token, subscribe the Notify webhook so future weigh-ins
+  // push to us instantly. Best-effort — never blocks the connect on a hiccup.
+  if (ok) {
+    const notifyUrl = new URL("/api/integrations/withings/notify", request.url).toString();
+    await subscribeNotifications(notifyUrl);
+  }
+
   return NextResponse.redirect(
     new URL(ok ? "/settings?connected=withings" : "/settings?error=withings-token", request.url),
   );

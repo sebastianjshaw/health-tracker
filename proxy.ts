@@ -14,6 +14,10 @@ export async function proxy(request: NextRequest) {
   // the matching state cookie + session inside the handler itself.
   if (pathname.endsWith("/integrations/withings/callback")) return NextResponse.next();
 
+  // Withings Notify webhook: Withings POSTs here with no session. Safe — it only
+  // triggers our own authenticated sync (see the route's doc comment).
+  if (pathname.endsWith("/integrations/withings/notify")) return NextResponse.next();
+
   const isLogin = pathname === "/login";
   const valid = await isValidToken(request.cookies.get(SESSION_COOKIE)?.value);
 
