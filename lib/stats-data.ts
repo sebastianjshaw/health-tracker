@@ -1,5 +1,5 @@
 import "server-only";
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   bodyMetrics,
@@ -10,6 +10,7 @@ import {
   heartRateDaily,
   liftSessions,
   liftSets,
+  recurringFoods,
   sleepSessions,
 } from "@/db/schema";
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
@@ -193,6 +194,15 @@ export async function getCalorieSeries(days = 14): Promise<CaloriePoint[]> {
   return calorieSeriesRange(addDays(today, -(days - 1)), today);
 }
 
+/** Daily consumed totals across the entire logged history (earliest food-log day
+ * → today), so the stats charts can show years of imported history. Falls back
+ * to a short window when nothing is logged. */
+export async function getCalorieSeriesAll(): Promise<CaloriePoint[]> {
+  const today = todayISO();
+  const earliest = (await db.select({ d: sql<string>`min(${foodLog.date})` }).from(foodLog).get())?.d;
+  return calorieSeriesRange(earliest && earliest < today ? earliest : addDays(today, -13), today);
+}
+
 /** Daily consumed totals merged for an inclusive [start, end] date range. */
 export async function calorieSeriesRange(
   start: string,
@@ -201,7 +211,17 @@ export async function calorieSeriesRange(
   const dates: string[] = [];
   for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
 
-  await materializeRecurringRange(db, start, end);
+  // Recurring defaults only exist from their startDate (recent), and
+  // materialising writes a row per applicable day — so bound it to the window
+  // where templates can apply. Over a multi-year range this avoids building a
+  // huge IN(...) for dates that could never have a recurring row anyway.
+  const recStart = (
+    await db.select({ d: sql<string>`min(${recurringFoods.startDate})` }).from(recurringFoods).get()
+  )?.d;
+  if (recStart) {
+    const matStart = recStart > start ? recStart : start;
+    if (matStart <= end) await materializeRecurringRange(db, matStart, end);
+  }
   const contingency = await getContingency();
   const targetHistory = await getTargetHistory();
 

@@ -10,7 +10,7 @@ import { measuredTdee } from "@/lib/tdee";
 import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
 import {
   getBodyMetrics,
-  getCalorieSeries,
+  getCalorieSeriesAll,
   getCardioDistances,
   getRestingHrSeries,
   getSleepSeries,
@@ -29,7 +29,7 @@ export default async function StatsPage() {
       getBodyMetrics(),
       getWeightSeries(),
       getWeightPredictions(),
-      getCalorieSeries(365), // bounded; the range control filters client-side
+      getCalorieSeriesAll(), // full logged history; the range control filters client-side
       getCardioDistances(), // for the at-a-glance Distance tile (charts live on /activity)
       getSleepSeries(),
       getRestingHrSeries(),
