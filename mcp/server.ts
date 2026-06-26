@@ -44,6 +44,7 @@ import { inferCategory } from "../lib/food-category";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
 import { ageFrom } from "../lib/health";
 import { estimateCardioKcal } from "../lib/cardio-calories";
+import { parseSplits } from "../lib/splits";
 import { estimateWaterMl, waterSourceOf } from "../lib/hydration";
 import { totals as macroTotals } from "../lib/nutrition";
 import {
@@ -770,12 +771,18 @@ server.tool(
             date: r.date,
             startedAt: r.startedAt ?? undefined,
             type: r.type,
+            name: r.name ?? undefined,
             durationMin: r.durationMin,
             distanceKm: r.distanceKm,
             avgHr: r.avgHr,
+            maxHr: r.maxHr ?? undefined,
+            elevationGainM: r.elevationGainM ?? undefined,
+            relativeEffort: r.relativeEffort ?? undefined,
             kcal: r.kcal,
             source: r.source,
             notes: r.notes ?? undefined,
+            splits: r.splits ? parseSplits(r.splits) : undefined,
+            hasGpsTrack: r.gpsTrack ? true : undefined,
           })),
         },
         null,

@@ -4,11 +4,66 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Button, Field, Input, Select } from "@/components/ui";
 import { Sheet } from "@/components/Sheet";
+import { RouteThumbnail } from "./RouteThumbnail";
 import { CARDIO_LABELS, CARDIO_TYPES, CardioType } from "@/lib/constants";
 import { timeOf } from "@/lib/date";
 import { nullableNum } from "@/lib/format";
+import { formatClock, formatPace, parseSplits } from "@/lib/splits";
 import { updateCardio } from "@/lib/activity-actions";
 import type { CardioSession } from "@/db/schema";
+
+function CardioDetails({ session }: { session: CardioSession }) {
+  const splits = parseSplits(session.splits);
+  const stats = [
+    session.maxHr != null ? { label: "Max HR", value: `${session.maxHr} bpm` } : null,
+    session.elevationGainM != null && session.elevationGainM > 0
+      ? { label: "Elevation", value: `↑${Math.round(session.elevationGainM)} m` }
+      : null,
+    session.relativeEffort != null ? { label: "Relative effort", value: `${session.relativeEffort}` } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
+
+  if (!session.gpsTrack && stats.length === 0 && splits.length === 0) return null;
+
+  return (
+    <div className="mb-4 space-y-3">
+      {session.name?.trim() && <p className="font-medium">{session.name}</p>}
+      {session.gpsTrack && (
+        <RouteThumbnail track={session.gpsTrack} className="h-40 w-full text-accent" />
+      )}
+      {stats.length > 0 && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {stats.map((s) => (
+            <span key={s.label} className="text-muted-foreground">
+              {s.label}: <span className="font-medium text-foreground">{s.value}</span>
+            </span>
+          ))}
+        </div>
+      )}
+      {splits.length > 0 && (
+        <table className="w-full text-sm tabular-nums">
+          <thead>
+            <tr className="text-left text-xs text-muted-foreground">
+              <th className="py-1 font-medium">Split</th>
+              <th className="py-1 text-right font-medium">Time</th>
+              <th className="py-1 text-right font-medium">Split</th>
+              <th className="py-1 text-right font-medium">min/km</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {splits.map((s, i) => (
+              <tr key={i}>
+                <td className="py-1 font-medium">{s.label}</td>
+                <td className="py-1 text-right">{formatClock(s.cumulativeSec)}</td>
+                <td className="py-1 text-right text-muted-foreground">{formatClock(s.splitSec)}</td>
+                <td className="py-1 text-right text-muted-foreground">{formatPace(s.paceSecPerKm)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
 
 export function CardioEditSheet({
   session,
@@ -63,9 +118,10 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
 
   return (
     <form onSubmit={submit} className="space-y-3">
+      <CardioDetails session={session} />
       {imported && (
         <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Imported from Google Health — only notes can be edited.
+          Imported from {session.source === "race" ? "official race results" : session.source} — only notes can be edited.
         </p>
       )}
       <div className="grid grid-cols-2 gap-3">
