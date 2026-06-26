@@ -22,6 +22,8 @@ const COLUMNS: Array<{ name: string; ddl: string }> = [
   { name: "elevation_gain_m", ddl: "ALTER TABLE cardio_sessions ADD COLUMN elevation_gain_m real" },
   { name: "relative_effort", ddl: "ALTER TABLE cardio_sessions ADD COLUMN relative_effort integer" },
   { name: "gps_track", ddl: "ALTER TABLE cardio_sessions ADD COLUMN gps_track text" },
+  { name: "name", ddl: "ALTER TABLE cardio_sessions ADD COLUMN name text" },
+  { name: "splits", ddl: "ALTER TABLE cardio_sessions ADD COLUMN splits text" },
 ];
 
 async function main() {

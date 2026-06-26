@@ -137,6 +137,12 @@ export const cardioSessions = sqliteTable("cardio_sessions", {
   // Google-encoded polyline (precision 5) of the GPS track, when one exists.
   // Stored for later map/elevation views — no renderer consumes it yet.
   gpsTrack: text("gps_track"),
+  // Short title (e.g. the Strava activity name or a race name); `notes` is the
+  // longer free-text description. Lets the UI show a heading + detail separately.
+  name: text("name"),
+  // JSON-encoded race/interval splits: { unit, rows: [{ label, cumulativeSec,
+  // splitSec, paceSecPerKm, kmh }] }. Populated for races (official timing mats).
+  splits: text("splits"),
   kcal: real("kcal"),
   notes: text("notes"),
   // ISO start time of the session (from the provider's interval, or set when
