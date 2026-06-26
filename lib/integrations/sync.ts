@@ -27,6 +27,7 @@ import {
 
 const SOURCE = "google-health";
 const MIN_EXERCISE_MIN = 10; // below this, with no distance, treat as auto-detected noise
+const MAX_EXERCISE_MIN = 300; // above ~5h, treat as a stuck timer / GPS artifact, not a session
 const LOOKBACK_DAYS = 7; // re-check the last week each sync to catch late-arriving data
 
 // ---- small parse helpers (the API mixes numbers and int64-as-string) ----
@@ -169,6 +170,11 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     // Skip Google Fit's auto-detected micro-activities: short blips with no
     // distance (e.g. 1–5 min "OTHER"). Keep anything with a distance or ≥10 min.
     if ((distanceKm == null || distanceKm === 0) && (durationMin == null || durationMin < MIN_EXERCISE_MIN)) {
+      continue;
+    }
+    // Drop implausibly long sessions (a stuck timer / GPS left running): e.g. a
+    // 14 h "run" of 0.7 km. Real deliberate cardio here is well under 5 h.
+    if (durationMin != null && durationMin > MAX_EXERCISE_MIN) {
       continue;
     }
 

@@ -6,25 +6,32 @@ import { DateNav } from "@/components/DateNav";
 import { SyncButton } from "@/components/integrations/SyncButton";
 import { CardioForm } from "./CardioForm";
 import { CardioList } from "./CardioList";
+import { StrengthForm } from "./StrengthForm";
+import { StrengthList } from "./StrengthList";
 import { LiftTracker } from "./LiftTracker";
 import { LiftHistory } from "./LiftHistory";
 import type { CardioSession } from "@/db/schema";
-import type { LiftHistoryEntry, NextLiftWorkout } from "@/lib/activity-data";
+import type { FreeformLift, LiftHistoryEntry, NextLiftWorkout } from "@/lib/activity-data";
+
+type Tab = "lift" | "cardio" | "strength";
+const TAB_LABELS: Record<Tab, string> = { lift: "Lift 5×5", cardio: "Cardio", strength: "Strength" };
 
 export function ActivityView({
   date,
   cardio,
+  freeform,
   nextWorkout,
   liftHistory,
   canSync,
 }: {
   date: string;
   cardio: CardioSession[];
+  freeform: FreeformLift[];
   nextWorkout: NextLiftWorkout;
   liftHistory: LiftHistoryEntry[];
   canSync: boolean;
 }) {
-  const [tab, setTab] = React.useState<"lift" | "cardio">("lift");
+  const [tab, setTab] = React.useState<Tab>("lift");
 
   return (
     <div className="space-y-4">
@@ -36,7 +43,7 @@ export function ActivityView({
       <DateNav date={date} basePath="/activity" />
 
       <div className="flex rounded-xl bg-muted p-1">
-        {(["lift", "cardio"] as const).map((t) => (
+        {(["lift", "cardio", "strength"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -47,12 +54,12 @@ export function ActivityView({
                 : "text-muted-foreground",
             )}
           >
-            {t === "lift" ? "Lift 5×5" : "Cardio"}
+            {TAB_LABELS[t]}
           </button>
         ))}
       </div>
 
-      {tab === "lift" ? (
+      {tab === "lift" && (
         <>
           {/* key remounts the tracker after a workout is saved + targets change */}
           <LiftTracker
@@ -67,12 +74,24 @@ export function ActivityView({
             <LiftHistory entries={liftHistory} />
           </div>
         </>
-      ) : (
+      )}
+
+      {tab === "cardio" && (
         <>
           <CardioForm date={date} />
           <div>
             <h3 className="mb-2 text-sm font-medium text-muted-foreground">Recent</h3>
             <CardioList sessions={cardio} />
+          </div>
+        </>
+      )}
+
+      {tab === "strength" && (
+        <>
+          <StrengthForm date={date} />
+          <div>
+            <h3 className="mb-2 text-sm font-medium text-muted-foreground">Recent</h3>
+            <StrengthList entries={freeform} />
           </div>
         </>
       )}

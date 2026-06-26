@@ -33,7 +33,7 @@ import { eq } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { mapCardioType, mapMeal, num, parseWorkbook, type MfpRecord } from "./lib/mfp-parse";
 
-const { foodLog, bodyMetrics, cardioSessions, freeformLifts } = schema;
+const { foodLog, bodyMetrics, cardioSessions, freeformLifts, liftSessions } = schema;
 
 const DEFAULT_XLSX = "/Users/Sebastian.Shaw/Downloads/sebastianjshaw Data Access Request.xlsx";
 const SOURCE = "mfp";
@@ -98,6 +98,15 @@ function sanitizeMacros(
 
 const milesToKm = (mi: number | null): number | null =>
   mi == null ? null : Math.round(mi * 1.609344 * 1000) / 1000;
+
+// MFP exports strength weights in the account's unit — this account is imperial
+// (verified: 176.37 → 80.0 kg, 88.185 → 40.0, 33.07 → 15.0). Convert lb → kg.
+const lbsToKg = (lb: number | null): number | null =>
+  lb == null ? null : Math.round(lb * 0.45359237 * 100) / 100;
+
+// Above ~5 h a "run"/"walk" is a stuck timer / GPS artifact, not a session
+// (e.g. 858 min for 0.7 km). Drop these on import.
+const MAX_CARDIO_MIN = 300;
 
 const isDate = (s: string | undefined): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
 const range = (ds: string[]) => (ds.length ? `${ds.reduce((a, b) => (a < b ? a : b))} → ${ds.reduce((a, b) => (a > b ? a : b))}` : "—");
@@ -197,7 +206,12 @@ async function main() {
 
   // ---- 3. Cardio → cardio_sessions ----
   const exercise = byType.get("Exercise") ?? [];
-  const cardio = exercise.filter((r) => (parseJson(r["details_json"])["type"] || "") === "cardio" && isDate(r["date"]));
+  const cardioAll = exercise.filter((r) => (parseJson(r["details_json"])["type"] || "") === "cardio" && isDate(r["date"]));
+  const cardio = cardioAll.filter((r) => {
+    const min = num(String(parseJson(r["details_json"])["minutes"] ?? ""));
+    return min == null || min <= MAX_CARDIO_MIN; // drop stuck-timer artifacts (>5h)
+  });
+  const cardioDropped = cardioAll.length - cardio.length;
   const cardioStmts: Stmt[] = [];
   cardio.forEach((r, i) => {
     const j = parseJson(r["details_json"]);
@@ -216,10 +230,17 @@ async function main() {
       }),
     );
   });
-  console.log(`CARDIO  ${cardio.length} sessions  (${range(cardio.map((r) => r["date"]))})\n`);
+  console.log(`CARDIO  ${cardio.length} sessions  (${range(cardio.map((r) => r["date"]))})  [dropped ${cardioDropped} >5h artifact(s)]\n`);
 
   // ---- 4. Strength → freeform_lifts ----
-  const strength = exercise.filter((r) => (parseJson(r["details_json"])["type"] || "") === "strength" && isDate(r["date"]));
+  // Dates already promoted to the 5×5 program log are owned there — don't also
+  // re-import them as freeform (would double-count / undo the extrapolation).
+  const promotedDates = new Set(
+    (await db.select({ date: liftSessions.date }).from(liftSessions).all()).map((r) => r.date),
+  );
+  const strengthAll = exercise.filter((r) => (parseJson(r["details_json"])["type"] || "") === "strength" && isDate(r["date"]));
+  const strength = strengthAll.filter((r) => !promotedDates.has(r["date"]));
+  const strengthSkipped = strengthAll.length - strength.length;
   const liftStmts: Stmt[] = [];
   for (const r of strength) {
     const j = parseJson(r["details_json"]);
@@ -229,12 +250,13 @@ async function main() {
         exercise: r["description"] || "(unnamed)",
         sets: num(String(j["sets"] ?? "")),
         repsPerSet: num(String(j["reps_per_set"] ?? "")),
-        weightKg: num(String(j["weight"] ?? "")),
+        // Strength weights are imperial in this export — convert lb → kg.
+        weightKg: lbsToKg(num(String(j["weight"] ?? ""))),
         source: SOURCE,
       }),
     );
   }
-  console.log(`LIFTS   ${strength.length} free-form strength entries  (${range(strength.map((r) => r["date"]))})`);
+  console.log(`LIFTS   ${strength.length} free-form strength entries  (${range(strength.map((r) => r["date"]))})  [skipped ${strengthSkipped} on promoted dates]`);
   if (strength[0]) {
     const j = parseJson(strength[0]["details_json"]);
     console.log(`        e.g. ${strength[0]["date"]} ${strength[0]["description"]} — ${j["sets"]}×${j["reps_per_set"]} @ ${j["weight"]}kg\n`);

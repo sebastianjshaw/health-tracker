@@ -2,7 +2,7 @@
 
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { cardioSessions, liftSessions, liftSets } from "@/db/schema";
+import { cardioSessions, freeformLifts, liftSessions, liftSets } from "@/db/schema";
 import { actionFail, actionOk, type ActionResult } from "./action-result";
 import { requireAuth } from "./auth";
 import { CARDIO_TYPES, CardioType, Exercise, EXERCISES } from "./constants";
@@ -108,6 +108,71 @@ export async function updateCardio(input: CardioUpdate): Promise<ActionResult> {
 export async function deleteCardio(id: number): Promise<ActionResult> {
   await requireAuth();
   await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
+  revalidatePaths("/activity", "/stats");
+  return actionOk();
+}
+
+export type FreeformLiftInput = {
+  date: string;
+  exercise: string;
+  sets?: number | null;
+  repsPerSet?: number | null;
+  weightKg?: number | null;
+  notes?: string | null;
+};
+
+function freeformNumbersValid(c: { sets?: number | null; repsPerSet?: number | null; weightKg?: number | null }): boolean {
+  return [c.sets, c.repsPerSet, c.weightKg].every(isFiniteOrNull);
+}
+
+/** Log a free-form strength entry (anything outside the 5×5 program). */
+export async function logFreeformLift(input: FreeformLiftInput): Promise<ActionResult> {
+  await requireAuth();
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
+  const exercise = input.exercise.trim();
+  if (!exercise) return actionFail("Exercise is required");
+  if (!freeformNumbersValid(input)) return actionFail("Sets/reps/weight must be numbers");
+  await db.insert(freeformLifts).values({
+    date: input.date,
+    exercise,
+    sets: input.sets ?? null,
+    repsPerSet: input.repsPerSet ?? null,
+    weightKg: input.weightKg ?? null,
+    notes: input.notes ?? null,
+    source: "manual",
+  });
+  revalidatePaths("/activity", "/stats");
+  return actionOk();
+}
+
+export type FreeformLiftUpdate = FreeformLiftInput & { id: number };
+
+export async function updateFreeformLift(input: FreeformLiftUpdate): Promise<ActionResult> {
+  await requireAuth();
+  const exercise = input.exercise.trim();
+  if (!exercise) return actionFail("Exercise is required");
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
+  if (!freeformNumbersValid(input)) return actionFail("Sets/reps/weight must be numbers");
+  const existing = await db.select({ id: freeformLifts.id }).from(freeformLifts).where(eq(freeformLifts.id, input.id)).get();
+  if (!existing) return actionFail("Entry not found");
+  await db
+    .update(freeformLifts)
+    .set({
+      date: input.date,
+      exercise,
+      sets: input.sets ?? null,
+      repsPerSet: input.repsPerSet ?? null,
+      weightKg: input.weightKg ?? null,
+      notes: input.notes ?? null,
+    })
+    .where(eq(freeformLifts.id, input.id));
+  revalidatePaths("/activity", "/stats");
+  return actionOk();
+}
+
+export async function deleteFreeformLift(id: number): Promise<ActionResult> {
+  await requireAuth();
+  await db.delete(freeformLifts).where(eq(freeformLifts.id, id));
   revalidatePaths("/activity", "/stats");
   return actionOk();
 }

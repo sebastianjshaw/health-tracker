@@ -89,6 +89,8 @@ export type FreeformLift = {
   sets: number | null;
   repsPerSet: number | null;
   weightKg: number | null;
+  source: string;
+  notes: string | null;
 };
 
 /** Free-form / historical strength entries (e.g. the MyFitnessPal import) that
@@ -103,6 +105,8 @@ export async function getFreeformLifts(limit = 200): Promise<FreeformLift[]> {
       sets: freeformLifts.sets,
       repsPerSet: freeformLifts.repsPerSet,
       weightKg: freeformLifts.weightKg,
+      source: freeformLifts.source,
+      notes: freeformLifts.notes,
     })
     .from(freeformLifts)
     .orderBy(desc(freeformLifts.date), desc(freeformLifts.id))
