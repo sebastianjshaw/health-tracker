@@ -22,10 +22,17 @@ import type { MonthlyAverage, YearlyAverage } from "@/lib/seasonal";
 import {
   RANGES,
   Range,
+  Granularity,
   cutoffFor,
   granularityFor,
   withinRange,
 } from "@/lib/stats-range";
+
+const GROUPINGS: { key: Granularity; label: string }[] = [
+  { key: "day", label: "Day" },
+  { key: "week", label: "Week" },
+  { key: "month", label: "Month" },
+];
 import type {
   CaloriePoint,
   DistancePoint,
@@ -109,6 +116,7 @@ export function StatsView({
   age: number | null;
 }) {
   const [range, setRange] = React.useState<Range>("30d");
+  const [nutriGroup, setNutriGroup] = React.useState<Granularity>("day");
   const cutoff = cutoffFor(range, today);
   const granularity = granularityFor(range);
 
@@ -253,10 +261,37 @@ export function StatsView({
       </Section>
 
       <Section title="Nutrition">
-        <CalorieChart data={fCalories} target={targets.kcal} mealSplit={mealSplit} />
-        <FiberChart data={fCalories} />
-        <SatFatChart data={fCalories} />
-        <HydrationChart data={fCalories} />
+        {/* Grouping control: Day = per-day bars; Week/Month sum into one bar per
+            bucket for a less cluttered long-range view. */}
+        <div className="flex gap-1.5">
+          {GROUPINGS.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setNutriGroup(opt.key)}
+              aria-pressed={nutriGroup === opt.key}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-sm",
+                nutriGroup === opt.key
+                  ? "bg-accent text-accent-foreground"
+                  : "border border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <CalorieChart
+          data={fCalories}
+          target={targets.kcal}
+          mealSplit={mealSplit}
+          granularity={nutriGroup}
+          start={startOf(fCalories)}
+          end={today}
+        />
+        <FiberChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
+        <SatFatChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
+        <HydrationChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
       </Section>
 
       <Section title="Wellbeing">

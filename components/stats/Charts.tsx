@@ -63,6 +63,68 @@ function longDate(iso: string) {
   return `${d} ${MONTHS_SHORT[m - 1]} ${y}`;
 }
 
+/**
+ * Nutrition rows for a chart at the chosen grouping. "day" passes each logged
+ * day through; "week"/"month" sum the metrics into one bar per bucket (so a long
+ * range reads as totals, not a forest of daily bars). `loggedDays` lets a chart
+ * scale its per-day target to the bucket (target × days logged).
+ */
+type NutRow = {
+  key: string;
+  label: string;
+  loggedDays: number;
+  kcal: number;
+  fiber: number;
+  satFat: number;
+  water: number;
+  waterWater: number;
+  waterDrink: number;
+  waterFood: number;
+};
+function nutritionRows(
+  data: CaloriePoint[],
+  g: Granularity,
+  start: string,
+  end: string,
+): NutRow[] {
+  if (g === "day") {
+    return data.map((d) => ({
+      key: d.date,
+      label: shortDate(d.date),
+      loggedDays: d.kcal > 0 ? 1 : 0,
+      kcal: d.kcal,
+      fiber: d.fiber,
+      satFat: d.satFat,
+      water: d.water,
+      waterWater: d.waterWater,
+      waterDrink: d.waterDrink,
+      waterFood: d.waterFood,
+    }));
+  }
+  const keys = bucketKeysBetween(g, start, end);
+  const acc = new Map(
+    keys.map((k) => [
+      k,
+      { kcal: 0, fiber: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
+    ]),
+  );
+  for (const d of data) {
+    const a = acc.get(bucketKey(g, d.date));
+    if (!a) continue;
+    a.kcal += d.kcal;
+    a.fiber += d.fiber;
+    a.satFat += d.satFat;
+    a.water += d.water;
+    a.waterWater += d.waterWater;
+    a.waterDrink += d.waterDrink;
+    a.waterFood += d.waterFood;
+    if (d.kcal > 0) a.loggedDays += 1;
+  }
+  return keys.map((k) => ({ key: k, label: bucketLabel(g, k), ...acc.get(k)! }));
+}
+
+const groupNoun = (g: Granularity) => (g === "day" ? "day" : g === "week" ? "week" : "month");
+
 function ChartCard({
   title,
   action,
@@ -358,52 +420,64 @@ export function CalorieChart({
   data,
   target,
   mealSplit,
+  granularity = "day",
+  start,
+  end,
 }: {
   data: CaloriePoint[];
   target: number;
   mealSplit: Record<Meal, number>;
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
 }) {
-  const hasData = data.some((d) => d.kcal > 0);
-  const dataMax = Math.max(0, ...data.map((d) => d.kcal));
-  const yMax = Math.ceil(Math.max(dataMax, target) / 100) * 100;
+  const isDay = granularity === "day";
+  const rows = nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? "");
+  const hasData = rows.some((r) => r.kcal > 0);
 
-  // Proportional target: only count the meals actually logged that day, so a
-  // day with just breakfast + lunch in isn't judged against the full goal.
-  const fraction = (meals: Meal[]) =>
-    meals.reduce((s, m) => s + (mealSplit[m] ?? 0), 0) / 100;
-  const colorFor = (d: CaloriePoint) => {
-    // Judge each day against the target that was in effect that day.
-    const eff = (d.targetKcal ?? target) * fraction(d.meals);
+  // Day view judges each day against the target in effect that day, counting only
+  // the meals actually logged (so a half-logged day isn't unfairly "over").
+  const dayByKey = new Map(data.map((d) => [d.date, d]));
+  const fraction = (meals: Meal[]) => meals.reduce((s, m) => s + (mealSplit[m] ?? 0), 0) / 100;
+  const colorFor = (r: NutRow) => {
+    if (isDay) {
+      const d = dayByKey.get(r.key)!;
+      const eff = (d.targetKcal ?? target) * fraction(d.meals);
+      if (eff <= 0) return CAL_COLORS.none;
+      return d.kcal > eff * 1.1 ? CAL_COLORS.over : d.kcal > eff ? CAL_COLORS.near : CAL_COLORS.under;
+    }
+    // Week/month: total vs the daily target scaled to days actually logged.
+    const eff = target * r.loggedDays;
     if (eff <= 0) return CAL_COLORS.none;
-    if (d.kcal > eff * 1.1) return CAL_COLORS.over; // >10% over → red
-    if (d.kcal > eff) return CAL_COLORS.near; // up to 10% over → amber
-    return CAL_COLORS.under; // at or under target → green (contingency already covers under-reporting)
+    return r.kcal > eff * 1.1 ? CAL_COLORS.over : r.kcal > eff ? CAL_COLORS.near : CAL_COLORS.under;
   };
+  const chart = rows.map((r) => ({ ...r, color: colorFor(r) }));
 
-  const logged = data.filter((d) => d.kcal > 0);
-  const avg = logged.length
-    ? Math.round(logged.reduce((s, d) => s + d.kcal, 0) / logged.length)
-    : 0;
+  const dataMax = Math.max(0, ...chart.map((r) => r.kcal));
+  const yMax = Math.ceil(Math.max(dataMax, isDay ? target : 0) / 100) * 100 || 100;
+  const totalKcal = chart.reduce((s, r) => s + r.kcal, 0);
+  const totalDays = chart.reduce((s, r) => s + r.loggedDays, 0);
+  const avg = totalDays ? Math.round(totalKcal / totalDays) : 0;
   const summary = `Calories: averaging ${avg} kcal per logged day versus a ${target} kcal target.`;
   return (
-    <ChartCard title="Calories">
+    <ChartCard title={isDay ? "Calories" : `Calories (per ${groupNoun(granularity)})`}>
       {!hasData ? (
         <EmptyState>No food logged yet.</EmptyState>
       ) : (
         <>
           <div role="img" aria-label={summary}>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+            <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
                 itemStyle={{ color: "var(--foreground)" }}
-                labelFormatter={(label) => shortDate(String(label))}
+                formatter={(value) => [`${Math.round(Number(value))} kcal`, "kcal"]}
                 cursor={{ fill: "var(--muted)" }}
               />
-              {target > 0 && (
+              {isDay && target > 0 && (
                 <ReferenceLine
                   y={target}
                   stroke="var(--muted-foreground)"
@@ -417,8 +491,8 @@ export function CalorieChart({
                 />
               )}
               <Bar dataKey="kcal" radius={[4, 4, 0, 0]} name="kcal">
-                {data.map((d) => (
-                  <Cell key={d.date} fill={colorFor(d)} />
+                {chart.map((r) => (
+                  <Cell key={r.key} fill={r.color} />
                 ))}
               </Bar>
             </BarChart>
@@ -428,7 +502,11 @@ export function CalorieChart({
             <Swatch color={CAL_COLORS.under} label="On/under" />
             <Swatch color={CAL_COLORS.near} label="Up to 10% over" />
             <Swatch color={CAL_COLORS.over} label="Over" />
-            <span>· judged vs the day’s logged-meal share of {target} kcal</span>
+            <span>
+              {isDay
+                ? `· judged vs the day’s logged-meal share of ${target} kcal`
+                : `· each ${groupNoun(granularity)} judged vs ${target} kcal × days logged`}
+            </span>
           </div>
         </>
       )}
@@ -436,7 +514,9 @@ export function CalorieChart({
   );
 }
 
-/** Shared daily-grams bar chart for secondary macros (fiber, saturated fat). */
+/** Shared grams bar chart for secondary macros (fiber, saturated fat). Day view
+ * shows per-day grams vs a daily target; week/month show the bucket total vs the
+ * target scaled by days logged. */
 function NutrientBarChart({
   title,
   data,
@@ -446,6 +526,9 @@ function NutrientBarChart({
   targetLabel,
   mode,
   emptyHint,
+  granularity = "day",
+  start,
+  end,
 }: {
   title: string;
   data: CaloriePoint[];
@@ -456,56 +539,57 @@ function NutrientBarChart({
   /** "more" = good when ≥ target (fiber); "less" = good when ≤ target (sat fat). */
   mode: "more" | "less";
   emptyHint: string;
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
 }) {
-  const val = (d: CaloriePoint) => d[dataKey];
-  const hasData = data.some((d) => val(d) > 0);
-  const dataMax = Math.max(0, ...data.map(val));
-  const yMax = Math.max(5, Math.ceil(Math.max(dataMax, target) / 5) * 5);
-  const logged = data.filter((d) => val(d) > 0);
-  const avg = logged.length
-    ? Math.round(logged.reduce((s, d) => s + val(d), 0) / logged.length)
-    : 0;
+  const isDay = granularity === "day";
+  const rows = nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? "");
+  const hasData = rows.some((r) => r[dataKey] > 0);
+  const colorFor = (r: NutRow) => {
+    const t = isDay ? target : target * r.loggedDays;
+    return mode === "less" ? (r[dataKey] > t ? "#ef4444" : color) : r[dataKey] >= t && t > 0 ? color : "#f59e0b";
+  };
+  const chart = rows.map((r) => ({ ...r, color: colorFor(r) }));
+  const dataMax = Math.max(0, ...chart.map((r) => r[dataKey]));
+  const yMax = Math.max(5, Math.ceil(Math.max(dataMax, isDay ? target : 0) / 5) * 5);
+  const total = chart.reduce((s, r) => s + r[dataKey], 0);
+  const totalDays = chart.reduce((s, r) => s + r.loggedDays, 0);
+  const avg = totalDays ? Math.round(total / totalDays) : 0;
   const summary = `${title}: averaging ${avg} g per logged day (target ${target} g).`;
-  const colorFor = (v: number) =>
-    mode === "less"
-      ? v > target
-        ? "#ef4444"
-        : color
-      : v >= target
-        ? color
-        : "#f59e0b";
   return (
-    <ChartCard title={`${title} (g/day)`}>
+    <ChartCard title={isDay ? `${title} (g/day)` : `${title} (g/${groupNoun(granularity)})`}>
       {!hasData ? (
         <EmptyState>{emptyHint}</EmptyState>
       ) : (
         <div role="img" aria-label={summary}>
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+            <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
                 itemStyle={{ color: "var(--foreground)" }}
-                labelFormatter={(label) => shortDate(String(label))}
-                formatter={(value) => [`${value} g`, title]}
+                formatter={(value) => [`${Math.round(Number(value))} g`, title]}
                 cursor={{ fill: "var(--muted)" }}
               />
-              <ReferenceLine
-                y={target}
-                stroke="var(--muted-foreground)"
-                strokeDasharray="4 4"
-                label={{
-                  value: targetLabel,
-                  position: "insideTopRight",
-                  fontSize: 10,
-                  fill: "var(--muted-foreground)",
-                }}
-              />
+              {isDay && (
+                <ReferenceLine
+                  y={target}
+                  stroke="var(--muted-foreground)"
+                  strokeDasharray="4 4"
+                  label={{
+                    value: targetLabel,
+                    position: "insideTopRight",
+                    fontSize: 10,
+                    fill: "var(--muted-foreground)",
+                  }}
+                />
+              )}
               <Bar dataKey={dataKey} radius={[4, 4, 0, 0]} name={title}>
-                {data.map((d) => (
-                  <Cell key={d.date} fill={colorFor(val(d))} />
+                {chart.map((r) => (
+                  <Cell key={r.key} fill={r.color} />
                 ))}
               </Bar>
             </BarChart>
@@ -516,7 +600,9 @@ function NutrientBarChart({
   );
 }
 
-export function FiberChart({ data }: { data: CaloriePoint[] }) {
+type NutrientChartProps = { data: CaloriePoint[]; granularity?: Granularity; start?: string; end?: string };
+
+export function FiberChart({ data, granularity, start, end }: NutrientChartProps) {
   return (
     <NutrientBarChart
       title="Fiber"
@@ -527,11 +613,14 @@ export function FiberChart({ data }: { data: CaloriePoint[] }) {
       targetLabel="30g goal"
       mode="more"
       emptyHint="Fiber shows here once you log foods with fiber data."
+      granularity={granularity}
+      start={start}
+      end={end}
     />
   );
 }
 
-export function SatFatChart({ data }: { data: CaloriePoint[] }) {
+export function SatFatChart({ data, granularity, start, end }: NutrientChartProps) {
   return (
     <NutrientBarChart
       title="Saturated fat"
@@ -542,6 +631,9 @@ export function SatFatChart({ data }: { data: CaloriePoint[] }) {
       targetLabel="22g cap"
       mode="less"
       emptyHint="Saturated fat shows here once you log foods with that data."
+      granularity={granularity}
+      start={start}
+      end={end}
     />
   );
 }
@@ -552,45 +644,57 @@ const WATER_COLORS = {
   food: "#64748b", // incidental moisture from solid food
 };
 
-export function HydrationChart({ data }: { data: CaloriePoint[] }) {
-  const hasData = data.some((d) => d.water > 0);
-  const dataMax = Math.max(0, ...data.map((d) => d.water));
-  const yMax = Math.max(500, Math.ceil(Math.max(dataMax, 2500) / 500) * 500);
-  const logged = data.filter((d) => d.water > 0);
-  const avg = logged.length
-    ? Math.round(logged.reduce((s, d) => s + d.water, 0) / logged.length)
-    : 0;
+export function HydrationChart({
+  data,
+  granularity = "day",
+  start,
+  end,
+}: {
+  data: CaloriePoint[];
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
+}) {
+  const isDay = granularity === "day";
+  const rows = nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? "");
+  const hasData = rows.some((r) => r.water > 0);
+  const dataMax = Math.max(0, ...rows.map((r) => r.water));
+  const yMax = Math.max(500, Math.ceil(Math.max(dataMax, isDay ? 2500 : 0) / 500) * 500);
+  const totalWater = rows.reduce((s, r) => s + r.water, 0);
+  const totalDays = rows.reduce((s, r) => s + r.loggedDays, 0);
+  const avg = totalDays ? Math.round(totalWater / totalDays) : 0;
   const summary = `Hydration: averaging ${(avg / 1000).toFixed(1)} L per logged day — split across plain water, other drinks and food.`;
   return (
-    <ChartCard title="Hydration (est. ml/day)">
+    <ChartCard title={isDay ? "Hydration (est. ml/day)" : `Hydration (est. ml/${groupNoun(granularity)})`}>
       {!hasData ? (
         <EmptyState>Logged food &amp; drink will show estimated water here.</EmptyState>
       ) : (
         <>
           <div role="img" aria-label={summary}>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+              <BarChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   itemStyle={{ color: "var(--foreground)" }}
-                  labelFormatter={(label) => shortDate(String(label))}
-                  formatter={(value, name) => [`${value} ml`, name]}
+                  formatter={(value, name) => [`${Math.round(Number(value))} ml`, name]}
                   cursor={{ fill: "var(--muted)" }}
                 />
-                <ReferenceLine
-                  y={2500}
-                  stroke="var(--muted-foreground)"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: "~2.5L",
-                    position: "insideTopRight",
-                    fontSize: 10,
-                    fill: "var(--muted-foreground)",
-                  }}
-                />
+                {isDay && (
+                  <ReferenceLine
+                    y={2500}
+                    stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                    label={{
+                      value: "~2.5L",
+                      position: "insideTopRight",
+                      fontSize: 10,
+                      fill: "var(--muted-foreground)",
+                    }}
+                  />
+                )}
                 <Bar dataKey="waterWater" stackId="w" fill={WATER_COLORS.water} name="Water" />
                 <Bar dataKey="waterDrink" stackId="w" fill={WATER_COLORS.drink} name="Other drinks" />
                 <Bar
