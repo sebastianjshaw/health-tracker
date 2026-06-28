@@ -95,7 +95,7 @@ export const SCHEDULE_LABELS: Record<Schedule, string> = {
   weekend: "Weekend",
 };
 
-export const CARDIO_TYPES = ["run", "bike", "row", "walk", "swim", "other"] as const;
+export const CARDIO_TYPES = ["run", "bike", "row", "walk", "hike", "swim", "other"] as const;
 export type CardioType = (typeof CARDIO_TYPES)[number];
 
 export const CARDIO_LABELS: Record<CardioType, string> = {
@@ -103,6 +103,7 @@ export const CARDIO_LABELS: Record<CardioType, string> = {
   bike: "Bike",
   row: "Row",
   walk: "Walk",
+  hike: "Hike",
   swim: "Swim",
   other: "Other",
 };

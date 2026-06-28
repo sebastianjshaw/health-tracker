@@ -11,6 +11,7 @@ export const CARDIO_MET: Record<CardioType, number> = {
   row: 7.0,
   swim: 7.0,
   walk: 3.5,
+  hike: 6.0, // cross-country / uphill hiking, Compendium mid-point
   other: 5.0,
 };
 

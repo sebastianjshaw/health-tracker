@@ -970,10 +970,10 @@ server.tool(
 
 server.tool(
   "log_cardio",
-  "Log a cardio session (run/bike/row/walk/swim/other). Defaults to today. If calories aren't given, they're estimated from the type, duration and your latest bodyweight.",
+  "Log a cardio session (run/bike/row/walk/hike/swim/other). Defaults to today. If calories aren't given, they're estimated from the type, duration and your latest bodyweight.",
   {
     date: ISO.optional(),
-    type: z.enum(["run", "bike", "row", "walk", "swim", "other"]),
+    type: z.enum(["run", "bike", "row", "walk", "hike", "swim", "other"]),
     durationMin: z.number().optional(),
     distanceKm: z.number().optional(),
     avgHr: z.number().optional(),

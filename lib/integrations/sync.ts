@@ -51,8 +51,9 @@ function exerciseToCardio(exerciseType?: string): CardioType {
     case "TREADMILL_RUNNING":
       return "run";
     case "WALKING":
-    case "HIKING":
       return "walk";
+    case "HIKING":
+      return "hike";
     case "BIKING":
     case "CYCLING":
     case "MOUNTAIN_BIKING":
