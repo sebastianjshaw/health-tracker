@@ -13,10 +13,13 @@ import {
   HydrationChart,
   SatFatChart,
   SleepChart,
+  TrainingLoadChart,
+  Vo2maxChart,
   WeightChart,
 } from "@/components/stats/charts-lazy";
 import { HealthCalendar } from "@/components/stats/HealthCalendar";
 import { BodyInsights } from "@/components/stats/BodyInsights";
+import { RecoveryCard } from "@/components/stats/RecoveryCard";
 import type { BodyComposition } from "@/lib/metabolic-age";
 import type { MonthlyAverage, YearlyAverage } from "@/lib/seasonal";
 import {
@@ -36,11 +39,14 @@ const GROUPINGS: { key: Granularity; label: string }[] = [
 import type {
   CaloriePoint,
   DistancePoint,
+  RecoveryPoint,
   RestingHrPoint,
   SleepPoint,
+  Vo2Point,
   WeightPoint,
   WeightPrediction,
 } from "@/lib/stats-data";
+import type { LoadSession } from "@/lib/fitness";
 import type { HealthStatus } from "@/lib/constants";
 import type { TdeeEstimate } from "@/lib/tdee";
 
@@ -86,6 +92,9 @@ export function StatsView({
   distances,
   sleep,
   restingHr,
+  recovery,
+  vo2max,
+  loadSessions,
   health,
   targets,
   goalWeight,
@@ -104,6 +113,9 @@ export function StatsView({
   distances: DistancePoint[];
   sleep: SleepPoint[];
   restingHr: RestingHrPoint[];
+  recovery: RecoveryPoint[];
+  vo2max: Vo2Point[];
+  loadSessions: LoadSession[];
   health: Record<string, HealthStatus>;
   targets: { kcal: number };
   goalWeight: number | null;
@@ -292,6 +304,12 @@ export function StatsView({
         <FiberChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
         <SatFatChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
         <HydrationChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
+      </Section>
+
+      <Section title="Fitness & recovery">
+        <RecoveryCard data={recovery} />
+        <Vo2maxChart data={vo2max} />
+        <TrainingLoadChart sessions={loadSessions} today={today} />
       </Section>
 
       <Section title="Wellbeing">

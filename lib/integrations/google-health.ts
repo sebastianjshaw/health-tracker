@@ -29,6 +29,10 @@ export const DATA_TYPES = {
   // of legacy provider weight we don't want to re-import over manual history.
   weight: "weight",
   bodyFat: "body-fat",
+  // Recovery metrics (Fitbit → Health Connect): instantaneous samples we
+  // aggregate to a daily value. (`-rmssd`/`respiratory-rate` slugs 400 here.)
+  spo2: "oxygen-saturation",
+  hrv: "heart-rate-variability",
 } as const;
 
 const TOKENS_KEY = "googleHealth";

@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { LogWeightButton } from "@/components/stats/LogWeightButton";
 import { projectGoalEta } from "@/lib/goal-eta";
 import { compositionBars } from "@/lib/metabolic-age";
@@ -24,7 +25,9 @@ import {
   bucketKey,
   bucketKeysBetween,
   bucketLabel,
+  mondayOf,
 } from "@/lib/stats-range";
+import { acwr, dailyLoad, type Acwr, type LoadSession } from "@/lib/fitness";
 import type {
   ActivityPoint,
   CaloriePoint,
@@ -32,6 +35,7 @@ import type {
   LiftPoint,
   RestingHrPoint,
   SleepPoint,
+  Vo2Point,
   WeightPoint,
   WeightPrediction,
 } from "@/lib/stats-data";
@@ -1123,6 +1127,96 @@ export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
           </LineChart>
         </ResponsiveContainer>
         </div>
+      )}
+    </ChartCard>
+  );
+}
+
+/** Estimated VO₂max (Daniels) per qualifying run, shown as the monthly best so
+ * the long-term fitness trend is legible. */
+export function Vo2maxChart({ data }: { data: Vo2Point[] }) {
+  const byMonth = new Map<string, number>();
+  for (const d of data) {
+    const k = d.date.slice(0, 7);
+    byMonth.set(k, Math.max(byMonth.get(k) ?? 0, d.vo2max));
+  }
+  const rows = [...byMonth.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([k, v]) => ({ label: bucketLabel("month", k), vo2max: v }));
+  const latest = rows[rows.length - 1]?.vo2max;
+  const summary = latest
+    ? `Estimated VO₂max around ${latest} ml/kg/min (best per month from your runs).`
+    : "Run with distance + time logged to estimate VO₂max.";
+  return (
+    <ChartCard title="VO₂max (est. from runs)">
+      {rows.length === 0 ? (
+        <EmptyState>Log runs with distance &amp; time to estimate VO₂max.</EmptyState>
+      ) : (
+        <div role="img" aria-label={summary}>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+              <CartesianGrid stroke={GRID} vertical={false} />
+              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+              <YAxis stroke={AXIS} fontSize={11} width={40} domain={["dataMin - 2", "dataMax + 2"]} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} ml/kg/min`, "VO₂max"]} />
+              <Line type="monotone" dataKey="vo2max" stroke={ACTUAL_COLOR} strokeWidth={2} dot={{ r: 2 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+      <p className="mt-1 text-xs text-muted-foreground">Daniels–Gilbert estimate — directional; affected by terrain &amp; pacing.</p>
+    </ChartCard>
+  );
+}
+
+const LOAD_ZONE: Record<Acwr["zone"], { label: string; cls: string }> = {
+  low: { label: "Detraining", cls: "text-warn" },
+  ok: { label: "Optimal", cls: "text-accent" },
+  high: { label: "Spike — injury risk", cls: "text-danger" },
+  none: { label: "—", cls: "text-muted-foreground" },
+};
+
+/** Weekly training load (Σ duration × type-intensity) with the current acute:chronic
+ * workload ratio — a simple over/under-training signal. */
+export function TrainingLoadChart({ sessions, today }: { sessions: LoadSession[]; today: string }) {
+  const loads = dailyLoad(sessions);
+  const ratio = acwr(loads, today);
+  const weekly = new Map<string, number>();
+  for (const [date, load] of loads) {
+    const wk = mondayOf(date);
+    weekly.set(wk, (weekly.get(wk) ?? 0) + load);
+  }
+  const rows = [...weekly.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .slice(-16)
+    .map(([k, v]) => ({ label: bucketLabel("week", k), load: Math.round(v) }));
+  const zone = LOAD_ZONE[ratio.zone];
+  return (
+    <ChartCard title="Training load (weekly)">
+      {rows.length === 0 ? (
+        <EmptyState>Logged cardio &amp; hikes build your training-load trend here.</EmptyState>
+      ) : (
+        <>
+          <div className="mb-2 flex items-baseline gap-2 text-sm">
+            <span className="text-muted-foreground">Acute : chronic</span>
+            <span className={cn("font-semibold tabular-nums", zone.cls)}>{ratio.ratio ?? "—"}</span>
+            <span className={cn("text-xs", zone.cls)}>{zone.label}</span>
+          </div>
+          <div role="img" aria-label={`Training load; acute-to-chronic ratio ${ratio.ratio ?? "n/a"} (${zone.label}).`}>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <YAxis stroke={AXIS} fontSize={11} width={40} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} load`, "Weekly"]} cursor={{ fill: "var(--muted)" }} />
+                <Bar dataKey="load" radius={[4, 4, 0, 0]} fill={ACTUAL_COLOR} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Load = duration × type intensity. Sweet spot 0.8–1.3; above ~1.5 is a spike.
+          </p>
+        </>
       )}
     </ChartCard>
   );

@@ -5,6 +5,7 @@ import {
   bodyMetrics,
   cardioSessions,
   dailyActivity,
+  dailyHealthMetrics,
   foodLog,
   foods,
   heartRateDaily,
@@ -14,6 +15,7 @@ import {
   sleepSessions,
 } from "@/db/schema";
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
+import { vo2maxFromRun, type LoadSession } from "./fitness";
 import { addDays, todayISO } from "./date";
 import { ageFrom } from "./health";
 import { estimateWaterMl, waterSourceOf } from "./hydration";
@@ -333,6 +335,69 @@ export async function getRestingHrSeries(): Promise<RestingHrPoint[]> {
     .orderBy(asc(heartRateDaily.date))
     .all();
   return rows.map((r) => ({ date: r.date, restingBpm: r.bpm as number }));
+}
+
+export type RecoveryPoint = {
+  date: string;
+  hrvMs: number | null;
+  spo2: number | null;
+  spo2Min: number | null;
+  restingBpm: number | null;
+};
+
+/** Daily recovery metrics (HRV, SpO₂) joined with resting HR, oldest first. */
+export async function getRecoverySeries(): Promise<RecoveryPoint[]> {
+  const [metrics, hr] = await Promise.all([
+    db
+      .select({ date: dailyHealthMetrics.date, hrvMs: dailyHealthMetrics.hrvMs, spo2: dailyHealthMetrics.spo2, spo2Min: dailyHealthMetrics.spo2Min })
+      .from(dailyHealthMetrics)
+      .orderBy(asc(dailyHealthMetrics.date))
+      .all(),
+    db
+      .select({ date: heartRateDaily.date, bpm: heartRateDaily.restingBpm })
+      .from(heartRateDaily)
+      .where(isNotNull(heartRateDaily.restingBpm))
+      .all(),
+  ]);
+  const rhrByDate = new Map(hr.map((r) => [r.date, r.bpm as number]));
+  return metrics.map((m) => ({
+    date: m.date,
+    hrvMs: m.hrvMs,
+    spo2: m.spo2,
+    spo2Min: m.spo2Min,
+    restingBpm: rhrByDate.get(m.date) ?? null,
+  }));
+}
+
+export type Vo2Point = { date: string; vo2max: number };
+
+/** VO₂max estimate per qualifying run (≥3 km, ≥10 min), oldest first. */
+export async function getRunVo2maxSeries(): Promise<Vo2Point[]> {
+  const rows = await db
+    .select({ date: cardioSessions.date, km: cardioSessions.distanceKm, min: cardioSessions.durationMin })
+    .from(cardioSessions)
+    .where(and(eq(cardioSessions.type, "run"), isNotNull(cardioSessions.distanceKm), isNotNull(cardioSessions.durationMin)))
+    .orderBy(asc(cardioSessions.date))
+    .all();
+  const out: Vo2Point[] = [];
+  for (const r of rows) {
+    const km = r.km as number;
+    const min = r.min as number;
+    if (km < 3 || min < 10) continue;
+    const v = vo2maxFromRun(km, min);
+    if (v != null) out.push({ date: r.date, vo2max: v });
+  }
+  return out;
+}
+
+/** All cardio sessions reduced to {date, type, durationMin} for load/ACWR. */
+export async function getCardioLoadSessions(): Promise<LoadSession[]> {
+  return db
+    .select({ date: cardioSessions.date, type: cardioSessions.type, durationMin: cardioSessions.durationMin })
+    .from(cardioSessions)
+    .where(isNotNull(cardioSessions.durationMin))
+    .orderBy(asc(cardioSessions.date))
+    .all();
 }
 
 export type SleepPoint = {

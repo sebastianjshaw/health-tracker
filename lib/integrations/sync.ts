@@ -2,7 +2,7 @@ import "server-only";
 import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
-import { bodyMetrics, cardioSessions, dailyActivity, heartRateDaily, sleepSessions } from "@/db/schema";
+import { bodyMetrics, cardioSessions, dailyActivity, dailyHealthMetrics, heartRateDaily, sleepSessions } from "@/db/schema";
 import { CardioType } from "@/lib/constants";
 import { estimateCardioKcal } from "@/lib/cardio-calories";
 import { dedupeSessions, type DedupSession } from "@/lib/cardio-dedup";
@@ -76,6 +76,7 @@ export type SyncSummary = {
   sleep: number;
   restingHr: number;
   activeDays: number;
+  recoveryDays: number;
 };
 
 type SqliteBatchItem = BatchItem<"sqlite">;
@@ -116,6 +117,7 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     sleep: 0,
     restingHr: 0,
     activeDays: 0,
+    recoveryDays: 0,
   };
 
   // ---- Exercise → cardioSessions ----
@@ -325,6 +327,73 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     summary.restingHr++;
   }
   await runBatched(hrStmts);
+
+  // ---- Recovery metrics (HRV + SpO₂) → dailyHealthMetrics ----
+  // Instantaneous samples (many per day) aggregated to one local-day row: HRV as
+  // the daily mean RMSSD, SpO₂ as daily mean + minimum. Bounded to the recent
+  // window. Both 200 from the API only when a wearable (Fitbit) supplies them.
+  const civilDate = (t?: { civilTime?: { date?: { year?: number; month?: number; day?: number } } }) => {
+    const d = t?.civilTime?.date;
+    return d?.year && d?.month && d?.day
+      ? `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`
+      : null;
+  };
+  type Sample = { sampleTime?: Parameters<typeof civilDate>[0] };
+  const hrvAcc = new Map<string, { sum: number; n: number }>();
+  const spo2Acc = new Map<string, { sum: number; n: number; min: number }>();
+  try {
+    const hrvPoints = await listDataPointsSince(token, DATA_TYPES.hrv, boundedSince, (dp) =>
+      civilDate((dp.heartRateVariability as Sample | undefined)?.sampleTime),
+    );
+    for (const dp of hrvPoints) {
+      const v = dp.heartRateVariability as
+        | (Sample & { rootMeanSquareOfSuccessiveDifferencesMilliseconds?: number })
+        | undefined;
+      const date = civilDate(v?.sampleTime);
+      const ms = num(v?.rootMeanSquareOfSuccessiveDifferencesMilliseconds);
+      if (!date || ms == null) continue;
+      const a = hrvAcc.get(date) ?? { sum: 0, n: 0 };
+      a.sum += ms;
+      a.n += 1;
+      hrvAcc.set(date, a);
+    }
+    const spo2Points = await listDataPointsSince(token, DATA_TYPES.spo2, boundedSince, (dp) =>
+      civilDate((dp.oxygenSaturation as Sample | undefined)?.sampleTime),
+    );
+    for (const dp of spo2Points) {
+      const v = dp.oxygenSaturation as (Sample & { percentage?: number }) | undefined;
+      const date = civilDate(v?.sampleTime);
+      const pct = num(v?.percentage);
+      // Raw passive SpO₂ samples include motion artifacts (e.g. 50%); anything
+      // below 88% is not a real resting reading for a healthy adult — drop it.
+      if (!date || pct == null || pct < 88) continue;
+      const a = spo2Acc.get(date) ?? { sum: 0, n: 0, min: pct };
+      a.sum += pct;
+      a.n += 1;
+      a.min = Math.min(a.min, pct);
+      spo2Acc.set(date, a);
+    }
+  } catch (e) {
+    // A wearable that doesn't supply these (or an unsupported slug) shouldn't
+    // fail the whole sync — log and carry on.
+    console.error("Recovery-metrics fetch failed:", e);
+  }
+  const recoveryStmts: SqliteBatchItem[] = [];
+  for (const date of new Set([...hrvAcc.keys(), ...spo2Acc.keys()])) {
+    const hrv = hrvAcc.get(date);
+    const sp = spo2Acc.get(date);
+    const hrvMs = hrv ? Math.round((hrv.sum / hrv.n) * 10) / 10 : null;
+    const spo2 = sp ? Math.round((sp.sum / sp.n) * 10) / 10 : null;
+    const spo2Min = sp ? Math.round(sp.min * 10) / 10 : null;
+    recoveryStmts.push(
+      db
+        .insert(dailyHealthMetrics)
+        .values({ date, hrvMs, spo2, spo2Min, source: SOURCE })
+        .onConflictDoUpdate({ target: dailyHealthMetrics.date, set: { hrvMs, spo2, spo2Min } }),
+    );
+    summary.recoveryDays++;
+  }
+  await runBatched(recoveryStmts);
 
   // ---- Passive steps & distance → dailyActivity ----
   // Granular measurement types: aggregated per local day, bounded to the recent

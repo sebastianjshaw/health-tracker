@@ -69,3 +69,13 @@ export const HeartRateChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.HeartRateChart })),
   { ssr: false, loading: ChartSkeleton },
 );
+
+export const Vo2maxChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.Vo2maxChart })),
+  { ssr: false, loading: ChartSkeleton },
+);
+
+export const TrainingLoadChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.TrainingLoadChart })),
+  { ssr: false, loading: ChartSkeleton },
+);

@@ -1,0 +1,109 @@
+import { Card } from "@/components/ui";
+import { cn } from "@/lib/cn";
+import type { RecoveryPoint } from "@/lib/stats-data";
+
+type Dir = "good" | "bad" | "even" | "none";
+const TONE: Record<Dir, string> = {
+  good: "text-accent",
+  bad: "text-danger",
+  even: "text-warn",
+  none: "text-foreground",
+};
+
+/** Average of a metric over the last `days` (from the newest record), or null. */
+function recentAvg(rows: RecoveryPoint[], pick: (r: RecoveryPoint) => number | null, days: number): number | null {
+  if (rows.length === 0) return null;
+  const end = Date.parse(`${rows[rows.length - 1].date}T00:00:00Z`);
+  const cutoff = end - (days - 1) * 86_400_000;
+  let sum = 0;
+  let n = 0;
+  for (const r of rows) {
+    const v = pick(r);
+    if (v == null) continue;
+    if (Date.parse(`${r.date}T00:00:00Z`) >= cutoff) {
+      sum += v;
+      n += 1;
+    }
+  }
+  return n ? sum / n : null;
+}
+
+function Tile({
+  label,
+  value,
+  unit,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  tone: Dir;
+}) {
+  return (
+    <div className="rounded-xl bg-muted/50 px-3 py-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={cn("text-lg font-semibold tabular-nums", TONE[tone])}>
+        {value}
+        {unit && <span className="ml-0.5 text-xs font-normal text-muted-foreground">{unit}</span>}
+      </div>
+      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
+    </div>
+  );
+}
+
+const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Recovery snapshot: HRV, SpO₂ and resting HR — each as the 7-day average vs a
+ * 28-day baseline, so a dip/spike stands out (the classic illness/overtraining
+ * signals). Reads the wearable feed (Fitbit → Google Health). */
+export function RecoveryCard({ data }: { data: RecoveryPoint[] }) {
+  const hrv7 = recentAvg(data, (r) => r.hrvMs, 7);
+  const hrv28 = recentAvg(data, (r) => r.hrvMs, 28);
+  const spo27 = recentAvg(data, (r) => r.spo2, 7);
+  const rhr7 = recentAvg(data, (r) => r.restingBpm, 7);
+  const rhr28 = recentAvg(data, (r) => r.restingBpm, 28);
+
+  if (hrv7 == null && spo27 == null && rhr7 == null) {
+    return (
+      <Card className="p-4 text-sm text-muted-foreground">
+        Recovery metrics (HRV, blood oxygen) appear here once a wearable syncs them.
+      </Card>
+    );
+  }
+
+  // HRV: higher = better recovered. RHR: lower = better. SpO₂: <95% worth noting.
+  const hrvTone: Dir = hrv7 == null || hrv28 == null ? "none" : hrv7 >= hrv28 * 1.02 ? "good" : hrv7 <= hrv28 * 0.9 ? "bad" : "even";
+  const rhrTone: Dir = rhr7 == null || rhr28 == null ? "none" : rhr7 <= rhr28 - 1 ? "good" : rhr7 >= rhr28 + 2 ? "bad" : "even";
+  const spo2Tone: Dir = spo27 == null ? "none" : spo27 >= 95 ? "good" : spo27 >= 92 ? "even" : "bad";
+
+  const delta = (a: number | null, b: number | null, unit: string) =>
+    a != null && b != null ? `${a - b >= 0 ? "+" : ""}${r1(a - b)} ${unit} vs 28d` : "baseline forming";
+
+  return (
+    <Card className="grid grid-cols-3 gap-2 p-3">
+      <Tile
+        label="HRV (RMSSD)"
+        value={hrv7 != null ? `${r1(hrv7)}` : "—"}
+        unit="ms"
+        sub={delta(hrv7, hrv28, "ms")}
+        tone={hrvTone}
+      />
+      <Tile
+        label="Blood oxygen"
+        value={spo27 != null ? `${r1(spo27)}` : "—"}
+        unit="%"
+        sub={spo27 != null ? (spo27 >= 95 ? "normal" : "below 95%") : "no data"}
+        tone={spo2Tone}
+      />
+      <Tile
+        label="Resting HR"
+        value={rhr7 != null ? `${Math.round(rhr7)}` : "—"}
+        unit="bpm"
+        sub={delta(rhr7, rhr28, "bpm")}
+        tone={rhrTone}
+      />
+    </Card>
+  );
+}

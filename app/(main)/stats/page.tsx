@@ -12,7 +12,10 @@ import {
   getBodyMetrics,
   getCalorieSeriesAll,
   getCardioDistances,
+  getCardioLoadSessions,
+  getRecoverySeries,
   getRestingHrSeries,
+  getRunVo2maxSeries,
   getSleepSeries,
   getWeightPredictions,
   getWeightSeries,
@@ -20,7 +23,7 @@ import {
 
 export default async function StatsPage() {
   const today = todayISO();
-  const [targets, goalWeight, mealSplit, profile, metrics, weight, predictions, calories, distances, sleep, restingHr, health] =
+  const [targets, goalWeight, mealSplit, profile, metrics, weight, predictions, calories, distances, sleep, restingHr, recovery, vo2max, loadSessions, health] =
     await Promise.all([
       getTargets(),
       getGoalWeight(),
@@ -33,6 +36,9 @@ export default async function StatsPage() {
       getCardioDistances(), // for the at-a-glance Distance tile (charts live on /activity)
       getSleepSeries(),
       getRestingHrSeries(),
+      getRecoverySeries(),
+      getRunVo2maxSeries(),
+      getCardioLoadSessions(),
       getHealthSeries(addDays(today, -363), today),
     ]);
 
@@ -82,6 +88,9 @@ export default async function StatsPage() {
         distances={distances}
         sleep={sleep}
         restingHr={restingHr}
+        recovery={recovery}
+        vo2max={vo2max}
+        loadSessions={loadSessions}
         health={health}
         targets={targets}
         goalWeight={goalWeight}

@@ -202,6 +202,17 @@ export const heartRateDaily = sqliteTable("heart_rate_daily", {
   uniqueIndex("heart_rate_daily_external_uidx").on(t.source, t.externalId),
 ]);
 
+/** Imported daily recovery metrics from a wearable (Fitbit → Google Health):
+ * overnight HRV (RMSSD) and blood-oxygen (SpO₂). One row per local day. */
+export const dailyHealthMetrics = sqliteTable("daily_health_metrics", {
+  date: text("date").primaryKey(), // local YYYY-MM-DD
+  hrvMs: real("hrv_ms"), // RMSSD, daily mean (ms)
+  spo2: real("spo2"), // blood-oxygen, daily mean (%)
+  spo2Min: real("spo2_min"), // daily minimum (%)
+  source: text("source").notNull().default("google-health"),
+  createdAt: createdAt(),
+});
+
 export const liftSessions = sqliteTable("lift_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   date: text("date").notNull(),
@@ -267,6 +278,7 @@ export type DayHealthRow = typeof dayHealth.$inferSelect;
 export type CardioSession = typeof cardioSessions.$inferSelect;
 export type SleepSession = typeof sleepSessions.$inferSelect;
 export type HeartRateDay = typeof heartRateDaily.$inferSelect;
+export type DailyHealthMetric = typeof dailyHealthMetrics.$inferSelect;
 export type LiftSession = typeof liftSessions.$inferSelect;
 export type LiftSet = typeof liftSets.$inferSelect;
 export type BloodMarker = typeof bloodMarkers.$inferSelect;
