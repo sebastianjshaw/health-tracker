@@ -40,9 +40,13 @@ export async function calculateCardioAvgHr(input: {
     return { ok: false, error: "Set a duration first" };
   }
 
-  const start = new Date(`${input.date}T${input.time}:00`).getTime();
-  if (!Number.isFinite(start)) return { ok: false, error: "Invalid start time" };
-  const end = start + input.durationMin * 60_000;
+  // Match on local wall-clock (minute-of-day) so the result is independent of
+  // the server's timezone — the form time and the samples' civilTime are both
+  // the user's local clock.
+  const [hh, mm] = input.time.split(":").map(Number);
+  const startMin = hh * 60 + mm;
+  const endMin = startMin + input.durationMin;
+  const fmt = (m: number) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(Math.round(m % 60)).padStart(2, "0")}`;
 
   const token = await getAccessToken();
   if (!token) return { ok: false, error: "Connect Google Health first (Sync)." };
@@ -54,10 +58,23 @@ export async function calculateCardioAvgHr(input: {
     return { ok: false, error: e instanceof Error ? e.message : "Heart-rate fetch failed" };
   }
 
-  const inWindow = samples.filter((s) => s.ms >= start && s.ms <= end);
+  const daySamples = samples.filter((s) => s.date === input.date && s.minute != null);
+  const inWindow = daySamples.filter((s) => s.minute! >= startMin && s.minute! <= endMin);
+
   if (inWindow.length === 0) {
-    return { ok: false, error: "No heart-rate data found for that window." };
+    if (daySamples.length === 0) {
+      return {
+        ok: false,
+        error: `No intraday heart-rate found for ${input.date}. Sync, and check that heart rate is exporting to Google Health.`,
+      };
+    }
+    const minutes = daySamples.map((s) => s.minute!).sort((a, b) => a - b);
+    return {
+      ok: false,
+      error: `Found ${daySamples.length} HR readings on ${input.date} (${fmt(minutes[0])}–${fmt(minutes[minutes.length - 1])}) but none in ${input.time}–${fmt(endMin)}.`,
+    };
   }
+
   const avgHr = Math.round(inWindow.reduce((s, x) => s + x.bpm, 0) / inWindow.length);
   const maxHr = Math.round(Math.max(...inWindow.map((x) => x.bpm)));
   return { ok: true, avgHr, maxHr, samples: inWindow.length };

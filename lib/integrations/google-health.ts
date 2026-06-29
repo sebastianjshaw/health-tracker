@@ -337,35 +337,32 @@ type SampleTime = {
   };
 };
 
-/** Absolute epoch-ms for an instantaneous sample. Prefers the absolute
- * `instantTime`; falls back to composing the local `civilTime`. null if neither. */
-function sampleMs(st?: SampleTime): number | null {
-  if (!st) return null;
-  if (typeof st.instantTime === "string") {
-    const t = Date.parse(st.instantTime);
-    if (Number.isFinite(t)) return t;
-  }
-  const c = st.civilTime;
+/**
+ * Local civil date + minute-of-day for an instantaneous sample. Prefers the
+ * provider's local `civilTime` (the user's wall clock) so matching is immune to
+ * the server's timezone; falls back to `instantTime` in UTC (may be offset from
+ * local — only used if civilTime is absent).
+ */
+function sampleLocal(st?: SampleTime): { date: string | null; minute: number | null } {
+  const c = st?.civilTime;
   const d = c?.date;
   if (d?.year && d?.month && d?.day) {
-    const tod = c?.timeOfDay ?? {};
-    // civilTime is local wall-clock; build it as a local Date.
-    return new Date(d.year, d.month - 1, d.day, tod.hours ?? 0, tod.minutes ?? 0, tod.seconds ?? 0).getTime();
+    const date = `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+    const tod = c?.timeOfDay;
+    const minute = tod ? (tod.hours ?? 0) * 60 + (tod.minutes ?? 0) : null;
+    return { date, minute };
   }
-  return null;
+  if (typeof st?.instantTime === "string") {
+    const t = new Date(st.instantTime);
+    if (!Number.isNaN(t.getTime())) {
+      return { date: st.instantTime.slice(0, 10), minute: t.getUTCHours() * 60 + t.getUTCMinutes() };
+    }
+  }
+  return { date: null, minute: null };
 }
 
-function sampleDate(st?: SampleTime): string | null {
-  if (st?.civilTime?.date?.year) {
-    const d = st.civilTime.date;
-    return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
-  }
-  return typeof st?.instantTime === "string" && st.instantTime.length >= 10
-    ? st.instantTime.slice(0, 10)
-    : null;
-}
-
-export type HeartRateSample = { ms: number; bpm: number };
+/** One heart-rate reading: local day + minute-of-day (for window matching). */
+export type HeartRateSample = { date: string | null; minute: number | null; bpm: number };
 
 /**
  * Instantaneous heart-rate samples on or after `since` (YYYY-MM-DD). Like the
@@ -378,15 +375,18 @@ export async function fetchHeartRateSamples(
   accessToken: string,
   since: string,
 ): Promise<HeartRateSample[]> {
-  const points = await listDataPointsSince(accessToken, DATA_TYPES.heartRate, since, (dp) =>
-    sampleDate((dp.heartRate as { sampleTime?: SampleTime } | undefined)?.sampleTime),
+  const points = await listDataPointsSince(
+    accessToken,
+    DATA_TYPES.heartRate,
+    since,
+    (dp) => sampleLocal((dp.heartRate as { sampleTime?: SampleTime } | undefined)?.sampleTime).date,
   );
   const out: HeartRateSample[] = [];
   for (const dp of points) {
     const hr = dp.heartRate as { sampleTime?: SampleTime; beatsPerMinute?: string | number } | undefined;
-    const ms = sampleMs(hr?.sampleTime);
+    const { date, minute } = sampleLocal(hr?.sampleTime);
     const bpm = Number(hr?.beatsPerMinute);
-    if (ms != null && Number.isFinite(bpm) && bpm > 0) out.push({ ms, bpm });
+    if (Number.isFinite(bpm) && bpm > 0) out.push({ date, minute, bpm });
   }
   return out;
 }
