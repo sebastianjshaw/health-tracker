@@ -173,6 +173,8 @@ export type CaloriePoint = {
   /** Daily fiber / saturated-fat totals (only present on rows logged since the
    * snapshot columns were added; older days read as 0). */
   fiber: number;
+  /** Portion of `fiber` that was AI-estimated (foods logged without fiber data). */
+  fiberEstimated: number;
   satFat: number;
   /** Estimated water intake (mL) from food + drink, total and by source. */
   water: number;
@@ -238,6 +240,7 @@ export async function calorieSeriesRange(
       carbs: foodLog.carbs,
       fat: foodLog.fat,
       fiber: foodLog.fiber,
+      fiberEstimated: foodLog.fiberEstimated,
       saturatedFat: foodLog.saturatedFat,
       servingSize: foodLog.servingSize,
       servingUnit: foodLog.servingUnit,
@@ -255,6 +258,7 @@ export async function calorieSeriesRange(
       kcal: number;
       protein: number;
       fiber: number;
+      fiberEstimated: number;
       satFat: number;
       waterWater: number;
       waterDrink: number;
@@ -265,10 +269,12 @@ export async function calorieSeriesRange(
   for (const r of logged) {
     const acc =
       loggedByDate.get(r.date) ??
-      { kcal: 0, protein: 0, fiber: 0, satFat: 0, waterWater: 0, waterDrink: 0, waterFood: 0 };
+      { kcal: 0, protein: 0, fiber: 0, fiberEstimated: 0, satFat: 0, waterWater: 0, waterDrink: 0, waterFood: 0 };
     acc.kcal += r.kcal * r.quantity * contingencyMultiplier(r.evolution, contingency);
     acc.protein += r.protein * r.quantity;
-    acc.fiber += (r.fiber ?? 0) * r.quantity;
+    const fiberG = (r.fiber ?? 0) * r.quantity;
+    acc.fiber += fiberG;
+    if (r.fiberEstimated) acc.fiberEstimated += fiberG;
     acc.satFat += (r.saturatedFat ?? 0) * r.quantity;
     const we = {
       servingSize: r.servingSize,
@@ -299,6 +305,7 @@ export async function calorieSeriesRange(
       kcal: Math.round(l?.kcal ?? 0),
       protein: Math.round(l?.protein ?? 0),
       fiber: Math.round(l?.fiber ?? 0),
+      fiberEstimated: Math.round(l?.fiberEstimated ?? 0),
       satFat: Math.round(l?.satFat ?? 0),
       water: Math.round((l?.waterWater ?? 0) + (l?.waterDrink ?? 0) + (l?.waterFood ?? 0)),
       waterWater: Math.round(l?.waterWater ?? 0),

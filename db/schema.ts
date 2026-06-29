@@ -23,6 +23,9 @@ export const foods = sqliteTable("foods", {
   carbs: real("carbs").notNull().default(0),
   fat: real("fat").notNull().default(0),
   fiber: real("fiber"),
+  // true when `fiber` was AI-estimated (food logged without fiber data) rather
+  // than measured/imported — lets the stats charts distinguish the two.
+  fiberEstimated: integer("fiber_estimated", { mode: "boolean" }),
   // extended per-serving nutrition (optional; mostly from barcode import)
   sugar: real("sugar"),
   saturatedFat: real("saturated_fat"),
@@ -73,6 +76,8 @@ export const foodLog = sqliteTable("food_log", {
   // per-serving snapshots of the secondary macros the library carries, so the
   // stats trends can be computed without re-joining (and stay history-stable)
   fiber: real("fiber"),
+  // snapshot of foods.fiberEstimated — see that column
+  fiberEstimated: integer("fiber_estimated", { mode: "boolean" }),
   saturatedFat: real("saturated_fat"),
   servingSize: real("serving_size").notNull().default(100),
   servingUnit: text("serving_unit").notNull().default("g"),

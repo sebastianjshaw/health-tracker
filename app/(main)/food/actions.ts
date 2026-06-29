@@ -16,12 +16,33 @@ import {
 import { todayISO } from "@/lib/date";
 import { asCategory, inferCategory } from "@/lib/food-category";
 import { num, nullableNum } from "@/lib/format";
+import { estimateFiberOne } from "@/lib/fiber-estimate";
 import { revalidatePaths } from "@/lib/revalidate";
 
 export type FoodFormState = { error: string | null; ok?: boolean };
 
 function str(v: FormDataEntryValue | null): string {
   return String(v ?? "").trim();
+}
+
+/**
+ * Resolve a food's fiber: keep an explicit value as measured, otherwise
+ * AI-estimate it (flagged as estimated). Never throws — a failed estimate just
+ * leaves fiber blank, so saving a food never depends on the AI call.
+ */
+async function resolveFiber(
+  name: string,
+  carbs: number,
+  fiber: number | null,
+): Promise<{ fiber: number | null; fiberEstimated: boolean }> {
+  if (fiber != null) return { fiber, fiberEstimated: false };
+  try {
+    const est = await estimateFiberOne(name, carbs);
+    if (est != null) return { fiber: est, fiberEstimated: true };
+  } catch (e) {
+    console.error("fiber estimate failed:", e);
+  }
+  return { fiber: null, fiberEstimated: false };
 }
 
 function asEvolution(v: string, fallback: Evolution): Evolution {
@@ -55,6 +76,9 @@ export async function createFood(
   const source = str(formData.get("source")) || "manual";
   const rawEvolution = str(formData.get("evolution"));
 
+  const carbs = num(formData.get("carbs"));
+  const fiber = await resolveFiber(name, carbs, nullableNum(formData.get("fiber")));
+
   await db.insert(foods).values({
     name,
     brand: brand || null,
@@ -63,9 +87,11 @@ export async function createFood(
     servingUnit,
     kcal: num(formData.get("kcal")),
     protein: num(formData.get("protein")),
-    carbs: num(formData.get("carbs")),
+    carbs,
     fat: num(formData.get("fat")),
     ...extendedFields(formData),
+    fiber: fiber.fiber,
+    fiberEstimated: fiber.fiberEstimated,
     category: rawCategory ? asCategory(rawCategory) : inferCategory(servingUnit, name),
     source,
     evolution: asEvolution(rawEvolution, evolutionForSource(source)),
@@ -98,6 +124,8 @@ export async function updateFood(
       carbs: num(formData.get("carbs")),
       fat: num(formData.get("fat")),
       ...extendedFields(formData),
+      // a manually-entered fiber value is measured; clear the estimated flag.
+      fiberEstimated: nullableNum(formData.get("fiber")) == null ? null : false,
       category: asCategory(str(formData.get("category"))),
       evolution: asEvolution(str(formData.get("evolution")), "commodity"),
     })
@@ -181,6 +209,8 @@ export async function upsertScannedFood(input: ScannedFoodInput): Promise<number
     if (existing) return existing.id;
   }
 
+  const fiber = await resolveFiber(input.name, input.carbs, input.fiber);
+
   const [row] = await db
     .insert(foods)
     .values({
@@ -193,7 +223,8 @@ export async function upsertScannedFood(input: ScannedFoodInput): Promise<number
       protein: input.protein,
       carbs: input.carbs,
       fat: input.fat,
-      fiber: input.fiber,
+      fiber: fiber.fiber,
+      fiberEstimated: fiber.fiberEstimated,
       sugar: input.sugar ?? null,
       saturatedFat: input.saturatedFat ?? null,
       salt: input.salt ?? null,

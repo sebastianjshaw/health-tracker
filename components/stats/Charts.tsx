@@ -79,6 +79,7 @@ type NutRow = {
   loggedDays: number;
   kcal: number;
   fiber: number;
+  fiberEstimated: number;
   satFat: number;
   water: number;
   waterWater: number;
@@ -98,6 +99,7 @@ function nutritionRows(
       loggedDays: d.kcal > 0 ? 1 : 0,
       kcal: d.kcal,
       fiber: d.fiber,
+      fiberEstimated: d.fiberEstimated,
       satFat: d.satFat,
       water: d.water,
       waterWater: d.waterWater,
@@ -109,7 +111,7 @@ function nutritionRows(
   const acc = new Map(
     keys.map((k) => [
       k,
-      { kcal: 0, fiber: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
+      { kcal: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
     ]),
   );
   for (const d of data) {
@@ -117,6 +119,7 @@ function nutritionRows(
     if (!a) continue;
     a.kcal += d.kcal;
     a.fiber += d.fiber;
+    a.fiberEstimated += d.fiberEstimated;
     a.satFat += d.satFat;
     a.water += d.water;
     a.waterWater += d.waterWater;
@@ -530,6 +533,7 @@ function NutrientBarChart({
   targetLabel,
   mode,
   emptyHint,
+  estimatedDataKey,
   granularity = "day",
   start,
   end,
@@ -543,6 +547,8 @@ function NutrientBarChart({
   /** "more" = good when ≥ target (fiber); "less" = good when ≤ target (sat fat). */
   mode: "more" | "less";
   emptyHint: string;
+  /** When set, the estimated portion of each bar is drawn lighter and stacked. */
+  estimatedDataKey?: "fiberEstimated";
   granularity?: Granularity;
   start?: string;
   end?: string;
@@ -554,7 +560,12 @@ function NutrientBarChart({
     const t = isDay ? target : target * r.loggedDays;
     return mode === "less" ? (r[dataKey] > t ? "#ef4444" : color) : r[dataKey] >= t && t > 0 ? color : "#f59e0b";
   };
-  const chart = rows.map((r) => ({ ...r, color: colorFor(r) }));
+  // When tracking estimates, split each bar into measured + estimated portions.
+  const chart = rows.map((r) => {
+    const est = estimatedDataKey ? r[estimatedDataKey] : 0;
+    return { ...r, color: colorFor(r), measured: r[dataKey] - est, estimated: est };
+  });
+  const hasEstimated = chart.some((r) => r.estimated > 0);
   const dataMax = Math.max(0, ...chart.map((r) => r[dataKey]));
   const yMax = Math.max(5, Math.ceil(Math.max(dataMax, isDay ? target : 0) / 5) * 5);
   const total = chart.reduce((s, r) => s + r[dataKey], 0);
@@ -591,13 +602,36 @@ function NutrientBarChart({
                   }}
                 />
               )}
-              <Bar dataKey={dataKey} radius={[4, 4, 0, 0]} name={title}>
-                {chart.map((r) => (
-                  <Cell key={r.key} fill={r.color} />
-                ))}
-              </Bar>
+              {estimatedDataKey ? (
+                <>
+                  <Bar dataKey="measured" stackId="n" radius={[4, 4, 0, 0]} name={title}>
+                    {chart.map((r) => (
+                      <Cell key={r.key} fill={r.color} />
+                    ))}
+                  </Bar>
+                  <Bar
+                    dataKey="estimated"
+                    stackId="n"
+                    radius={[4, 4, 0, 0]}
+                    name="Estimated"
+                    fill={color}
+                    fillOpacity={0.35}
+                  />
+                </>
+              ) : (
+                <Bar dataKey={dataKey} radius={[4, 4, 0, 0]} name={title}>
+                  {chart.map((r) => (
+                    <Cell key={r.key} fill={r.color} />
+                  ))}
+                </Bar>
+              )}
             </BarChart>
           </ResponsiveContainer>
+          {hasEstimated && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Lighter bars are AI-estimated fiber for foods logged without fiber data.
+            </p>
+          )}
         </div>
       )}
     </ChartCard>
@@ -617,6 +651,7 @@ export function FiberChart({ data, granularity, start, end }: NutrientChartProps
       targetLabel="30g goal"
       mode="more"
       emptyHint="Fiber shows here once you log foods with fiber data."
+      estimatedDataKey="fiberEstimated"
       granularity={granularity}
       start={start}
       end={end}

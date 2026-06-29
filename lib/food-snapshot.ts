@@ -15,6 +15,7 @@ export type LibraryFoodLike = PerServingMacros & {
   evolution: string;
   /** Optional secondary macros — snapshotted onto the log row when present. */
   fiber?: number | null;
+  fiberEstimated?: boolean | null;
   saturatedFat?: number | null;
 };
 
@@ -54,6 +55,7 @@ export function foodLogSnapshot(
     carbs: food.carbs,
     fat: food.fat,
     fiber: food.fiber ?? null,
+    fiberEstimated: food.fiberEstimated ?? null,
     saturatedFat: food.saturatedFat ?? null,
     servingSize: food.servingSize,
     servingUnit: food.servingUnit,
