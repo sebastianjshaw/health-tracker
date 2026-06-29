@@ -16,6 +16,7 @@ export function CardioForm({ date }: { date: string }) {
   const formRef = React.useRef<HTMLFormElement>(null);
   const [type, setType] = React.useState<CardioType>("run");
   const [avgHr, setAvgHr] = React.useState("");
+  const [maxHr, setMaxHr] = React.useState("");
   const [pending, start] = useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [calcPending, startCalc] = useTransition();
@@ -34,6 +35,7 @@ export function CardioForm({ date }: { date: string }) {
         durationMin: nullableNum(fd.get("duration")),
         distanceKm: nullableNum(fd.get("distance")),
         avgHr: nullableNum(fd.get("avgHr")),
+        maxHr: nullableNum(fd.get("maxHr")),
         kcal: nullableNum(fd.get("kcal")),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
@@ -44,6 +46,7 @@ export function CardioForm({ date }: { date: string }) {
       formRef.current?.reset();
       setType("run");
       setAvgHr("");
+      setMaxHr("");
       setCalcMsg(null);
     });
   }
@@ -64,6 +67,7 @@ export function CardioForm({ date }: { date: string }) {
         return;
       }
       setAvgHr(String(r.avgHr));
+      setMaxHr(String(r.maxHr));
       setCalcMsg(`Averaged ${r.samples} readings (max ${r.maxHr}).`);
     });
   }
@@ -113,6 +117,15 @@ export function CardioForm({ date }: { date: string }) {
                 {calcPending ? "…" : "Calc"}
               </Button>
             </div>
+          </Field>
+          <Field label="Max HR (bpm)">
+            <Input
+              name="maxHr"
+              type="number"
+              inputMode="numeric"
+              value={maxHr}
+              onChange={(e) => setMaxHr(e.target.value)}
+            />
           </Field>
           <Field label="Calories">
             <Input name="kcal" type="number" inputMode="numeric" />

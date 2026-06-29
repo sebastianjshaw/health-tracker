@@ -85,6 +85,7 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
   const formRef = React.useRef<HTMLFormElement>(null);
   const [type, setType] = React.useState<CardioType>(session.type as CardioType);
   const [avgHr, setAvgHr] = React.useState(session.avgHr != null ? String(session.avgHr) : "");
+  const [maxHr, setMaxHr] = React.useState(session.maxHr != null ? String(session.maxHr) : "");
   const [pending, start] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
   const [calcPending, startCalc] = React.useTransition();
@@ -106,6 +107,7 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
         return;
       }
       setAvgHr(String(r.avgHr));
+      setMaxHr(String(r.maxHr));
       setCalcMsg(`Averaged ${r.samples} readings (max ${r.maxHr}).`);
     });
   }
@@ -127,6 +129,7 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
               durationMin: nullableNum(fd.get("duration")),
               distanceKm: nullableNum(fd.get("distance")),
               avgHr: nullableNum(fd.get("avgHr")),
+              maxHr: nullableNum(fd.get("maxHr")),
               kcal: nullableNum(fd.get("kcal")),
               notes,
             },
@@ -213,6 +216,16 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
               </Button>
             )}
           </div>
+        </Field>
+        <Field label="Max HR (bpm)">
+          <Input
+            name="maxHr"
+            type="number"
+            inputMode="numeric"
+            value={maxHr}
+            onChange={(e) => setMaxHr(e.target.value)}
+            disabled={imported}
+          />
         </Field>
         <Field label="Calories">
           <Input

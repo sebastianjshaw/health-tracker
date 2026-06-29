@@ -91,13 +91,14 @@ export type CardioInput = {
   durationMin?: number | null;
   distanceKm?: number | null;
   avgHr?: number | null;
+  maxHr?: number | null;
   kcal?: number | null;
   notes?: string | null;
 };
 
 /** Optional numeric cardio fields that must be finite when present. */
-function cardioNumbersValid(c: { durationMin?: number | null; distanceKm?: number | null; avgHr?: number | null; kcal?: number | null }): boolean {
-  return [c.durationMin, c.distanceKm, c.avgHr, c.kcal].every(isFiniteOrNull);
+function cardioNumbersValid(c: { durationMin?: number | null; distanceKm?: number | null; avgHr?: number | null; maxHr?: number | null; kcal?: number | null }): boolean {
+  return [c.durationMin, c.distanceKm, c.avgHr, c.maxHr, c.kcal].every(isFiniteOrNull);
 }
 
 export async function logCardio(input: CardioInput): Promise<ActionResult> {
@@ -112,6 +113,7 @@ export async function logCardio(input: CardioInput): Promise<ActionResult> {
     durationMin: input.durationMin ?? null,
     distanceKm: input.distanceKm ?? null,
     avgHr: input.avgHr ?? null,
+    maxHr: input.maxHr ?? null,
     kcal: input.kcal ?? null,
     notes: input.notes ?? null,
   });
@@ -126,6 +128,7 @@ export type CardioUpdate = {
   durationMin?: number | null;
   distanceKm?: number | null;
   avgHr?: number | null;
+  maxHr?: number | null;
   kcal?: number | null;
   notes?: string | null;
 };
@@ -162,6 +165,7 @@ export async function updateCardio(input: CardioUpdate): Promise<ActionResult> {
         durationMin: input.durationMin ?? null,
         distanceKm: input.distanceKm ?? null,
         avgHr: input.avgHr ?? null,
+        maxHr: input.maxHr ?? null,
         kcal: input.kcal ?? null,
         notes: input.notes ?? null,
       })
