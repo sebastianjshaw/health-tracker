@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/profile", label: "Profile" },
   { href: "/measurements", label: "Measurement history" },
   { href: "/bloodwork", label: "Blood & lab results" },
+  { href: "/medication", label: "Medication" },
   { href: "/settings", label: "Settings" },
   { href: "/report", label: "Doctor report" },
   { href: "/character", label: "Character Sheet" },

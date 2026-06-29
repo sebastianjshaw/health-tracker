@@ -269,6 +269,29 @@ export const bloodMarkers = sqliteTable("blood_markers", {
   createdAt: createdAt(),
 }, (t) => [index("blood_markers_date_idx").on(t.date)]);
 
+/** Injection log for GLP-1 (and similar) medication — one row per dose. */
+export const medicationDoses = sqliteTable("medication_doses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(), // YYYY-MM-DD of the injection
+  time: text("time"), // optional HH:MM
+  // 'tirzepatide' (Mounjaro) | 'semaglutide' (Ozempic) | free text
+  drug: text("drug").notNull().default("tirzepatide"),
+  doseMg: real("dose_mg"),
+  // 'abdomen' | 'thigh' | 'upper_arm' | free text — rotate to avoid lipohypertrophy
+  site: text("site"),
+  notes: text("notes"),
+  createdAt: createdAt(),
+}, (t) => [index("medication_doses_date_idx").on(t.date)]);
+
+/** Daily medication check-in: appetite + side effects. One row per date; sparse. */
+export const medicationCheckins = sqliteTable("medication_checkins", {
+  date: text("date").primaryKey(), // YYYY-MM-DD
+  appetite: integer("appetite"), // 1 (none) … 5 (ravenous)
+  sideEffects: text("side_effects"), // JSON [{ type, severity:1-3 }]
+  notes: text("notes"),
+  createdAt: createdAt(),
+});
+
 /** Single-row-per-key store for app settings (targets, lift weights, etc.). */
 export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
@@ -287,3 +310,5 @@ export type DailyHealthMetric = typeof dailyHealthMetrics.$inferSelect;
 export type LiftSession = typeof liftSessions.$inferSelect;
 export type LiftSet = typeof liftSets.$inferSelect;
 export type BloodMarker = typeof bloodMarkers.$inferSelect;
+export type MedicationDose = typeof medicationDoses.$inferSelect;
+export type MedicationCheckin = typeof medicationCheckins.$inferSelect;

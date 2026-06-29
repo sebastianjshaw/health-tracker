@@ -108,6 +108,70 @@ export const CARDIO_LABELS: Record<CardioType, string> = {
   other: "Other",
 };
 
+// GLP-1 medication tracking
+export const MED_DRUGS = ["tirzepatide", "semaglutide"] as const;
+export type MedDrug = (typeof MED_DRUGS)[number];
+
+export const MED_DRUG_LABELS: Record<MedDrug, string> = {
+  tirzepatide: "Tirzepatide (Mounjaro)",
+  semaglutide: "Semaglutide (Ozempic)",
+};
+
+// Typical titration doses (mg) per drug — just to speed up entry, not advice.
+export const MED_DOSE_OPTIONS: Record<MedDrug, number[]> = {
+  tirzepatide: [2.5, 5, 7.5, 10, 12.5, 15],
+  semaglutide: [0.25, 0.5, 1, 1.7, 2.4],
+};
+
+export const INJECTION_SITES = ["abdomen", "thigh", "upper_arm"] as const;
+export type InjectionSite = (typeof INJECTION_SITES)[number];
+
+export const INJECTION_SITE_LABELS: Record<InjectionSite, string> = {
+  abdomen: "Abdomen",
+  thigh: "Thigh",
+  upper_arm: "Upper arm",
+};
+
+export const SIDE_EFFECTS = [
+  "nausea",
+  "reflux",
+  "constipation",
+  "diarrhea",
+  "fatigue",
+  "headache",
+  "injection_site",
+] as const;
+export type SideEffect = (typeof SIDE_EFFECTS)[number];
+
+export const SIDE_EFFECT_LABELS: Record<SideEffect, string> = {
+  nausea: "Nausea",
+  reflux: "Reflux / heartburn",
+  constipation: "Constipation",
+  diarrhea: "Diarrhoea",
+  fatigue: "Fatigue",
+  headache: "Headache",
+  injection_site: "Injection-site reaction",
+};
+
+// Appetite scale used by the daily check-in (1 = no appetite … 5 = ravenous).
+export const APPETITE_LABELS: Record<number, string> = {
+  1: "None",
+  2: "Low",
+  3: "Normal",
+  4: "High",
+  5: "Ravenous",
+};
+
+// Side-effect severity (0 = not present, omitted from storage).
+export const SEVERITY_LABELS: Record<number, string> = {
+  1: "Mild",
+  2: "Moderate",
+  3: "Severe",
+};
+
+/** Weekly injection cadence — drives the "next dose due" indicator. */
+export const MED_CADENCE_DAYS = 7;
+
 // StrongLifts 5x5
 export const EXERCISES = ["squat", "bench", "row", "ohp", "deadlift"] as const;
 export type Exercise = (typeof EXERCISES)[number];

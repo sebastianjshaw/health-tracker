@@ -2,8 +2,10 @@ import { DateNav } from "@/components/DateNav";
 import { MacroSummary } from "@/components/MacroSummary";
 import { DayHealthControl } from "@/components/today/DayHealthControl";
 import { MealSection } from "@/components/today/MealSection";
+import { MedicationCard } from "@/components/medication/MedicationCard";
 import { MEALS } from "@/lib/constants";
 import { isValidISO, todayISO } from "@/lib/date";
+import { getNextDoseInfo } from "@/lib/medication-data";
 import { getDayActivity, getDayHealth } from "@/lib/day-data";
 import { getDayEntries } from "@/lib/food-data";
 import { totalWaterMl } from "@/lib/hydration";
@@ -18,12 +20,14 @@ export default async function TodayPage({
   const { d } = await searchParams;
   const date = d && isValidISO(d) ? d : todayISO();
 
-  const [entries, targets, health, contingency, activity] = await Promise.all([
+  const isToday = date === todayISO();
+  const [entries, targets, health, contingency, activity, nextDose] = await Promise.all([
     getDayEntries(date),
     getTargets(),
     getDayHealth(date),
     getContingency(),
     getDayActivity(date),
+    getNextDoseInfo(),
   ]);
 
   const dayTotals = totals(entries);
@@ -44,6 +48,8 @@ export default async function TodayPage({
         steps={activity?.steps}
         distanceKm={activity?.distanceKm}
       />
+
+      {isToday && nextDose.status !== "none" && <MedicationCard next={nextDose} />}
 
       {MEALS.map((meal) => (
         <MealSection

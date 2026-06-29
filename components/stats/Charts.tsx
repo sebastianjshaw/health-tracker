@@ -165,10 +165,13 @@ export function WeightChart({
   predictions = [],
   goalWeight,
   today,
+  doseMarkers = [],
 }: {
   data: WeightPoint[];
   predictions?: WeightPrediction[];
   goalWeight?: number | null;
+  /** Vertical markers (e.g. medication dose changes) snapped to the nearest weigh-in. */
+  doseMarkers?: { date: string; label: string }[];
   /** When set, shows a quick weight-log button that logs against this date. */
   today?: string;
 }) {
@@ -218,6 +221,24 @@ export function WeightChart({
         }`
       : null;
 
+  // Snap each dose marker to the nearest weigh-in date (the X axis is categorical,
+  // so a ReferenceLine only renders on a date that exists in the data).
+  const chartDates = chartData.map((d) => d.date);
+  const snappedMarkers = doseMarkers
+    .map((m) => {
+      let best: string | null = null;
+      let bestDiff = Infinity;
+      for (const d of chartDates) {
+        const diff = Math.abs(Date.parse(d) - Date.parse(m.date));
+        if (diff < bestDiff) {
+          bestDiff = diff;
+          best = d;
+        }
+      }
+      return best ? { x: best, label: m.label } : null;
+    })
+    .filter((m): m is { x: string; label: string } => m != null);
+
   const latestPred = predictions[predictions.length - 1];
   const summary = data.length
     ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.${
@@ -266,6 +287,15 @@ export function WeightChart({
                 label={{ value: `goal ${goal}`, position: "insideTopRight", fontSize: 10, fill: "var(--muted-foreground)" }}
               />
             )}
+            {snappedMarkers.map((m, i) => (
+              <ReferenceLine
+                key={`dose-${i}`}
+                x={m.x}
+                stroke="var(--muted-foreground)"
+                strokeDasharray="2 3"
+                label={{ value: m.label, position: "top", fontSize: 9, fill: "var(--muted-foreground)" }}
+              />
+            ))}
             {showAvg && (
               <Line
                 type="monotone"
