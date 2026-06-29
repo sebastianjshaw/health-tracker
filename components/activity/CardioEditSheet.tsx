@@ -9,7 +9,7 @@ import { CARDIO_LABELS, CARDIO_TYPES, CardioType } from "@/lib/constants";
 import { timeOf } from "@/lib/date";
 import { nullableNum } from "@/lib/format";
 import { formatClock, formatPace, parseSplits } from "@/lib/splits";
-import { updateCardio } from "@/lib/activity-actions";
+import { calculateCardioAvgHr, updateCardio } from "@/lib/activity-actions";
 import type { CardioSession } from "@/db/schema";
 
 function CardioDetails({ session }: { session: CardioSession }) {
@@ -82,9 +82,33 @@ export function CardioEditSheet({
 function EditForm({ session, onClose }: { session: CardioSession; onClose: () => void }) {
   const router = useRouter();
   const imported = session.source !== "manual";
+  const formRef = React.useRef<HTMLFormElement>(null);
   const [type, setType] = React.useState<CardioType>(session.type as CardioType);
+  const [avgHr, setAvgHr] = React.useState(session.avgHr != null ? String(session.avgHr) : "");
   const [pending, start] = React.useTransition();
   const [error, setError] = React.useState<string | null>(null);
+  const [calcPending, startCalc] = React.useTransition();
+  const [calcMsg, setCalcMsg] = React.useState<string | null>(null);
+
+  // Backfill Avg HR from the day's Google Health samples over this session's
+  // start-time + duration window.
+  function calcHr() {
+    const form = formRef.current;
+    if (!form) return;
+    const fd = new FormData(form);
+    const time = String(fd.get("time") ?? "").trim();
+    const duration = nullableNum(fd.get("duration"));
+    startCalc(async () => {
+      setCalcMsg(null);
+      const r = await calculateCardioAvgHr({ date: session.date, time, durationMin: duration ?? 0 });
+      if (!r.ok) {
+        setCalcMsg(r.error);
+        return;
+      }
+      setAvgHr(String(r.avgHr));
+      setCalcMsg(`Averaged ${r.samples} readings (max ${r.maxHr}).`);
+    });
+  }
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -117,7 +141,7 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
   }
 
   return (
-    <form onSubmit={submit} className="space-y-3">
+    <form ref={formRef} onSubmit={submit} className="space-y-3">
       <CardioDetails session={session} />
       {imported && (
         <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
@@ -167,13 +191,28 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
           />
         </Field>
         <Field label="Avg HR (bpm)">
-          <Input
-            name="avgHr"
-            type="number"
-            inputMode="numeric"
-            defaultValue={session.avgHr ?? ""}
-            disabled={imported}
-          />
+          <div className="flex gap-2">
+            <Input
+              name="avgHr"
+              type="number"
+              inputMode="numeric"
+              value={avgHr}
+              onChange={(e) => setAvgHr(e.target.value)}
+              disabled={imported}
+            />
+            {!imported && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={calcHr}
+                disabled={calcPending}
+                className="h-11 shrink-0 px-3 text-sm"
+                title="Average heart rate from Google Health for this time window"
+              >
+                {calcPending ? "…" : "Calc"}
+              </Button>
+            )}
+          </div>
         </Field>
         <Field label="Calories">
           <Input
@@ -185,6 +224,7 @@ function EditForm({ session, onClose }: { session: CardioSession; onClose: () =>
           />
         </Field>
       </div>
+      {calcMsg && <p className="text-sm text-muted-foreground">{calcMsg}</p>}
       <Field label="Notes">
         <Input name="notes" defaultValue={session.notes ?? ""} placeholder="optional" />
       </Field>

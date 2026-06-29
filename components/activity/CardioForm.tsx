@@ -4,7 +4,7 @@ import * as React from "react";
 import { useTransition } from "react";
 import { Button, Card, Field, Input, Select } from "@/components/ui";
 import { CARDIO_LABELS, CARDIO_TYPES, CardioType } from "@/lib/constants";
-import { logCardio } from "@/lib/activity-actions";
+import { calculateCardioAvgHr, logCardio } from "@/lib/activity-actions";
 import { nullableNum } from "@/lib/format";
 
 function nowHHMM() {
@@ -15,8 +15,11 @@ function nowHHMM() {
 export function CardioForm({ date }: { date: string }) {
   const formRef = React.useRef<HTMLFormElement>(null);
   const [type, setType] = React.useState<CardioType>("run");
+  const [avgHr, setAvgHr] = React.useState("");
   const [pending, start] = useTransition();
   const [error, setError] = React.useState<string | null>(null);
+  const [calcPending, startCalc] = useTransition();
+  const [calcMsg, setCalcMsg] = React.useState<string | null>(null);
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -40,6 +43,28 @@ export function CardioForm({ date }: { date: string }) {
       }
       formRef.current?.reset();
       setType("run");
+      setAvgHr("");
+      setCalcMsg(null);
+    });
+  }
+
+  // Pull the day's Fitbit/Google Health HR samples for the start-time + duration
+  // window and fill Avg HR with their mean.
+  function calcHr() {
+    const form = formRef.current;
+    if (!form) return;
+    const fd = new FormData(form);
+    const time = String(fd.get("time") ?? "").trim();
+    const duration = nullableNum(fd.get("duration"));
+    startCalc(async () => {
+      setCalcMsg(null);
+      const r = await calculateCardioAvgHr({ date, time, durationMin: duration ?? 0 });
+      if (!r.ok) {
+        setCalcMsg(r.error);
+        return;
+      }
+      setAvgHr(String(r.avgHr));
+      setCalcMsg(`Averaged ${r.samples} readings (max ${r.maxHr}).`);
     });
   }
 
@@ -69,12 +94,31 @@ export function CardioForm({ date }: { date: string }) {
             <Input name="distance" type="number" step="any" inputMode="decimal" />
           </Field>
           <Field label="Avg HR (bpm)">
-            <Input name="avgHr" type="number" inputMode="numeric" />
+            <div className="flex gap-2">
+              <Input
+                name="avgHr"
+                type="number"
+                inputMode="numeric"
+                value={avgHr}
+                onChange={(e) => setAvgHr(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={calcHr}
+                disabled={calcPending}
+                className="h-11 shrink-0 px-3 text-sm"
+                title="Average heart rate from Google Health for this time window"
+              >
+                {calcPending ? "…" : "Calc"}
+              </Button>
+            </div>
           </Field>
           <Field label="Calories">
             <Input name="kcal" type="number" inputMode="numeric" />
           </Field>
         </div>
+        {calcMsg && <p className="text-sm text-muted-foreground">{calcMsg}</p>}
         <Field label="Notes">
           <Input name="notes" placeholder="optional" />
         </Field>

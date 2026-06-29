@@ -17,6 +17,51 @@ import {
   setNextWorkout,
 } from "./settings";
 import { revalidatePaths } from "./revalidate";
+import { fetchHeartRateSamples, getAccessToken } from "./integrations/google-health";
+
+export type CalcHrResult =
+  | { ok: true; avgHr: number; maxHr: number; samples: number }
+  | { ok: false; error: string };
+
+/**
+ * Average the Fitbit/Google Health heart-rate samples that fall within a logged
+ * cardio window (start time + duration), for the "Calc" button on the form.
+ * Read-only — fetches intraday HR for the session's day and windows it locally.
+ */
+export async function calculateCardioAvgHr(input: {
+  date: string;
+  time: string;
+  durationMin: number;
+}): Promise<CalcHrResult> {
+  await requireAuth();
+  if (!isValidISO(input.date)) return { ok: false, error: "Invalid date" };
+  if (!/^\d{2}:\d{2}$/.test(input.time)) return { ok: false, error: "Set a start time first" };
+  if (!Number.isFinite(input.durationMin) || input.durationMin <= 0) {
+    return { ok: false, error: "Set a duration first" };
+  }
+
+  const start = new Date(`${input.date}T${input.time}:00`).getTime();
+  if (!Number.isFinite(start)) return { ok: false, error: "Invalid start time" };
+  const end = start + input.durationMin * 60_000;
+
+  const token = await getAccessToken();
+  if (!token) return { ok: false, error: "Connect Google Health first (Sync)." };
+
+  let samples;
+  try {
+    samples = await fetchHeartRateSamples(token, input.date);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Heart-rate fetch failed" };
+  }
+
+  const inWindow = samples.filter((s) => s.ms >= start && s.ms <= end);
+  if (inWindow.length === 0) {
+    return { ok: false, error: "No heart-rate data found for that window." };
+  }
+  const avgHr = Math.round(inWindow.reduce((s, x) => s + x.bpm, 0) / inWindow.length);
+  const maxHr = Math.round(Math.max(...inWindow.map((x) => x.bpm)));
+  return { ok: true, avgHr, maxHr, samples: inWindow.length };
+}
 
 export type CardioInput = {
   date: string;

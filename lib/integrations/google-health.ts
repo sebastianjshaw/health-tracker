@@ -33,6 +33,9 @@ export const DATA_TYPES = {
   // aggregate to a daily value. (`-rmssd`/`respiratory-rate` slugs 400 here.)
   spo2: "oxygen-saturation",
   hrv: "heart-rate-variability",
+  // Instantaneous heart-rate samples (bpm + timestamp) — used on demand to
+  // average HR over a logged exercise window, not in the regular sync.
+  heartRate: "heart-rate",
 } as const;
 
 const TOKENS_KEY = "googleHealth";
@@ -322,4 +325,68 @@ export async function fetchDailyTotals(
     if (best) totals.set(date, best.value);
   }
   return totals;
+}
+
+// ---- Instantaneous heart-rate samples (for the cardio "Calc HR" button) ----
+
+type SampleTime = {
+  instantTime?: string; // RFC3339 absolute instant
+  civilTime?: {
+    date?: { year?: number; month?: number; day?: number };
+    timeOfDay?: { hours?: number; minutes?: number; seconds?: number };
+  };
+};
+
+/** Absolute epoch-ms for an instantaneous sample. Prefers the absolute
+ * `instantTime`; falls back to composing the local `civilTime`. null if neither. */
+function sampleMs(st?: SampleTime): number | null {
+  if (!st) return null;
+  if (typeof st.instantTime === "string") {
+    const t = Date.parse(st.instantTime);
+    if (Number.isFinite(t)) return t;
+  }
+  const c = st.civilTime;
+  const d = c?.date;
+  if (d?.year && d?.month && d?.day) {
+    const tod = c?.timeOfDay ?? {};
+    // civilTime is local wall-clock; build it as a local Date.
+    return new Date(d.year, d.month - 1, d.day, tod.hours ?? 0, tod.minutes ?? 0, tod.seconds ?? 0).getTime();
+  }
+  return null;
+}
+
+function sampleDate(st?: SampleTime): string | null {
+  if (st?.civilTime?.date?.year) {
+    const d = st.civilTime.date;
+    return `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
+  }
+  return typeof st?.instantTime === "string" && st.instantTime.length >= 10
+    ? st.instantTime.slice(0, 10)
+    : null;
+}
+
+export type HeartRateSample = { ms: number; bpm: number };
+
+/**
+ * Instantaneous heart-rate samples on or after `since` (YYYY-MM-DD). Like the
+ * other instantaneous types this rejects server-side time filters but comes
+ * back newest-first, so we page only back to `since` and window the rest
+ * client-side. Keep `since` tight (the session's own day) — a day of intraday
+ * HR is hundreds of points.
+ */
+export async function fetchHeartRateSamples(
+  accessToken: string,
+  since: string,
+): Promise<HeartRateSample[]> {
+  const points = await listDataPointsSince(accessToken, DATA_TYPES.heartRate, since, (dp) =>
+    sampleDate((dp.heartRate as { sampleTime?: SampleTime } | undefined)?.sampleTime),
+  );
+  const out: HeartRateSample[] = [];
+  for (const dp of points) {
+    const hr = dp.heartRate as { sampleTime?: SampleTime; beatsPerMinute?: string | number } | undefined;
+    const ms = sampleMs(hr?.sampleTime);
+    const bpm = Number(hr?.beatsPerMinute);
+    if (ms != null && Number.isFinite(bpm) && bpm > 0) out.push({ ms, bpm });
+  }
+  return out;
 }
