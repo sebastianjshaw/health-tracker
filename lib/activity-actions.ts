@@ -58,8 +58,9 @@ export async function calculateCardioAvgHr(input: {
     return { ok: false, error: e instanceof Error ? e.message : "Heart-rate fetch failed" };
   }
 
-  const daySamples = samples.filter((s) => s.date === input.date && s.minute != null);
-  const inWindow = daySamples.filter((s) => s.minute! >= startMin && s.minute! <= endMin);
+  const daySamples = samples.filter((s) => s.date === input.date);
+  const timed = daySamples.filter((s) => s.minute != null);
+  const inWindow = timed.filter((s) => s.minute! >= startMin && s.minute! <= endMin);
 
   if (inWindow.length === 0) {
     if (daySamples.length === 0) {
@@ -68,10 +69,13 @@ export async function calculateCardioAvgHr(input: {
         error: `No intraday heart-rate found for ${input.date}. Sync, and check that heart rate is exporting to Google Health.`,
       };
     }
-    const minutes = daySamples.map((s) => s.minute!).sort((a, b) => a - b);
+    if (timed.length === 0) {
+      return { ok: false, error: `Found ${daySamples.length} HR readings for ${input.date} but without per-sample timestamps to window.` };
+    }
+    const minutes = timed.map((s) => s.minute!).sort((a, b) => a - b);
     return {
       ok: false,
-      error: `Found ${daySamples.length} HR readings on ${input.date} (${fmt(minutes[0])}–${fmt(minutes[minutes.length - 1])}) but none in ${input.time}–${fmt(endMin)}.`,
+      error: `Found ${timed.length} HR readings on ${input.date} (${fmt(minutes[0])}–${fmt(minutes[minutes.length - 1])}) but none in ${input.time}–${fmt(endMin)}.`,
     };
   }
 

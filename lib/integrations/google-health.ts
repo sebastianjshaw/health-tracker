@@ -383,9 +383,13 @@ export async function fetchHeartRateSamples(
   );
   const out: HeartRateSample[] = [];
   for (const dp of points) {
-    const hr = dp.heartRate as { sampleTime?: SampleTime; beatsPerMinute?: string | number } | undefined;
+    // The instantaneous heart-rate sample carries bpm in `bpm` (daily resting
+    // HR uses `beatsPerMinute` — accept both to be safe).
+    const hr = dp.heartRate as
+      | { sampleTime?: SampleTime; bpm?: string | number; beatsPerMinute?: string | number }
+      | undefined;
     const { date, minute } = sampleLocal(hr?.sampleTime);
-    const bpm = Number(hr?.beatsPerMinute);
+    const bpm = Number(hr?.bpm ?? hr?.beatsPerMinute);
     if (Number.isFinite(bpm) && bpm > 0) out.push({ date, minute, bpm });
   }
   return out;
