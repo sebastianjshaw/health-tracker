@@ -330,10 +330,12 @@ export async function fetchDailyTotals(
 // ---- Instantaneous heart-rate samples (for the cardio "Calc HR" button) ----
 
 type SampleTime = {
-  instantTime?: string; // RFC3339 absolute instant
+  physicalTime?: string; // RFC3339 absolute instant (UTC)
+  utcOffset?: string;
   civilTime?: {
     date?: { year?: number; month?: number; day?: number };
-    timeOfDay?: { hours?: number; minutes?: number; seconds?: number };
+    // Local wall-clock; `time`, not `timeOfDay`. Zero components are omitted.
+    time?: { hours?: number; minutes?: number; seconds?: number };
   };
 };
 
@@ -348,14 +350,14 @@ function sampleLocal(st?: SampleTime): { date: string | null; minute: number | n
   const d = c?.date;
   if (d?.year && d?.month && d?.day) {
     const date = `${d.year}-${String(d.month).padStart(2, "0")}-${String(d.day).padStart(2, "0")}`;
-    const tod = c?.timeOfDay;
-    const minute = tod ? (tod.hours ?? 0) * 60 + (tod.minutes ?? 0) : null;
+    const t = c?.time;
+    const minute = t ? (t.hours ?? 0) * 60 + (t.minutes ?? 0) : null;
     return { date, minute };
   }
-  if (typeof st?.instantTime === "string") {
-    const t = new Date(st.instantTime);
+  if (typeof st?.physicalTime === "string") {
+    const t = new Date(st.physicalTime);
     if (!Number.isNaN(t.getTime())) {
-      return { date: st.instantTime.slice(0, 10), minute: t.getUTCHours() * 60 + t.getUTCMinutes() };
+      return { date: st.physicalTime.slice(0, 10), minute: t.getUTCHours() * 60 + t.getUTCMinutes() };
     }
   }
   return { date: null, minute: null };
