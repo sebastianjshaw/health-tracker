@@ -19,6 +19,7 @@ import {
   calorieSeriesRange,
   getBodyMetrics,
   getLiftProgression,
+  getRestingHrSeries,
   getWeightSeries,
 } from "./stats-data";
 import {
@@ -163,7 +164,7 @@ function buildTrends(panels: BloodPanel[]): MarkerTrend[] {
 }
 
 export async function getReportData(from: string, to: string): Promise<ReportData> {
-  const [profile, targets, goalWeight, weights, allBody, panels, calorie, lifts, cardio] =
+  const [profile, targets, goalWeight, weights, allBody, panels, calorie, lifts, restingHrSeries, cardio] =
     await Promise.all([
       getProfile(),
       getTargets(),
@@ -173,6 +174,7 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
       getBloodPanels(), // newest-first
       calorieSeriesRange(from, to),
       getLiftProgression(),
+      getRestingHrSeries(from, to), // wearable daily RHR within range, ascending
       db
         .select()
         .from(cardioSessions)
@@ -204,6 +206,19 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
   });
   const latestWaist = latestWith(rangeBody, (m) => m.waistCm);
   const whtr = waistToHeight(latestWaist?.value ?? null, profile.heightCm);
+
+  // Resting HR: use the wearable daily feed (heart_rate_daily) — the same source
+  // the stats page and character sheet use — as a range average, so the report
+  // agrees with the rest of the app instead of echoing a stale manual entry.
+  // Fall back to the latest manual body_metrics reading only if no wearable data.
+  const restingHr: { value: number; date: string } | null = restingHrSeries.length
+    ? {
+        value: Math.round(
+          restingHrSeries.reduce((s, r) => s + r.restingBpm, 0) / restingHrSeries.length,
+        ),
+        date: restingHrSeries[restingHrSeries.length - 1].date,
+      }
+    : latestWith(rangeBody, (m) => m.restingHr);
 
   // ---- derived: measured TDEE + plateau (recent window, weight vs. intake) ----
   const tryingToLose = goalWeight != null && current != null && current.weight > goalWeight;
@@ -283,7 +298,7 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
       latestWaist,
       baselineWaist: earliestWith(rangeBody, (m) => m.waistCm),
       latestBodyFat,
-      latestRestingHr: latestWith(rangeBody, (m) => m.restingHr),
+      latestRestingHr: restingHr,
       // Derived (estimates, not measurements), all from the same reading.
       leanMassKg: bodyComp?.leanMassKg ?? null,
       fatMassKg: bodyComp?.fatMassKg ?? null,

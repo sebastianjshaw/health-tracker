@@ -185,7 +185,7 @@ export default async function ReportPage({
                 </td>
               </tr>
               <tr>
-                <td className="py-1.5 text-muted-foreground">Resting heart rate</td>
+                <td className="py-1.5 text-muted-foreground">Resting heart rate (period avg)</td>
                 <td className="py-1.5 text-right">
                   {v.latestRestingHr ? `${v.latestRestingHr.value} bpm` : "—"}
                 </td>

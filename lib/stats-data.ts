@@ -333,12 +333,18 @@ export async function getCardioDistances(): Promise<DistancePoint[]> {
 
 export type RestingHrPoint = { date: string; restingBpm: number };
 
-/** Daily resting heart rate (where recorded), oldest first. */
-export async function getRestingHrSeries(): Promise<RestingHrPoint[]> {
+/** Daily resting heart rate (where recorded), oldest first. Optionally bounded
+ * to an inclusive [from, to] date range. */
+export async function getRestingHrSeries(from?: string, to?: string): Promise<RestingHrPoint[]> {
+  const bounds = [
+    isNotNull(heartRateDaily.restingBpm),
+    from ? gte(heartRateDaily.date, from) : undefined,
+    to ? lte(heartRateDaily.date, to) : undefined,
+  ].filter(Boolean);
   const rows = await db
     .select({ date: heartRateDaily.date, bpm: heartRateDaily.restingBpm })
     .from(heartRateDaily)
-    .where(isNotNull(heartRateDaily.restingBpm))
+    .where(and(...bounds))
     .orderBy(asc(heartRateDaily.date))
     .all();
   return rows.map((r) => ({ date: r.date, restingBpm: r.bpm as number }));
