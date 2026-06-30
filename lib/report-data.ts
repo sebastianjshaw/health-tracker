@@ -238,14 +238,6 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
   const avgProtein = logged.length
     ? Math.round(logged.reduce((s, c) => s + c.protein, 0) / logged.length)
     : null;
-  // Average the target that was actually in effect across the range, so a window
-  // spanning a target change isn't judged against the latest value alone.
-  const avgTargetKcal = calorie.length
-    ? Math.round(calorie.reduce((s, c) => s + c.targetKcal, 0) / calorie.length)
-    : targets.kcal;
-  const avgTargetProtein = calorie.length
-    ? Math.round(calorie.reduce((s, c) => s + c.targetProtein, 0) / calorie.length)
-    : targets.protein;
 
   // ---- activity (cardio in range) ----
   const byTypeMap = new Map<string, { count: number; totalMin: number; totalKm: number }>();
@@ -316,8 +308,10 @@ export async function getReportData(from: string, to: string): Promise<ReportDat
       avgProtein,
       daysLogged: logged.length,
       daysInRange,
-      targetKcal: avgTargetKcal,
-      targetProtein: avgTargetProtein,
+      // Current target (matches the Today page) — not a period average, which
+      // blends across a mid-range target change and reads as "wrong".
+      targetKcal: targets.kcal,
+      targetProtein: targets.protein,
     },
     activity: {
       cardio: {
