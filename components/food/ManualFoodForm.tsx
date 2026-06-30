@@ -12,6 +12,7 @@ import {
   evolutionForSource,
 } from "@/lib/constants";
 import { inferCategory } from "@/lib/food-category";
+import { num, trimNum } from "@/lib/format";
 import { NutrientList, type Extra } from "./NutrientList";
 import {
   createFood,
@@ -21,6 +22,26 @@ import {
 import type { Food } from "@/db/schema";
 
 const initialState: FoodFormState = { error: null };
+
+// Nutrition is stored per serving, but most labels quote per 100 g/ml — so for
+// mass/volume foods the form takes values per 100 and scales them to the serving
+// size on save (and back when editing). Discrete units (e.g. "serving", "piece")
+// keep per-serving entry, where "per 100" is meaningless.
+const PER100_UNITS = new Set(["g", "ml"]);
+const isPer100Unit = (unit: string) => PER100_UNITS.has(unit.trim().toLowerCase());
+
+/** Per-serving nutrient fields that scale with the serving size. */
+const SCALED_FIELDS = [
+  "kcal",
+  "protein",
+  "carbs",
+  "fat",
+  "fiber",
+  "sugar",
+  "saturatedFat",
+  "salt",
+  "sodium",
+] as const;
 
 function parseExtras(json: string | null | undefined): Extra[] {
   if (!json) return [];
@@ -66,8 +87,24 @@ export function ManualFoodForm({
   const [pending, start] = useTransition();
   const [error, setError] = React.useState<string | null>(null);
 
+  // The stored values were saved per serving; convert them back to per-100 for
+  // display when the food is measured by mass/volume, so the form round-trips.
+  const baseSize = food?.servingSize ?? defaults?.servingSize ?? 100;
+  const baseUnit = food?.servingUnit ?? defaults?.servingUnit ?? "g";
+  const showPer100 = isPer100Unit(baseUnit) && baseSize > 0 && baseSize !== 100;
+  const toPer100 = (v: number | string | null | undefined): number | string => {
+    if (v === "" || v == null) return "";
+    return showPer100 ? trimNum((Number(v) * 100) / baseSize) : trimNum(Number(v));
+  };
+
+  const [unit, setUnit] = React.useState<string>(baseUnit);
+
   const [extras, setExtras] = React.useState<Extra[]>(() =>
-    parseExtras(food?.extras ?? null),
+    parseExtras(food?.extras ?? null).map((e) =>
+      showPer100 && e.value.trim() !== ""
+        ? { ...e, value: String(toPer100(e.value)) }
+        : e,
+    ),
   );
   const hasExtended = !!(
     food &&
@@ -83,6 +120,29 @@ export function ManualFoodForm({
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    // Inputs are per 100 g/ml for mass/volume foods — scale to per serving (the
+    // stored convention) so logged totals come out right for the serving size.
+    const size = num(fd.get("servingSize"), 100);
+    const enteredUnit = String(fd.get("servingUnit") ?? "").trim() || "g";
+    if (isPer100Unit(enteredUnit) && size > 0 && size !== 100) {
+      const factor = size / 100;
+      for (const key of SCALED_FIELDS) {
+        const raw = fd.get(key);
+        if (raw != null && String(raw).trim() !== "") {
+          fd.set(key, String(Number(raw) * factor));
+        }
+      }
+      if (cleanExtras.length) {
+        fd.set(
+          "extras",
+          JSON.stringify(
+            cleanExtras.map((ex) =>
+              ex.value.trim() === "" ? ex : { ...ex, value: String(Number(ex.value) * factor) },
+            ),
+          ),
+        );
+      }
+    }
     const action = editing ? updateFood : createFood;
     start(async () => {
       setError(null);
@@ -101,16 +161,17 @@ export function ManualFoodForm({
     brand: food?.brand ?? defaults?.brand ?? "",
     barcode: food?.barcode ?? defaults?.barcode ?? "",
     servingSize: food?.servingSize ?? defaults?.servingSize ?? 100,
-    servingUnit: food?.servingUnit ?? defaults?.servingUnit ?? "g",
-    kcal: food?.kcal ?? defaults?.kcal ?? "",
-    protein: food?.protein ?? defaults?.protein ?? "",
-    carbs: food?.carbs ?? defaults?.carbs ?? "",
-    fat: food?.fat ?? defaults?.fat ?? "",
-    fiber: food?.fiber ?? "",
-    sugar: food?.sugar ?? "",
-    saturatedFat: food?.saturatedFat ?? "",
-    salt: food?.salt ?? "",
-    sodium: food?.sodium ?? "",
+    servingUnit: baseUnit,
+    // Nutrient defaults are shown per 100 g/ml (see toPer100); stored per serving.
+    kcal: toPer100(food?.kcal ?? defaults?.kcal ?? ""),
+    protein: toPer100(food?.protein ?? defaults?.protein ?? ""),
+    carbs: toPer100(food?.carbs ?? defaults?.carbs ?? ""),
+    fat: toPer100(food?.fat ?? defaults?.fat ?? ""),
+    fiber: toPer100(food?.fiber ?? ""),
+    sugar: toPer100(food?.sugar ?? ""),
+    saturatedFat: toPer100(food?.saturatedFat ?? ""),
+    salt: toPer100(food?.salt ?? ""),
+    sodium: toPer100(food?.sodium ?? ""),
     source: food?.source ?? defaults?.source ?? "manual",
   };
   const defaultCategory =
@@ -141,7 +202,12 @@ export function ManualFoodForm({
           <Input name="servingSize" type="number" step="any" inputMode="decimal" defaultValue={dv.servingSize} />
         </Field>
         <Field label="Unit">
-          <Input name="servingUnit" defaultValue={dv.servingUnit} placeholder="g, ml, serving" />
+          <Input
+            name="servingUnit"
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+            placeholder="g, ml, serving"
+          />
         </Field>
       </div>
 
@@ -165,7 +231,11 @@ export function ManualFoodForm({
         </Select>
       </Field>
 
-      <p className="text-xs text-muted-foreground">Nutrition per serving:</p>
+      <p className="text-xs text-muted-foreground">
+        {isPer100Unit(unit)
+          ? `Nutrition per 100 ${unit.trim().toLowerCase()} — as printed on the label. We scale it to your serving size when logging.`
+          : "Nutrition per serving:"}
+      </p>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Calories (kcal)">
           <Input name="kcal" type="number" step="any" inputMode="decimal" defaultValue={dv.kcal} />
