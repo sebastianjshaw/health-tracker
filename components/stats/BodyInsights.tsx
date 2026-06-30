@@ -1,18 +1,8 @@
 import type { ReactNode } from "react";
-import { Card } from "@/components/ui";
+import { Card, Stat } from "@/components/ui";
 import { trimNum } from "@/lib/format";
 import type { BodyComposition } from "@/lib/metabolic-age";
 import type { MonthlyAverage, YearlyAverage } from "@/lib/seasonal";
-
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-xl bg-muted/50 px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-    </div>
-  );
-}
 
 /** Card-styled native disclosure — closed by default, no client JS. The marker
  * is hidden and replaced with a rotating chevron driven by [open]. */
@@ -71,22 +61,22 @@ export function BodyInsights({
     <div className="space-y-4">
       {bodyComp && (
         <Card className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-4">
-          <Tile
+          <Stat
             label="Lean mass"
             value={`${trimNum(bodyComp.leanMassKg)} kg`}
             sub={bodyComp.measured ? "scale-measured" : "estimated"}
           />
           {bodyComp.fatMassKg != null && (
-            <Tile label="Fat mass" value={`${trimNum(bodyComp.fatMassKg)} kg`} />
+            <Stat label="Fat mass" value={`${trimNum(bodyComp.fatMassKg)} kg`} />
           )}
           {bodyComp.muscleMassKg != null && (
-            <Tile label="Muscle mass" value={`${trimNum(bodyComp.muscleMassKg)} kg`} />
+            <Stat label="Muscle mass" value={`${trimNum(bodyComp.muscleMassKg)} kg`} />
           )}
           {bodyComp.boneMassKg != null && (
-            <Tile label="Bone mass" value={`${trimNum(bodyComp.boneMassKg)} kg`} />
+            <Stat label="Bone mass" value={`${trimNum(bodyComp.boneMassKg)} kg`} />
           )}
           {bodyComp.hydrationKg != null && (
-            <Tile
+            <Stat
               label="Hydration"
               value={`${trimNum(bodyComp.hydrationKg)} kg`}
               sub={
@@ -97,10 +87,10 @@ export function BodyInsights({
             />
           )}
           {bodyComp.ffmi != null && (
-            <Tile label="FFMI" value={`${trimNum(bodyComp.ffmi)}`} sub="lean ÷ height²" />
+            <Stat label="FFMI" value={`${trimNum(bodyComp.ffmi)}`} sub="lean ÷ height²" />
           )}
           {bodyComp.metabolicAge != null && (
-            <Tile
+            <Stat
               label="Metabolic age"
               value={`${bodyComp.metabolicAge} yr`}
               sub={age != null ? `vs ${age} actual` : "estimated"}

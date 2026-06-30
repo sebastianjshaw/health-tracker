@@ -1,14 +1,7 @@
-import { Card } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { Card, Stat, type StatTone } from "@/components/ui";
 import type { RecoveryPoint } from "@/lib/stats-data";
 
-type Dir = "good" | "bad" | "even" | "none";
-const TONE: Record<Dir, string> = {
-  good: "text-accent",
-  bad: "text-danger",
-  even: "text-warn",
-  none: "text-foreground",
-};
+type Dir = StatTone;
 
 /** Average of a metric over the last `days` (from the newest record), or null. */
 function recentAvg(rows: RecoveryPoint[], pick: (r: RecoveryPoint) => number | null, days: number): number | null {
@@ -26,31 +19,6 @@ function recentAvg(rows: RecoveryPoint[], pick: (r: RecoveryPoint) => number | n
     }
   }
   return n ? sum / n : null;
-}
-
-function Tile({
-  label,
-  value,
-  unit,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  sub?: string;
-  tone: Dir;
-}) {
-  return (
-    <div className="rounded-xl bg-muted/50 px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-semibold tabular-nums", TONE[tone])}>
-        {value}
-        {unit && <span className="ml-0.5 text-xs font-normal text-muted-foreground">{unit}</span>}
-      </div>
-      {sub && <div className="text-xs text-muted-foreground">{sub}</div>}
-    </div>
-  );
 }
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -83,21 +51,21 @@ export function RecoveryCard({ data }: { data: RecoveryPoint[] }) {
 
   return (
     <Card className="grid grid-cols-3 gap-2 p-3">
-      <Tile
+      <Stat
         label="HRV (RMSSD)"
         value={hrv7 != null ? `${r1(hrv7)}` : "—"}
         unit="ms"
         sub={delta(hrv7, hrv28, "ms")}
         tone={hrvTone}
       />
-      <Tile
+      <Stat
         label="Blood oxygen"
         value={spo27 != null ? `${r1(spo27)}` : "—"}
         unit="%"
         sub={spo27 != null ? (spo27 >= 95 ? "normal" : "below 95%") : "no data"}
         tone={spo2Tone}
       />
-      <Tile
+      <Stat
         label="Resting HR"
         value={rhr7 != null ? `${Math.round(rhr7)}` : "—"}
         unit="bpm"

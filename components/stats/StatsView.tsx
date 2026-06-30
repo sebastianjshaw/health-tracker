@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Card } from "@/components/ui";
-import { cn } from "@/lib/cn";
+import { Card, SegmentedControl, Stat, type StatTone } from "@/components/ui";
 import { Meal } from "@/lib/constants";
 import { bmi, bmiClass } from "@/lib/health";
 import {
@@ -54,24 +53,13 @@ export type StatsInsights = {
   streak: { logging: number; onTarget: number };
 };
 
-type Tone = "good" | "bad" | "even" | "none";
-const TONE: Record<Tone, string> = {
-  good: "text-accent",
-  bad: "text-danger",
-  even: "text-warn",
-  none: "text-foreground",
-};
+type Tone = StatTone;
 const r1 = (n: number) => Math.round(n * 10) / 10;
 const last = <T,>(a: T[]): T | undefined => a[a.length - 1];
 
-function Metric({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone: Tone }) {
-  return (
-    <div className="rounded-xl bg-muted/50 px-3 py-2">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={cn("text-lg font-semibold tabular-nums", TONE[tone])}>{value}</div>
-      {sub && <div className={cn("text-xs", tone === "none" ? "text-muted-foreground" : TONE[tone])}>{sub}</div>}
-    </div>
-  );
+/** Summary tile — a `Stat` whose sub line follows the value's tone. */
+function Metric(props: { label: string; value: string; sub?: string; tone: Tone }) {
+  return <Stat {...props} subTone />;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -193,42 +181,8 @@ export function StatsView({
     <div className="space-y-6">
       {/* Range + grouping controls — apply to every chart below. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex gap-1.5">
-          {RANGES.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setRange(opt.key)}
-              aria-pressed={range === opt.key}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-sm",
-                range === opt.key
-                  ? "bg-accent text-accent-foreground"
-                  : "border border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-1.5" role="group" aria-label="Group by">
-          {GROUPINGS.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setGroup(opt.key)}
-              aria-pressed={group === opt.key}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-sm",
-                group === opt.key
-                  ? "bg-accent text-accent-foreground"
-                  : "border border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={RANGES} value={range} onChange={setRange} label="Time range" />
+        <SegmentedControl options={GROUPINGS} value={group} onChange={setGroup} label="Group by" />
       </div>
 
       {/* At-a-glance summary */}

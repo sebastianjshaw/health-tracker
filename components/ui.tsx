@@ -149,3 +149,82 @@ export function EmptyState({ children }: { children: React.ReactNode }) {
     <p className="py-8 text-center text-sm text-muted-foreground">{children}</p>
   );
 }
+
+/** A pill-style single-select toggle (time range, grouping, …). Wrapped in a
+ * labelled `role="group"` so the set is announced as one control. */
+export function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+  className,
+}: {
+  options: readonly { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+  /** Group label for assistive tech (not rendered). */
+  label: string;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex gap-1.5", className)} role="group" aria-label={label}>
+      {options.map((opt) => (
+        <button
+          key={opt.key}
+          type="button"
+          onClick={() => onChange(opt.key)}
+          aria-pressed={value === opt.key}
+          className={cn(
+            "rounded-lg px-2.5 py-1 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            value === opt.key
+              ? "bg-accent text-accent-foreground"
+              : "border border-border text-muted-foreground hover:bg-muted",
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export type StatTone = "good" | "bad" | "even" | "none";
+const STAT_TONE: Record<StatTone, string> = {
+  good: "text-accent",
+  bad: "text-danger",
+  even: "text-warn",
+  none: "text-foreground",
+};
+
+/** A compact metric tile: label, big value (optionally with a unit), and an
+ * optional sub line. `subTone` tints the sub line with the value's tone. */
+export function Stat({
+  label,
+  value,
+  unit,
+  sub,
+  tone = "none",
+  subTone = false,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  tone?: StatTone;
+  subTone?: boolean;
+}) {
+  return (
+    <div className="rounded-xl bg-muted/50 px-3 py-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={cn("text-lg font-semibold tabular-nums", STAT_TONE[tone])}>
+        {value}
+        {unit && <span className="ml-0.5 text-xs font-normal text-muted-foreground">{unit}</span>}
+      </div>
+      {sub && (
+        <div className={cn("text-xs", subTone && tone !== "none" ? STAT_TONE[tone] : "text-muted-foreground")}>
+          {sub}
+        </div>
+      )}
+    </div>
+  );
+}

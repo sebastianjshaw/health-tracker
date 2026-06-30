@@ -81,7 +81,6 @@ function longDate(iso: string) {
  */
 type NutRow = {
   key: string;
-  label: string;
   loggedDays: number;
   kcal: number;
   fiber: number;
@@ -101,7 +100,6 @@ function nutritionRows(
   if (g === "day") {
     return data.map((d) => ({
       key: d.date,
-      label: shortDate(d.date),
       loggedDays: d.kcal > 0 ? 1 : 0,
       kcal: d.kcal,
       fiber: d.fiber,
@@ -133,7 +131,7 @@ function nutritionRows(
     a.waterFood += d.waterFood;
     if (d.kcal > 0) a.loggedDays += 1;
   }
-  return keys.map((k) => ({ key: k, label: bucketLabel(g, k), ...acc.get(k)! }));
+  return keys.map((k) => ({ key: k, ...acc.get(k)! }));
 }
 
 const groupNoun = (g: Granularity) => (g === "day" ? "day" : g === "week" ? "week" : "month");
@@ -165,6 +163,17 @@ const tooltipStyle = {
   color: "var(--foreground)",
   fontSize: 12,
 };
+
+/** Wraps a chart so assistive tech announces only `summary`. Recharts renders
+ * its SVG with role="application" and dozens of empty groups; hiding that
+ * subtree keeps the a11y tree to the one curated description. */
+function ChartFigure({ summary, children }: { summary: string; children: React.ReactNode }) {
+  return (
+    <div role="img" aria-label={summary}>
+      <div aria-hidden="true">{children}</div>
+    </div>
+  );
+}
 
 export function WeightChart({
   data,
@@ -232,18 +241,20 @@ export function WeightChart({
   } else {
     const wk = bucketReduce(data, (d) => d.date, (d) => d.weight, granularity, s, e, "avg");
     const pr = bucketReduce(predictions, (p) => p.date, (p) => p.predicted, granularity, s, e, "avg");
+    // Key on the bucket key (unique) rather than the display label (week labels
+    // repeat across years), and format the label at the axis/tooltip.
     chartData = wk.map((w, i) => ({
-      x: w.label,
+      x: w.key,
       weight: w.value == null ? null : round1(w.value),
       predicted: pr[i]?.value == null ? null : round1(pr[i].value),
       avg: null,
     }));
-    // Map each dose marker to its bucket's label.
-    const labelByKey = new Map(wk.map((w) => [w.key, w.label]));
+    // Map each dose marker to its bucket key.
+    const bucketKeys = new Set(wk.map((w) => w.key));
     snappedMarkers = doseMarkers
       .map((m) => {
-        const lbl = labelByKey.get(bucketKey(granularity, m.date));
-        return lbl ? { x: lbl, label: m.label } : null;
+        const k = bucketKey(granularity, m.date);
+        return bucketKeys.has(k) ? { x: k, label: m.label } : null;
       })
       .filter((m): m is { x: string; label: string } => m != null);
   }
@@ -300,13 +311,13 @@ export function WeightChart({
       {data.length === 0 ? (
         <EmptyState>Log your weight to see the trend.</EmptyState>
       ) : (
-        <div role="img" aria-label={summary}>
+        <ChartFigure summary={summary}>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis
               dataKey="x"
-              tickFormatter={isDay ? shortDate : undefined}
+              tickFormatter={(v) => bucketLabel(granularity, String(v))}
               interval="preserveStartEnd"
               stroke={AXIS}
               fontSize={11}
@@ -320,7 +331,9 @@ export function WeightChart({
             />
             <Tooltip
               contentStyle={tooltipStyle}
-              labelFormatter={isDay ? (label) => shortDateYear(String(label)) : undefined}
+              labelFormatter={(label) =>
+                isDay ? shortDateYear(String(label)) : bucketLabel(granularity, String(label))
+              }
               formatter={(value, name) =>
                 value == null ? ["—", name] : [`${value} kg`, name]
               }
@@ -375,7 +388,7 @@ export function WeightChart({
             )}
           </LineChart>
         </ResponsiveContainer>
-        </div>
+        </ChartFigure>
       )}
       {goalNote && (
         <p className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -448,7 +461,7 @@ export function MarkerWeightChart({
   }
 
   return (
-    <div role="img" aria-label={`${markerName} vs body weight over time`}>
+    <ChartFigure summary={`${markerName} vs body weight over time`}>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid stroke={GRID} vertical={false} />
@@ -496,7 +509,7 @@ export function MarkerWeightChart({
         <Swatch color={MARKER_COLOR} label={`${markerName}${unit ? ` (${unit})` : ""}`} />
         <Swatch color={ACTUAL_COLOR} label="Body weight (kg)" />
       </div>
-    </div>
+    </ChartFigure>
   );
 }
 
@@ -549,15 +562,22 @@ export function CalorieChart({
         <EmptyState>No food logged yet.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+              <XAxis
+                dataKey="key"
+                tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                stroke={AXIS}
+                fontSize={11}
+                interval="preserveStartEnd"
+              />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
                 itemStyle={{ color: "var(--foreground)" }}
+                labelFormatter={(label) => bucketLabel(granularity, String(label))}
                 formatter={(value) => [`${Math.round(Number(value))} kcal`, "kcal"]}
                 cursor={{ fill: "var(--muted)" }}
               />
@@ -581,7 +601,7 @@ export function CalorieChart({
               </Bar>
             </BarChart>
           </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <Swatch color={CAL_COLORS.under} label="On/under" />
             <Swatch color={CAL_COLORS.near} label="Up to 10% over" />
@@ -654,15 +674,22 @@ function NutrientBarChart({
       {!hasData ? (
         <EmptyState>{emptyHint}</EmptyState>
       ) : (
-        <div role="img" aria-label={summary}>
+        <ChartFigure summary={summary}>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+              <XAxis
+                dataKey="key"
+                tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                stroke={AXIS}
+                fontSize={11}
+                interval="preserveStartEnd"
+              />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
               <Tooltip
                 contentStyle={tooltipStyle}
                 itemStyle={{ color: "var(--foreground)" }}
+                labelFormatter={(label) => bucketLabel(granularity, String(label))}
                 formatter={(value) => [`${Math.round(Number(value))} g`, title]}
                 cursor={{ fill: "var(--muted)" }}
               />
@@ -709,7 +736,7 @@ function NutrientBarChart({
               Lighter bars are AI-estimated fiber for foods logged without fiber data.
             </p>
           )}
-        </div>
+        </ChartFigure>
       )}
     </ChartCard>
   );
@@ -786,15 +813,22 @@ export function HydrationChart({
         <EmptyState>Logged food &amp; drink will show estimated water here.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
                 <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
                   formatter={(value, name) => [`${Math.round(Number(value))} ml`, name]}
                   cursor={{ fill: "var(--muted)" }}
                 />
@@ -822,7 +856,7 @@ export function HydrationChart({
                 />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <Swatch color={WATER_COLORS.water} label="Water" />
             <Swatch color={WATER_COLORS.drink} label="Other drinks" />
@@ -862,14 +896,14 @@ export function CompositionChart({
   const e = end ?? bars[bars.length - 1]?.date ?? "";
   const chart = React.useMemo(() => {
     if (granularity === "day") {
-      return bars.map((b) => ({ label: shortDate(b.date), fatKg: b.fatKg, leanKg: b.leanKg, boneKg: b.boneKg }));
+      return bars.map((b) => ({ key: b.date, fatKg: b.fatKg, leanKg: b.leanKg, boneKg: b.boneKg }));
     }
     const fat = bucketReduce(bars, (b) => b.date, (b) => b.fatKg, granularity, s, e, "avg");
     const lean = bucketReduce(bars, (b) => b.date, (b) => b.leanKg, granularity, s, e, "avg");
     const bone = bucketReduce(bars, (b) => b.date, (b) => b.boneKg, granularity, s, e, "avg");
     return fat
       .map((f, i) => ({
-        label: f.label,
+        key: f.key,
         fatKg: f.value == null ? 0 : round1(f.value),
         leanKg: lean[i].value == null ? 0 : round1(lean[i].value),
         boneKg: bone[i].value == null ? 0 : round1(bone[i].value),
@@ -890,15 +924,22 @@ export function CompositionChart({
         <EmptyState>Weigh-ins with a body-fat reading will break weight into fat, lean &amp; bone here.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
                   formatter={(value, name) => [`${value} kg`, name]}
                   cursor={{ fill: "var(--muted)" }}
                 />
@@ -907,7 +948,7 @@ export function CompositionChart({
                 <Bar dataKey="boneKg" stackId="c" fill={COMP_COLORS.bone} name="Bone" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <Swatch color={COMP_COLORS.fat} label="Fat" />
             <Swatch color={COMP_COLORS.lean} label="Lean" />
@@ -939,7 +980,7 @@ export function StepsChart({ data }: { data: ActivityPoint[] }) {
         <EmptyState>Passive steps appear here once your device syncs movement.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: 4 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
@@ -978,7 +1019,7 @@ export function StepsChart({ data }: { data: ActivityPoint[] }) {
                 <Bar dataKey="steps" radius={[4, 4, 0, 0]} fill="#2dd4bf" name="Steps" />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <p className="mt-2 text-xs text-muted-foreground">
             Passive movement from your device — counted toward energy use, net of any logged
             cardio sessions.
@@ -1005,7 +1046,7 @@ export function LiftChart({ data }: { data: LiftPoint[] }) {
         <EmptyState>Complete a workout to see progress.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -16 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
@@ -1026,7 +1067,7 @@ export function LiftChart({ data }: { data: LiftPoint[] }) {
               ))}
             </LineChart>
           </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
             {EXERCISES.map((ex) => (
               <span key={ex} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1090,7 +1131,7 @@ export function DistanceChart({
     const k = bucketKey(granularity, p.date);
     if (sums.has(k)) sums.set(k, (sums.get(k) ?? 0) + p.km);
   }
-  const chart = keys.map((k) => ({ label: bucketLabel(granularity, k), km: round1(sums.get(k) ?? 0) }));
+  const chart = keys.map((k) => ({ key: k, km: round1(sums.get(k) ?? 0) }));
   const total = data.reduce((s, p) => s + p.km, 0);
   const equiv = distanceEquivalent(total);
   const summary =
@@ -1104,21 +1145,28 @@ export function DistanceChart({
         <EmptyState>Log a cardio session with a distance to see this.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   cursor={{ fill: "var(--muted)" }}
+                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
                   formatter={(v) => [`${v} km`, "Distance"]}
                 />
                 <Bar dataKey="km" radius={[4, 4, 0, 0]} fill="#2563eb" name="km" />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <p className="mt-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">{round1(total)} km</span> total
             {equiv && <> · {equiv}</>}
@@ -1166,7 +1214,7 @@ export function SleepChart({
     const a = acc.get(k)!;
     const n = a.n || 1;
     return {
-      label: bucketLabel(granularity, k),
+      key: k,
       deep: round1(a.deep / n / 60),
       rem: round1(a.rem / n / 60),
       light: round1(a.light / n / 60),
@@ -1187,14 +1235,21 @@ export function SleepChart({
         <EmptyState>Connect a wearable to see your sleep.</EmptyState>
       ) : (
         <>
-          <div role="img" aria-label={summary}>
+          <ChartFigure summary={summary}>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
                 <YAxis stroke={AXIS} fontSize={11} width={40} unit="h" />
                 <Tooltip
                   contentStyle={tooltipStyle}
+                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
                   formatter={(v, n) => [`${v} h`, String(n)]}
                 />
                 {hasStages ? (
@@ -1214,7 +1269,7 @@ export function SleepChart({
                 )}
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             {hasStages && (
               <>
@@ -1248,9 +1303,9 @@ export function HeartRateChart({
   const e = end ?? data[data.length - 1]?.date ?? "";
   const rows =
     granularity === "day"
-      ? data.map((d) => ({ label: shortDate(d.date), bpm: d.restingBpm as number | null }))
+      ? data.map((d) => ({ key: d.date, bpm: d.restingBpm as number | null }))
       : bucketReduce(data, (d) => d.date, (d) => d.restingBpm, granularity, s, e, "avg").map((b) => ({
-          label: b.label,
+          key: b.key,
           bpm: b.value == null ? null : Math.round(b.value),
         }));
   const vals = rows.map((r) => r.bpm).filter((v): v is number => v != null);
@@ -1264,14 +1319,21 @@ export function HeartRateChart({
       {vals.length === 0 ? (
         <EmptyState>Connect a wearable to see resting HR.</EmptyState>
       ) : (
-        <div role="img" aria-label={summary}>
+        <ChartFigure summary={summary}>
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+            <XAxis
+              dataKey="key"
+              tickFormatter={(v) => bucketLabel(granularity, String(v))}
+              stroke={AXIS}
+              fontSize={11}
+              interval="preserveStartEnd"
+            />
             <YAxis stroke={AXIS} fontSize={11} width={40} domain={[lo, hi]} allowDecimals={false} />
             <Tooltip
               contentStyle={tooltipStyle}
+              labelFormatter={(label) => bucketLabel(granularity, String(label))}
               formatter={(v) => [`${v} bpm`, "Resting HR"]}
             />
             <Line
@@ -1285,7 +1347,7 @@ export function HeartRateChart({
             />
           </LineChart>
         </ResponsiveContainer>
-        </div>
+        </ChartFigure>
       )}
     </ChartCard>
   );
@@ -1301,7 +1363,7 @@ export function Vo2maxChart({ data, granularity = "month" }: { data: Vo2Point[];
   }
   const rows = [...byBucket.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([k, v]) => ({ label: bucketLabel(granularity, k), vo2max: Math.round(v * 10) / 10 }));
+    .map(([k, v]) => ({ key: k, vo2max: Math.round(v * 10) / 10 }));
   const latest = rows[rows.length - 1]?.vo2max;
   const summary = latest
     ? `Estimated VO₂max around ${latest} ml/kg/min (best per ${groupNoun(granularity)} from your runs).`
@@ -1311,17 +1373,27 @@ export function Vo2maxChart({ data, granularity = "month" }: { data: Vo2Point[];
       {rows.length === 0 ? (
         <EmptyState>Log runs with distance &amp; time to estimate VO₂max.</EmptyState>
       ) : (
-        <div role="img" aria-label={summary}>
+        <ChartFigure summary={summary}>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+              <XAxis
+                dataKey="key"
+                tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                stroke={AXIS}
+                fontSize={11}
+                interval="preserveStartEnd"
+              />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={["dataMin - 2", "dataMax + 2"]} />
-              <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} ml/kg/min`, "VO₂max"]} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(label) => bucketLabel(granularity, String(label))}
+                formatter={(v) => [`${v} ml/kg/min`, "VO₂max"]}
+              />
               <Line type="monotone" dataKey="vo2max" stroke={ACTUAL_COLOR} strokeWidth={2} dot={{ r: 2 }} />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </ChartFigure>
       )}
       <p className="mt-1 text-xs text-muted-foreground">Daniels–Gilbert estimate — directional; affected by terrain &amp; pacing.</p>
     </ChartCard>
@@ -1356,7 +1428,7 @@ export function TrainingLoadChart({
   const rows = [...byBucket.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .slice(-16)
-    .map(([k, v]) => ({ label: bucketLabel(granularity, k), load: Math.round(v) }));
+    .map(([k, v]) => ({ key: k, load: Math.round(v) }));
   const zone = LOAD_ZONE[ratio.zone];
   return (
     <ChartCard title={`Training load (per ${groupNoun(granularity)})`}>
@@ -1369,17 +1441,28 @@ export function TrainingLoadChart({
             <span className={cn("font-semibold tabular-nums", zone.cls)}>{ratio.ratio ?? "—"}</span>
             <span className={cn("text-xs", zone.cls)}>{zone.label}</span>
           </div>
-          <div role="img" aria-label={`Training load; acute-to-chronic ratio ${ratio.ratio ?? "n/a"} (${zone.label}).`}>
+          <ChartFigure summary={`Training load; acute-to-chronic ratio ${ratio.ratio ?? "n/a"} (${zone.label}).`}>
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} load`, "Load"]} cursor={{ fill: "var(--muted)" }} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
+                  formatter={(v) => [`${v} load`, "Load"]}
+                  cursor={{ fill: "var(--muted)" }}
+                />
                 <Bar dataKey="load" radius={[4, 4, 0, 0]} fill={ACTUAL_COLOR} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+          </ChartFigure>
           <p className="mt-1 text-xs text-muted-foreground">
             Load = duration × type intensity. Sweet spot 0.8–1.3; above ~1.5 is a spike.
           </p>

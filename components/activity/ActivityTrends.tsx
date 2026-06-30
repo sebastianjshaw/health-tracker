@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { cn } from "@/lib/cn";
+import { SegmentedControl } from "@/components/ui";
 import { DistanceChart, LiftChart, StepsChart } from "@/components/stats/charts-lazy";
 import { RANGES, Range, cutoffFor, granularityFor, withinRange } from "@/lib/stats-range";
 import type { ActivityPoint, DistancePoint, LiftPoint } from "@/lib/stats-data";
@@ -33,23 +33,7 @@ export function ActivityTrends({
     <section className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Trends</h2>
-        <div className="flex gap-1">
-          {RANGES.map((opt) => (
-            <button
-              key={opt.key}
-              onClick={() => setRange(opt.key)}
-              aria-pressed={range === opt.key}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-sm",
-                range === opt.key
-                  ? "bg-accent text-accent-foreground"
-                  : "border border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl options={RANGES} value={range} onChange={setRange} label="Time range" />
       </div>
 
       <LiftChart data={fLifts} />
