@@ -60,6 +60,12 @@ function shortDate(d: string) {
   return `${day}/${m}`;
 }
 
+/** "dd/mm/yy" from an ISO date — for tooltips where the year matters. */
+function shortDateYear(d: string) {
+  const [y, m, day] = d.split("-");
+  return `${day}/${m}/${y.slice(2)}`;
+}
+
 const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "12 Jul 2027" from an ISO date — tz-stable (parses the string parts). */
 function longDate(iso: string) {
@@ -274,7 +280,7 @@ export function WeightChart({
             />
             <Tooltip
               contentStyle={tooltipStyle}
-              labelFormatter={(label) => shortDate(String(label))}
+              labelFormatter={(label) => shortDateYear(String(label))}
               formatter={(value, name) =>
                 value == null ? ["—", name] : [`${value} kg`, name]
               }
