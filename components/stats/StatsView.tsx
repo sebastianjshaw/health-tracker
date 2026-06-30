@@ -27,7 +27,6 @@ import {
   Range,
   Granularity,
   cutoffFor,
-  granularityFor,
   withinRange,
 } from "@/lib/stats-range";
 
@@ -128,9 +127,8 @@ export function StatsView({
   age: number | null;
 }) {
   const [range, setRange] = React.useState<Range>("30d");
-  const [nutriGroup, setNutriGroup] = React.useState<Granularity>("day");
+  const [group, setGroup] = React.useState<Granularity>("day");
   const cutoff = cutoffFor(range, today);
-  const granularity = granularityFor(range);
 
   const fWeight = withinRange(weight, cutoff);
   const fPredictions = withinRange(predictions, cutoff);
@@ -193,24 +191,44 @@ export function StatsView({
 
   return (
     <div className="space-y-6">
-      {/* Range control */}
-      <div className="flex gap-1.5">
-        {RANGES.map((opt) => (
-          <button
-            key={opt.key}
-            type="button"
-            onClick={() => setRange(opt.key)}
-            aria-pressed={range === opt.key}
-            className={cn(
-              "rounded-lg px-2.5 py-1 text-sm",
-              range === opt.key
-                ? "bg-accent text-accent-foreground"
-                : "border border-border text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
+      {/* Range + grouping controls — apply to every chart below. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex gap-1.5">
+          {RANGES.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setRange(opt.key)}
+              aria-pressed={range === opt.key}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-sm",
+                range === opt.key
+                  ? "bg-accent text-accent-foreground"
+                  : "border border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-1.5" role="group" aria-label="Group by">
+          {GROUPINGS.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => setGroup(opt.key)}
+              aria-pressed={group === opt.key}
+              className={cn(
+                "rounded-lg px-2.5 py-1 text-sm",
+                group === opt.key
+                  ? "bg-accent text-accent-foreground"
+                  : "border border-border text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* At-a-glance summary */}
@@ -267,54 +285,42 @@ export function StatsView({
       </Card>
 
       <Section title="Body">
-        <WeightChart data={fWeight} predictions={fPredictions} goalWeight={goalWeight} today={today} />
-        <CompositionChart data={fWeight} />
+        <WeightChart
+          data={fWeight}
+          predictions={fPredictions}
+          goalWeight={goalWeight}
+          today={today}
+          granularity={group}
+          start={startOf(fWeight)}
+          end={today}
+        />
+        <CompositionChart data={fWeight} granularity={group} start={startOf(fWeight)} end={today} />
         <BodyInsights bodyComp={bodyComp} yearly={yearly} monthly={monthly} age={age} />
       </Section>
 
       <Section title="Nutrition">
-        {/* Grouping control: Day = per-day bars; Week/Month sum into one bar per
-            bucket for a less cluttered long-range view. */}
-        <div className="flex gap-1.5">
-          {GROUPINGS.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              onClick={() => setNutriGroup(opt.key)}
-              aria-pressed={nutriGroup === opt.key}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-sm",
-                nutriGroup === opt.key
-                  ? "bg-accent text-accent-foreground"
-                  : "border border-border text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
         <CalorieChart
           data={fCalories}
           target={targets.kcal}
           mealSplit={mealSplit}
-          granularity={nutriGroup}
+          granularity={group}
           start={startOf(fCalories)}
           end={today}
         />
-        <FiberChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
-        <SatFatChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
-        <HydrationChart data={fCalories} granularity={nutriGroup} start={startOf(fCalories)} end={today} />
+        <FiberChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
+        <SatFatChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
+        <HydrationChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
       </Section>
 
       <Section title="Fitness & recovery">
         <RecoveryCard data={recovery} />
-        <Vo2maxChart data={vo2max} />
-        <TrainingLoadChart sessions={loadSessions} today={today} />
+        <Vo2maxChart data={vo2max} granularity={group} />
+        <TrainingLoadChart sessions={loadSessions} today={today} granularity={group} />
       </Section>
 
       <Section title="Wellbeing">
-        <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={granularity} />
-        <HeartRateChart data={fHr} />
+        <SleepChart data={fSleep} start={startOf(fSleep)} end={today} granularity={group} />
+        <HeartRateChart data={fHr} granularity={group} start={startOf(fHr)} end={today} />
         {/* Health calendar keeps its own year view, independent of the range above. */}
         <HealthCalendar statuses={health} end={today} />
       </Section>

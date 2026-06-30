@@ -64,6 +64,43 @@ export function bucketLabel(g: Granularity, key: string): string {
   return `${d}/${m}`;
 }
 
+export type BucketPoint = { key: string; label: string; value: number | null };
+
+/**
+ * Bucket daily rows by granularity and reduce each bucket to a single value.
+ * Empty buckets yield `null` (so lines gap rather than dropping to zero).
+ * `avg`/`max` suit measurements; `sum` suits counts/totals.
+ */
+export function bucketReduce<T>(
+  rows: T[],
+  dateOf: (r: T) => string,
+  valueOf: (r: T) => number | null | undefined,
+  g: Granularity,
+  start: string,
+  end: string,
+  agg: "avg" | "sum" | "max",
+): BucketPoint[] {
+  const keys = bucketKeysBetween(g, start, end);
+  const acc = new Map<string, number[]>(keys.map((k) => [k, []]));
+  for (const r of rows) {
+    const arr = acc.get(bucketKey(g, dateOf(r)));
+    if (!arr) continue;
+    const v = valueOf(r);
+    if (v == null || !Number.isFinite(v)) continue;
+    arr.push(v);
+  }
+  return keys.map((k) => {
+    const arr = acc.get(k)!;
+    let value: number | null = null;
+    if (arr.length) {
+      if (agg === "sum") value = arr.reduce((s, x) => s + x, 0);
+      else if (agg === "max") value = Math.max(...arr);
+      else value = arr.reduce((s, x) => s + x, 0) / arr.length;
+    }
+    return { key: k, label: bucketLabel(g, k), value };
+  });
+}
+
 /** Ordered bucket keys spanning [start, end] inclusive. */
 export function bucketKeysBetween(g: Granularity, start: string, end: string): string[] {
   const keys: string[] = [];

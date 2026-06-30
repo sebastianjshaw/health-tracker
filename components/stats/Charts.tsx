@@ -25,7 +25,7 @@ import {
   bucketKey,
   bucketKeysBetween,
   bucketLabel,
-  mondayOf,
+  bucketReduce,
 } from "@/lib/stats-range";
 import { acwr, dailyLoad, type Acwr, type LoadSession } from "@/lib/fitness";
 import type {
@@ -172,6 +172,9 @@ export function WeightChart({
   goalWeight,
   today,
   doseMarkers = [],
+  granularity = "day",
+  start,
+  end,
 }: {
   data: WeightPoint[];
   predictions?: WeightPrediction[];
@@ -180,21 +183,70 @@ export function WeightChart({
   doseMarkers?: { date: string; label: string }[];
   /** When set, shows a quick weight-log button that logs against this date. */
   today?: string;
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
 }) {
   const goal = goalWeight ?? null;
+  const isDay = granularity === "day";
   const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
   // Trailing 7-point moving average smooths daily water-weight noise so the
   // trend is readable (only worth showing once there are a few weigh-ins).
-  const showAvg = data.length >= 5;
-  const chartData = data.map((d, i) => {
-    const window = data.slice(Math.max(0, i - 6), i + 1);
-    const avg = window.reduce((s, p) => s + p.weight, 0) / window.length;
-    return {
-      ...d,
-      predicted: predByDate.get(d.date) ?? null,
-      avg: showAvg ? Math.round(avg * 10) / 10 : null,
-    };
-  });
+  // Only meaningful on the daily view — week/month buckets are already averaged.
+  const showAvg = isDay && data.length >= 5;
+  const s = start ?? data[0]?.date ?? today ?? "";
+  const e = end ?? today ?? data[data.length - 1]?.date ?? "";
+
+  // `x` is the categorical axis value (date for day; bucket label otherwise).
+  type Row = { x: string; weight: number | null; predicted: number | null; avg: number | null };
+  let chartData: Row[];
+  let snappedMarkers: { x: string; label: string }[];
+
+  if (isDay) {
+    chartData = data.map((d, i) => {
+      const window = data.slice(Math.max(0, i - 6), i + 1);
+      const avg = window.reduce((sum, p) => sum + p.weight, 0) / window.length;
+      return {
+        x: d.date,
+        weight: d.weight,
+        predicted: predByDate.get(d.date) ?? null,
+        avg: showAvg ? Math.round(avg * 10) / 10 : null,
+      };
+    });
+    // Snap each dose marker to the nearest weigh-in date (categorical X axis).
+    const chartDates = data.map((d) => d.date);
+    snappedMarkers = doseMarkers
+      .map((m) => {
+        let best: string | null = null;
+        let bestDiff = Infinity;
+        for (const d of chartDates) {
+          const diff = Math.abs(Date.parse(d) - Date.parse(m.date));
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            best = d;
+          }
+        }
+        return best ? { x: best, label: m.label } : null;
+      })
+      .filter((m): m is { x: string; label: string } => m != null);
+  } else {
+    const wk = bucketReduce(data, (d) => d.date, (d) => d.weight, granularity, s, e, "avg");
+    const pr = bucketReduce(predictions, (p) => p.date, (p) => p.predicted, granularity, s, e, "avg");
+    chartData = wk.map((w, i) => ({
+      x: w.label,
+      weight: w.value == null ? null : round1(w.value),
+      predicted: pr[i]?.value == null ? null : round1(pr[i].value),
+      avg: null,
+    }));
+    // Map each dose marker to its bucket's label.
+    const labelByKey = new Map(wk.map((w) => [w.key, w.label]));
+    snappedMarkers = doseMarkers
+      .map((m) => {
+        const lbl = labelByKey.get(bucketKey(granularity, m.date));
+        return lbl ? { x: lbl, label: m.label } : null;
+      })
+      .filter((m): m is { x: string; label: string } => m != null);
+  }
 
   // Scope the y-axis to the actual + predicted data only; a far-off goal would
   // otherwise squash the whole weight band. The goal is shown as an annotation.
@@ -227,24 +279,6 @@ export function WeightChart({
         }`
       : null;
 
-  // Snap each dose marker to the nearest weigh-in date (the X axis is categorical,
-  // so a ReferenceLine only renders on a date that exists in the data).
-  const chartDates = chartData.map((d) => d.date);
-  const snappedMarkers = doseMarkers
-    .map((m) => {
-      let best: string | null = null;
-      let bestDiff = Infinity;
-      for (const d of chartDates) {
-        const diff = Math.abs(Date.parse(d) - Date.parse(m.date));
-        if (diff < bestDiff) {
-          bestDiff = diff;
-          best = d;
-        }
-      }
-      return best ? { x: best, label: m.label } : null;
-    })
-    .filter((m): m is { x: string; label: string } => m != null);
-
   const latestPred = predictions[predictions.length - 1];
   const summary = data.length
     ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.${
@@ -256,7 +290,7 @@ export function WeightChart({
 
   return (
     <ChartCard
-      title="Weight"
+      title={isDay ? "Weight" : `Weight (avg/${groupNoun(granularity)})`}
       action={
         today ? (
           <LogWeightButton date={today} current={data[data.length - 1]?.weight ?? null} />
@@ -270,7 +304,13 @@ export function WeightChart({
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+            <XAxis
+              dataKey="x"
+              tickFormatter={isDay ? shortDate : undefined}
+              interval="preserveStartEnd"
+              stroke={AXIS}
+              fontSize={11}
+            />
             <YAxis
               stroke={AXIS}
               fontSize={11}
@@ -280,7 +320,7 @@ export function WeightChart({
             />
             <Tooltip
               contentStyle={tooltipStyle}
-              labelFormatter={(label) => shortDateYear(String(label))}
+              labelFormatter={isDay ? (label) => shortDateYear(String(label)) : undefined}
               formatter={(value, name) =>
                 value == null ? ["—", name] : [`${value} kg`, name]
               }
@@ -318,6 +358,7 @@ export function WeightChart({
               stroke={ACTUAL_COLOR}
               strokeWidth={2.5}
               dot={{ r: 3 }}
+              connectNulls={!isDay}
               name="actual"
             />
             {predictions.length > 0 && (
@@ -805,9 +846,37 @@ const COMP_COLORS = {
 /** Bodyweight stacked into fat / lean / bone per weigh-in, so the bar height is
  * total weight and the segments show how composition shifts over time. Only days
  * with a fat/lean split (scale body-fat or measured lean) appear. */
-export function CompositionChart({ data }: { data: WeightPoint[] }) {
+export function CompositionChart({
+  data,
+  granularity = "day",
+  start,
+  end,
+}: {
+  data: WeightPoint[];
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
+}) {
   const bars = React.useMemo(() => compositionBars(data), [data]);
-  const hasData = bars.length > 0;
+  const s = start ?? bars[0]?.date ?? "";
+  const e = end ?? bars[bars.length - 1]?.date ?? "";
+  const chart = React.useMemo(() => {
+    if (granularity === "day") {
+      return bars.map((b) => ({ label: shortDate(b.date), fatKg: b.fatKg, leanKg: b.leanKg, boneKg: b.boneKg }));
+    }
+    const fat = bucketReduce(bars, (b) => b.date, (b) => b.fatKg, granularity, s, e, "avg");
+    const lean = bucketReduce(bars, (b) => b.date, (b) => b.leanKg, granularity, s, e, "avg");
+    const bone = bucketReduce(bars, (b) => b.date, (b) => b.boneKg, granularity, s, e, "avg");
+    return fat
+      .map((f, i) => ({
+        label: f.label,
+        fatKg: f.value == null ? 0 : round1(f.value),
+        leanKg: lean[i].value == null ? 0 : round1(lean[i].value),
+        boneKg: bone[i].value == null ? 0 : round1(bone[i].value),
+      }))
+      .filter((r) => r.fatKg > 0 || r.leanKg > 0 || r.boneKg > 0);
+  }, [bars, granularity, s, e]);
+  const hasData = chart.length > 0;
   const last = bars[bars.length - 1];
   const first = bars[0];
   const leanDelta =
@@ -823,14 +892,13 @@ export function CompositionChart({ data }: { data: WeightPoint[] }) {
         <>
           <div role="img" aria-label={summary}>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={bars} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+              <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
                 <CartesianGrid stroke={GRID} vertical={false} />
-                <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+                <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
                 <Tooltip
                   contentStyle={tooltipStyle}
                   itemStyle={{ color: "var(--foreground)" }}
-                  labelFormatter={(label) => shortDate(String(label))}
                   formatter={(value, name) => [`${value} kg`, name]}
                   cursor={{ fill: "var(--muted)" }}
                 />
@@ -1165,34 +1233,54 @@ export function SleepChart({
 
 // ---- Resting heart rate ----
 
-export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
-  const lo = data.length ? Math.floor(Math.min(...data.map((d) => d.restingBpm)) - 3) : 0;
-  const hi = data.length ? Math.ceil(Math.max(...data.map((d) => d.restingBpm)) + 3) : 1;
-  const summary = data.length
-    ? `Resting heart rate: latest ${data[data.length - 1].restingBpm} bpm.`
-    : "No resting heart rate in range.";
+export function HeartRateChart({
+  data,
+  granularity = "day",
+  start,
+  end,
+}: {
+  data: RestingHrPoint[];
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
+}) {
+  const s = start ?? data[0]?.date ?? "";
+  const e = end ?? data[data.length - 1]?.date ?? "";
+  const rows =
+    granularity === "day"
+      ? data.map((d) => ({ label: shortDate(d.date), bpm: d.restingBpm as number | null }))
+      : bucketReduce(data, (d) => d.date, (d) => d.restingBpm, granularity, s, e, "avg").map((b) => ({
+          label: b.label,
+          bpm: b.value == null ? null : Math.round(b.value),
+        }));
+  const vals = rows.map((r) => r.bpm).filter((v): v is number => v != null);
+  const lo = vals.length ? Math.floor(Math.min(...vals) - 3) : 0;
+  const hi = vals.length ? Math.ceil(Math.max(...vals) + 3) : 1;
+  const latest = [...vals].length ? vals[vals.length - 1] : null;
+  const summary =
+    latest != null ? `Resting heart rate: latest ${latest} bpm.` : "No resting heart rate in range.";
   return (
-    <ChartCard title="Resting heart rate">
-      {data.length === 0 ? (
+    <ChartCard title={granularity === "day" ? "Resting heart rate" : `Resting heart rate (avg/${groupNoun(granularity)})`}>
+      {vals.length === 0 ? (
         <EmptyState>Connect a wearable to see resting HR.</EmptyState>
       ) : (
         <div role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={data} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+          <LineChart data={rows} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID} vertical={false} />
-            <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+            <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
             <YAxis stroke={AXIS} fontSize={11} width={40} domain={[lo, hi]} allowDecimals={false} />
             <Tooltip
               contentStyle={tooltipStyle}
-              labelFormatter={(l) => shortDate(String(l))}
               formatter={(v) => [`${v} bpm`, "Resting HR"]}
             />
             <Line
               type="monotone"
-              dataKey="restingBpm"
+              dataKey="bpm"
               stroke="#ef4444"
               strokeWidth={2.5}
               dot={{ r: 2 }}
+              connectNulls
               name="bpm"
             />
           </LineChart>
@@ -1203,23 +1291,23 @@ export function HeartRateChart({ data }: { data: RestingHrPoint[] }) {
   );
 }
 
-/** Estimated VO₂max (Daniels) per qualifying run, shown as the monthly best so
- * the long-term fitness trend is legible. */
-export function Vo2maxChart({ data }: { data: Vo2Point[] }) {
-  const byMonth = new Map<string, number>();
+/** Estimated VO₂max (Daniels) per qualifying run, shown as the best per bucket
+ * so the long-term fitness trend is legible. */
+export function Vo2maxChart({ data, granularity = "month" }: { data: Vo2Point[]; granularity?: Granularity }) {
+  const byBucket = new Map<string, number>();
   for (const d of data) {
-    const k = d.date.slice(0, 7);
-    byMonth.set(k, Math.max(byMonth.get(k) ?? 0, d.vo2max));
+    const k = bucketKey(granularity, d.date);
+    byBucket.set(k, Math.max(byBucket.get(k) ?? -Infinity, d.vo2max));
   }
-  const rows = [...byMonth.entries()]
+  const rows = [...byBucket.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([k, v]) => ({ label: bucketLabel("month", k), vo2max: v }));
+    .map(([k, v]) => ({ label: bucketLabel(granularity, k), vo2max: Math.round(v * 10) / 10 }));
   const latest = rows[rows.length - 1]?.vo2max;
   const summary = latest
-    ? `Estimated VO₂max around ${latest} ml/kg/min (best per month from your runs).`
+    ? `Estimated VO₂max around ${latest} ml/kg/min (best per ${groupNoun(granularity)} from your runs).`
     : "Run with distance + time logged to estimate VO₂max.";
   return (
-    <ChartCard title="VO₂max (est. from runs)">
+    <ChartCard title={`VO₂max (best/${groupNoun(granularity)})`}>
       {rows.length === 0 ? (
         <EmptyState>Log runs with distance &amp; time to estimate VO₂max.</EmptyState>
       ) : (
@@ -1249,21 +1337,29 @@ const LOAD_ZONE: Record<Acwr["zone"], { label: string; cls: string }> = {
 
 /** Weekly training load (Σ duration × type-intensity) with the current acute:chronic
  * workload ratio — a simple over/under-training signal. */
-export function TrainingLoadChart({ sessions, today }: { sessions: LoadSession[]; today: string }) {
+export function TrainingLoadChart({
+  sessions,
+  today,
+  granularity = "week",
+}: {
+  sessions: LoadSession[];
+  today: string;
+  granularity?: Granularity;
+}) {
   const loads = dailyLoad(sessions);
   const ratio = acwr(loads, today);
-  const weekly = new Map<string, number>();
+  const byBucket = new Map<string, number>();
   for (const [date, load] of loads) {
-    const wk = mondayOf(date);
-    weekly.set(wk, (weekly.get(wk) ?? 0) + load);
+    const k = bucketKey(granularity, date);
+    byBucket.set(k, (byBucket.get(k) ?? 0) + load);
   }
-  const rows = [...weekly.entries()]
+  const rows = [...byBucket.entries()]
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .slice(-16)
-    .map(([k, v]) => ({ label: bucketLabel("week", k), load: Math.round(v) }));
+    .map(([k, v]) => ({ label: bucketLabel(granularity, k), load: Math.round(v) }));
   const zone = LOAD_ZONE[ratio.zone];
   return (
-    <ChartCard title="Training load (weekly)">
+    <ChartCard title={`Training load (per ${groupNoun(granularity)})`}>
       {rows.length === 0 ? (
         <EmptyState>Logged cardio &amp; hikes build your training-load trend here.</EmptyState>
       ) : (
@@ -1279,7 +1375,7 @@ export function TrainingLoadChart({ sessions, today }: { sessions: LoadSession[]
                 <CartesianGrid stroke={GRID} vertical={false} />
                 <XAxis dataKey="label" stroke={AXIS} fontSize={11} interval="preserveStartEnd" />
                 <YAxis stroke={AXIS} fontSize={11} width={40} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} load`, "Weekly"]} cursor={{ fill: "var(--muted)" }} />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v) => [`${v} load`, "Load"]} cursor={{ fill: "var(--muted)" }} />
                 <Bar dataKey="load" radius={[4, 4, 0, 0]} fill={ACTUAL_COLOR} />
               </BarChart>
             </ResponsiveContainer>
