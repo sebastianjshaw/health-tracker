@@ -3,6 +3,11 @@ export function trimNum(n: number): string {
   return Number(n.toFixed(2)).toString();
 }
 
+/** Round to one decimal place: 1.234 -> 1.2. */
+export function round1(n: number): number {
+  return Math.round(n * 10) / 10;
+}
+
 /** Parse a form value to a number, falling back when blank/invalid. */
 export function num(v: unknown, fallback = 0): number {
   const n = parseFloat(String(v ?? ""));

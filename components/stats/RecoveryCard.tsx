@@ -1,4 +1,5 @@
 import { Card, Stat, type StatTone } from "@/components/ui";
+import { round1 } from "@/lib/format";
 import type { RecoveryPoint } from "@/lib/stats-data";
 
 type Dir = StatTone;
@@ -21,7 +22,7 @@ function recentAvg(rows: RecoveryPoint[], pick: (r: RecoveryPoint) => number | n
   return n ? sum / n : null;
 }
 
-const r1 = (n: number) => Math.round(n * 10) / 10;
+const r1 = round1;
 
 /** Recovery snapshot: HRV, SpO₂ and resting HR — each as the 7-day average vs a
  * 28-day baseline, so a dip/spike stands out (the classic illness/overtraining

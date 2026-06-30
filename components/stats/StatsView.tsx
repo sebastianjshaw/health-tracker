@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Card, SegmentedControl, Stat, type StatTone } from "@/components/ui";
+import { round1 } from "@/lib/format";
 import { Meal } from "@/lib/constants";
 import { bmi, bmiClass } from "@/lib/health";
 import {
@@ -54,7 +55,7 @@ export type StatsInsights = {
 };
 
 type Tone = StatTone;
-const r1 = (n: number) => Math.round(n * 10) / 10;
+const r1 = round1;
 const last = <T,>(a: T[]): T | undefined => a[a.length - 1];
 
 /** Summary tile — a `Stat` whose sub line follows the value's tone. */
@@ -124,6 +125,8 @@ export function StatsView({
   const fDistances = withinRange(distances, cutoff);
   const fSleep = withinRange(sleep, cutoff);
   const fHr = withinRange(restingHr, cutoff);
+  const fRecovery = withinRange(recovery, cutoff);
+  const fVo2max = withinRange(vo2max, cutoff);
   const startOf = (rows: { date: string }[]) => cutoff ?? rows[0]?.date ?? today;
 
   // ---- summary metrics ----
@@ -267,9 +270,9 @@ export function StatsView({
       </Section>
 
       <Section title="Fitness & recovery">
-        <RecoveryCard data={recovery} />
-        <Vo2maxChart data={vo2max} granularity={group} />
-        <TrainingLoadChart sessions={loadSessions} today={today} granularity={group} />
+        <RecoveryCard data={fRecovery} />
+        <Vo2maxChart data={fVo2max} granularity={group} />
+        <TrainingLoadChart sessions={loadSessions} today={today} granularity={group} cutoff={cutoff} />
       </Section>
 
       <Section title="Wellbeing">

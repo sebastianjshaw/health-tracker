@@ -16,6 +16,7 @@ import {
 } from "recharts";
 import { Card, EmptyState } from "@/components/ui";
 import { cn } from "@/lib/cn";
+import { round1 } from "@/lib/format";
 import { LogWeightButton } from "@/components/stats/LogWeightButton";
 import { projectGoalEta } from "@/lib/goal-eta";
 import { compositionBars } from "@/lib/metabolic-age";
@@ -136,6 +137,18 @@ function nutritionRows(
 
 const groupNoun = (g: Granularity) => (g === "day" ? "day" : g === "week" ? "week" : "month");
 
+const PERIOD_ADJ: Record<Granularity, string> = { day: "Daily", week: "Weekly", month: "Monthly" };
+
+/**
+ * Title suffix spelling out how a grouped series is aggregated, e.g.
+ * " · Weekly total". Empty on the day view, where bars/points are the raw
+ * per-day values. `agg` is the per-chart reducer ("avg"/"total"/"best") so the
+ * title says whether a week bar sums its days or averages them.
+ */
+function groupSuffix(g: Granularity, agg: "avg" | "total" | "best"): string {
+  return g === "day" ? "" : ` · ${PERIOD_ADJ[g]} ${agg}`;
+}
+
 function ChartCard({
   title,
   action,
@@ -198,7 +211,6 @@ export function WeightChart({
 }) {
   const goal = goalWeight ?? null;
   const isDay = granularity === "day";
-  const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
   // Trailing 7-point moving average smooths daily water-weight noise so the
   // trend is readable (only worth showing once there are a few weigh-ins).
   // Only meaningful on the daily view — week/month buckets are already averaged.
@@ -206,44 +218,47 @@ export function WeightChart({
   const s = start ?? data[0]?.date ?? today ?? "";
   const e = end ?? today ?? data[data.length - 1]?.date ?? "";
 
-  // `x` is the categorical axis value (date for day; bucket label otherwise).
+  // `x` is the categorical axis value (date for day; bucket key otherwise).
   type Row = { x: string; weight: number | null; predicted: number | null; avg: number | null };
-  let chartData: Row[];
-  let snappedMarkers: { x: string; label: string }[];
-
-  if (isDay) {
-    chartData = data.map((d, i) => {
-      const window = data.slice(Math.max(0, i - 6), i + 1);
-      const avg = window.reduce((sum, p) => sum + p.weight, 0) / window.length;
-      return {
-        x: d.date,
-        weight: d.weight,
-        predicted: predByDate.get(d.date) ?? null,
-        avg: showAvg ? Math.round(avg * 10) / 10 : null,
-      };
-    });
-    // Snap each dose marker to the nearest weigh-in date (categorical X axis).
-    const chartDates = data.map((d) => d.date);
-    snappedMarkers = doseMarkers
-      .map((m) => {
-        let best: string | null = null;
-        let bestDiff = Infinity;
-        for (const d of chartDates) {
-          const diff = Math.abs(Date.parse(d) - Date.parse(m.date));
-          if (diff < bestDiff) {
-            bestDiff = diff;
-            best = d;
+  const { chartData, snappedMarkers } = React.useMemo<{
+    chartData: Row[];
+    snappedMarkers: { x: string; label: string }[];
+  }>(() => {
+    const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
+    if (isDay) {
+      const rows = data.map((d, i) => {
+        const window = data.slice(Math.max(0, i - 6), i + 1);
+        const avg = window.reduce((sum, p) => sum + p.weight, 0) / window.length;
+        return {
+          x: d.date,
+          weight: d.weight,
+          predicted: predByDate.get(d.date) ?? null,
+          avg: showAvg ? round1(avg) : null,
+        };
+      });
+      // Snap each dose marker to the nearest weigh-in date (categorical X axis).
+      const chartDates = data.map((d) => d.date);
+      const markers = doseMarkers
+        .map((m) => {
+          let best: string | null = null;
+          let bestDiff = Infinity;
+          for (const d of chartDates) {
+            const diff = Math.abs(Date.parse(d) - Date.parse(m.date));
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              best = d;
+            }
           }
-        }
-        return best ? { x: best, label: m.label } : null;
-      })
-      .filter((m): m is { x: string; label: string } => m != null);
-  } else {
+          return best ? { x: best, label: m.label } : null;
+        })
+        .filter((m): m is { x: string; label: string } => m != null);
+      return { chartData: rows, snappedMarkers: markers };
+    }
     const wk = bucketReduce(data, (d) => d.date, (d) => d.weight, granularity, s, e, "avg");
     const pr = bucketReduce(predictions, (p) => p.date, (p) => p.predicted, granularity, s, e, "avg");
     // Key on the bucket key (unique) rather than the display label (week labels
     // repeat across years), and format the label at the axis/tooltip.
-    chartData = wk.map((w, i) => ({
+    const rows = wk.map((w, i) => ({
       x: w.key,
       weight: w.value == null ? null : round1(w.value),
       predicted: pr[i]?.value == null ? null : round1(pr[i].value),
@@ -251,13 +266,14 @@ export function WeightChart({
     }));
     // Map each dose marker to its bucket key.
     const bucketKeys = new Set(wk.map((w) => w.key));
-    snappedMarkers = doseMarkers
+    const markers = doseMarkers
       .map((m) => {
         const k = bucketKey(granularity, m.date);
         return bucketKeys.has(k) ? { x: k, label: m.label } : null;
       })
       .filter((m): m is { x: string; label: string } => m != null);
-  }
+    return { chartData: rows, snappedMarkers: markers };
+  }, [data, predictions, doseMarkers, granularity, s, e, isDay, showAvg]);
 
   // Scope the y-axis to the actual + predicted data only; a far-off goal would
   // otherwise squash the whole weight band. The goal is shown as an annotation.
@@ -301,7 +317,7 @@ export function WeightChart({
 
   return (
     <ChartCard
-      title={isDay ? "Weight" : `Weight (avg/${groupNoun(granularity)})`}
+      title={`Weight${groupSuffix(granularity, "avg")}`}
       action={
         today ? (
           <LogWeightButton date={today} current={data[data.length - 1]?.weight ?? null} />
@@ -529,7 +545,10 @@ export function CalorieChart({
   end?: string;
 }) {
   const isDay = granularity === "day";
-  const rows = nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? "");
+  const rows = React.useMemo(
+    () => nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? ""),
+    [data, granularity, start, end],
+  );
   const hasData = rows.some((r) => r.kcal > 0);
 
   // Day view judges each day against the target in effect that day, counting only
@@ -557,7 +576,7 @@ export function CalorieChart({
   const avg = totalDays ? Math.round(totalKcal / totalDays) : 0;
   const summary = `Calories: averaging ${avg} kcal per logged day versus a ${target} kcal target.`;
   return (
-    <ChartCard title={isDay ? "Calories" : `Calories (per ${groupNoun(granularity)})`}>
+    <ChartCard title={`Calories${groupSuffix(granularity, "total")}`}>
       {!hasData ? (
         <EmptyState>No food logged yet.</EmptyState>
       ) : (
@@ -651,7 +670,10 @@ function NutrientBarChart({
   end?: string;
 }) {
   const isDay = granularity === "day";
-  const rows = nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? "");
+  const rows = React.useMemo(
+    () => nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? ""),
+    [data, granularity, start, end],
+  );
   const hasData = rows.some((r) => r[dataKey] > 0);
   const colorFor = (r: NutRow) => {
     const t = isDay ? target : target * r.loggedDays;
@@ -670,7 +692,7 @@ function NutrientBarChart({
   const avg = totalDays ? Math.round(total / totalDays) : 0;
   const summary = `${title}: averaging ${avg} g per logged day (target ${target} g).`;
   return (
-    <ChartCard title={isDay ? `${title} (g/day)` : `${title} (g/${groupNoun(granularity)})`}>
+    <ChartCard title={`${title} (g)${groupSuffix(granularity, "total")}`}>
       {!hasData ? (
         <EmptyState>{emptyHint}</EmptyState>
       ) : (
@@ -799,7 +821,10 @@ export function HydrationChart({
   end?: string;
 }) {
   const isDay = granularity === "day";
-  const rows = nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? "");
+  const rows = React.useMemo(
+    () => nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? ""),
+    [data, granularity, start, end],
+  );
   const hasData = rows.some((r) => r.water > 0);
   const dataMax = Math.max(0, ...rows.map((r) => r.water));
   const yMax = Math.max(500, Math.ceil(Math.max(dataMax, isDay ? 2500 : 0) / 500) * 500);
@@ -808,7 +833,7 @@ export function HydrationChart({
   const avg = totalDays ? Math.round(totalWater / totalDays) : 0;
   const summary = `Hydration: averaging ${(avg / 1000).toFixed(1)} L per logged day — split across plain water, other drinks and food.`;
   return (
-    <ChartCard title={isDay ? "Hydration (est. ml/day)" : `Hydration (est. ml/${groupNoun(granularity)})`}>
+    <ChartCard title={`Hydration (est. ml)${groupSuffix(granularity, "total")}`}>
       {!hasData ? (
         <EmptyState>Logged food &amp; drink will show estimated water here.</EmptyState>
       ) : (
@@ -919,7 +944,7 @@ export function CompositionChart({
     ? `Body composition: latest ${last.fatKg} kg fat, ${last.leanKg} kg lean, ${last.boneKg} kg bone.`
     : "Body composition over time.";
   return (
-    <ChartCard title="Body composition (kg)">
+    <ChartCard title={`Body composition (kg)${groupSuffix(granularity, "avg")}`}>
       {!hasData ? (
         <EmptyState>Weigh-ins with a body-fat reading will break weight into fat, lean &amp; bone here.</EmptyState>
       ) : (
@@ -1097,7 +1122,6 @@ const ROUTES = [
   { label: "Stockholm → Malmö", km: 615 },
   { label: "the length of Sweden", km: 1572 },
 ];
-const round1 = (n: number) => Math.round(n * 10) / 10;
 
 /** Friendly equivalent for a total distance, e.g. "1.5 marathons · about Gothenburg → Örebro". */
 function distanceEquivalent(km: number): string | null {
@@ -1125,13 +1149,14 @@ export function DistanceChart({
   end: string;
   granularity: Granularity;
 }) {
-  const keys = bucketKeysBetween(granularity, start, end);
-  const sums = new Map<string, number>(keys.map((k) => [k, 0]));
-  for (const p of data) {
-    const k = bucketKey(granularity, p.date);
-    if (sums.has(k)) sums.set(k, (sums.get(k) ?? 0) + p.km);
-  }
-  const chart = keys.map((k) => ({ key: k, km: round1(sums.get(k) ?? 0) }));
+  const chart = React.useMemo(
+    () =>
+      bucketReduce(data, (p) => p.date, (p) => p.km, granularity, start, end, "sum").map((b) => ({
+        key: b.key,
+        km: round1(b.value ?? 0),
+      })),
+    [data, granularity, start, end],
+  );
   const total = data.reduce((s, p) => s + p.km, 0);
   const equiv = distanceEquivalent(total);
   const summary =
@@ -1140,7 +1165,7 @@ export function DistanceChart({
       : "No distance in range.";
 
   return (
-    <ChartCard title="Distance">
+    <ChartCard title={`Distance${groupSuffix(granularity, "total")}`}>
       {data.length === 0 ? (
         <EmptyState>Log a cardio session with a distance to see this.</EmptyState>
       ) : (
@@ -1195,32 +1220,24 @@ export function SleepChart({
   const hasStages = data.some(
     (d) => d.deepMin != null || d.remMin != null || d.lightMin != null,
   );
-  const keys = bucketKeysBetween(granularity, start, end);
-  type Acc = { dur: number; deep: number; rem: number; light: number; n: number };
-  const acc = new Map<string, Acc>(
-    keys.map((k) => [k, { dur: 0, deep: 0, rem: 0, light: 0, n: 0 }]),
-  );
-  for (const d of data) {
-    const a = acc.get(bucketKey(granularity, d.date));
-    if (!a) continue;
-    a.dur += d.durationMin;
-    a.deep += d.deepMin ?? 0;
-    a.rem += d.remMin ?? 0;
-    a.light += d.lightMin ?? 0;
-    a.n++;
-  }
   // Per bucket: average per-night hours (so week/month buckets are comparable).
-  const chart = keys.map((k) => {
-    const a = acc.get(k)!;
-    const n = a.n || 1;
-    return {
-      key: k,
-      deep: round1(a.deep / n / 60),
-      rem: round1(a.rem / n / 60),
-      light: round1(a.light / n / 60),
-      asleep: round1(a.dur / n / 60),
-    };
-  });
+  // Each stage averages minutes-per-night (missing stages count as 0), matching
+  // the asleep average, then converts to hours.
+  const chart = React.useMemo(() => {
+    const avgOf = (pick: (d: SleepPoint) => number) =>
+      bucketReduce(data, (d) => d.date, pick, granularity, start, end, "avg");
+    const deep = avgOf((d) => d.deepMin ?? 0);
+    const rem = avgOf((d) => d.remMin ?? 0);
+    const light = avgOf((d) => d.lightMin ?? 0);
+    const asleep = avgOf((d) => d.durationMin);
+    return deep.map((b, i) => ({
+      key: b.key,
+      deep: round1((b.value ?? 0) / 60),
+      rem: round1((rem[i].value ?? 0) / 60),
+      light: round1((light[i].value ?? 0) / 60),
+      asleep: round1((asleep[i].value ?? 0) / 60),
+    }));
+  }, [data, granularity, start, end]);
   const nights = data.length;
   const avgH = nights
     ? round1(data.reduce((s, d) => s + d.durationMin, 0) / nights / 60)
@@ -1230,7 +1247,7 @@ export function SleepChart({
     : "No sleep data in range.";
 
   return (
-    <ChartCard title="Sleep">
+    <ChartCard title={`Sleep${groupSuffix(granularity, "avg")}`}>
       {nights === 0 ? (
         <EmptyState>Connect a wearable to see your sleep.</EmptyState>
       ) : (
@@ -1301,13 +1318,16 @@ export function HeartRateChart({
 }) {
   const s = start ?? data[0]?.date ?? "";
   const e = end ?? data[data.length - 1]?.date ?? "";
-  const rows =
-    granularity === "day"
-      ? data.map((d) => ({ key: d.date, bpm: d.restingBpm as number | null }))
-      : bucketReduce(data, (d) => d.date, (d) => d.restingBpm, granularity, s, e, "avg").map((b) => ({
-          key: b.key,
-          bpm: b.value == null ? null : Math.round(b.value),
-        }));
+  const rows = React.useMemo(
+    () =>
+      granularity === "day"
+        ? data.map((d) => ({ key: d.date, bpm: d.restingBpm as number | null }))
+        : bucketReduce(data, (d) => d.date, (d) => d.restingBpm, granularity, s, e, "avg").map((b) => ({
+            key: b.key,
+            bpm: b.value == null ? null : Math.round(b.value),
+          })),
+    [data, granularity, s, e],
+  );
   const vals = rows.map((r) => r.bpm).filter((v): v is number => v != null);
   const lo = vals.length ? Math.floor(Math.min(...vals) - 3) : 0;
   const hi = vals.length ? Math.ceil(Math.max(...vals) + 3) : 1;
@@ -1315,7 +1335,7 @@ export function HeartRateChart({
   const summary =
     latest != null ? `Resting heart rate: latest ${latest} bpm.` : "No resting heart rate in range.";
   return (
-    <ChartCard title={granularity === "day" ? "Resting heart rate" : `Resting heart rate (avg/${groupNoun(granularity)})`}>
+    <ChartCard title={`Resting heart rate${groupSuffix(granularity, "avg")}`}>
       {vals.length === 0 ? (
         <EmptyState>Connect a wearable to see resting HR.</EmptyState>
       ) : (
@@ -1356,20 +1376,22 @@ export function HeartRateChart({
 /** Estimated VO₂max (Daniels) per qualifying run, shown as the best per bucket
  * so the long-term fitness trend is legible. */
 export function Vo2maxChart({ data, granularity = "month" }: { data: Vo2Point[]; granularity?: Granularity }) {
-  const byBucket = new Map<string, number>();
-  for (const d of data) {
-    const k = bucketKey(granularity, d.date);
-    byBucket.set(k, Math.max(byBucket.get(k) ?? -Infinity, d.vo2max));
-  }
-  const rows = [...byBucket.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([k, v]) => ({ key: k, vo2max: Math.round(v * 10) / 10 }));
+  const rows = React.useMemo(() => {
+    const byBucket = new Map<string, number>();
+    for (const d of data) {
+      const k = bucketKey(granularity, d.date);
+      byBucket.set(k, Math.max(byBucket.get(k) ?? -Infinity, d.vo2max));
+    }
+    return [...byBucket.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([k, v]) => ({ key: k, vo2max: round1(v) }));
+  }, [data, granularity]);
   const latest = rows[rows.length - 1]?.vo2max;
   const summary = latest
     ? `Estimated VO₂max around ${latest} ml/kg/min (best per ${groupNoun(granularity)} from your runs).`
     : "Run with distance + time logged to estimate VO₂max.";
   return (
-    <ChartCard title={`VO₂max (best/${groupNoun(granularity)})`}>
+    <ChartCard title={`VO₂max${groupSuffix(granularity, "best")}`}>
       {rows.length === 0 ? (
         <EmptyState>Log runs with distance &amp; time to estimate VO₂max.</EmptyState>
       ) : (
@@ -1407,31 +1429,38 @@ const LOAD_ZONE: Record<Acwr["zone"], { label: string; cls: string }> = {
   none: { label: "—", cls: "text-muted-foreground" },
 };
 
-/** Weekly training load (Σ duration × type-intensity) with the current acute:chronic
- * workload ratio — a simple over/under-training signal. */
+/** Training load (Σ duration × type-intensity) per bucket, with the current
+ * acute:chronic workload ratio — a simple over/under-training signal. The bars
+ * honour the page range via `cutoff`, but the ratio always reads from the full
+ * session history (it needs the trailing 28 days regardless of the view). */
 export function TrainingLoadChart({
   sessions,
   today,
   granularity = "week",
+  cutoff,
 }: {
   sessions: LoadSession[];
   today: string;
   granularity?: Granularity;
+  /** Inclusive start date for the displayed bars; null = all-time. */
+  cutoff?: string | null;
 }) {
-  const loads = dailyLoad(sessions);
-  const ratio = acwr(loads, today);
-  const byBucket = new Map<string, number>();
-  for (const [date, load] of loads) {
-    const k = bucketKey(granularity, date);
-    byBucket.set(k, (byBucket.get(k) ?? 0) + load);
-  }
-  const rows = [...byBucket.entries()]
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .slice(-16)
-    .map(([k, v]) => ({ key: k, load: Math.round(v) }));
+  const loads = React.useMemo(() => dailyLoad(sessions), [sessions]);
+  const ratio = React.useMemo(() => acwr(loads, today), [loads, today]);
+  const rows = React.useMemo(() => {
+    const byBucket = new Map<string, number>();
+    for (const [date, load] of loads) {
+      if (cutoff != null && date < cutoff) continue;
+      const k = bucketKey(granularity, date);
+      byBucket.set(k, (byBucket.get(k) ?? 0) + load);
+    }
+    return [...byBucket.entries()]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([k, v]) => ({ key: k, load: Math.round(v) }));
+  }, [loads, granularity, cutoff]);
   const zone = LOAD_ZONE[ratio.zone];
   return (
-    <ChartCard title={`Training load (per ${groupNoun(granularity)})`}>
+    <ChartCard title={`Training load${groupSuffix(granularity, "total")}`}>
       {rows.length === 0 ? (
         <EmptyState>Logged cardio &amp; hikes build your training-load trend here.</EmptyState>
       ) : (
