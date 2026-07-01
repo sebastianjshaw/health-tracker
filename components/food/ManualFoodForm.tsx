@@ -94,7 +94,12 @@ export function ManualFoodForm({
   const showPer100 = isPer100Unit(baseUnit) && baseSize > 0 && baseSize !== 100;
   const toPer100 = (v: number | string | null | undefined): number | string => {
     if (v === "" || v == null) return "";
-    return showPer100 ? trimNum((Number(v) * 100) / baseSize) : trimNum(Number(v));
+    // Only rescale mass/volume foods, and only genuine numbers — free-text extra
+    // values ("trace", "1,5", …) and non-per-100 foods pass through untouched so
+    // nothing is rounded away or turned into "NaN".
+    const n = Number(v);
+    if (!showPer100 || !Number.isFinite(n)) return v;
+    return trimNum((n * 100) / baseSize);
   };
 
   const [unit, setUnit] = React.useState<string>(baseUnit);
@@ -128,17 +133,22 @@ export function ManualFoodForm({
       const factor = size / 100;
       for (const key of SCALED_FIELDS) {
         const raw = fd.get(key);
-        if (raw != null && String(raw).trim() !== "") {
-          fd.set(key, String(Number(raw) * factor));
+        const n = Number(raw);
+        if (raw != null && String(raw).trim() !== "" && Number.isFinite(n)) {
+          fd.set(key, String(n * factor));
         }
       }
       if (cleanExtras.length) {
         fd.set(
           "extras",
           JSON.stringify(
-            cleanExtras.map((ex) =>
-              ex.value.trim() === "" ? ex : { ...ex, value: String(Number(ex.value) * factor) },
-            ),
+            cleanExtras.map((ex) => {
+              const n = Number(ex.value);
+              // Leave blank or non-numeric extra values (e.g. "trace") as-is.
+              return ex.value.trim() === "" || !Number.isFinite(n)
+                ? ex
+                : { ...ex, value: String(n * factor) };
+            }),
           ),
         );
       }
