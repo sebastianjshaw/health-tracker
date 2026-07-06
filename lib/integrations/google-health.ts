@@ -1,5 +1,6 @@
 import "server-only";
 import { getSetting, setSetting } from "@/lib/settings";
+import { fetchRetry } from "./fetch-retry";
 
 /**
  * Google Health API integration — OAuth 2.0 (web-server flow) + typed reads.
@@ -93,7 +94,7 @@ type TokenResponse = {
 
 /** Exchange an auth code for tokens and persist them. */
 export async function exchangeCode(code: string, redirectUri: string): Promise<boolean> {
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchRetry(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -122,7 +123,7 @@ export async function getAccessToken(): Promise<string | null> {
   if (!tokens) return null;
   if (Date.now() < tokens.expiresAt) return tokens.accessToken;
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await fetchRetry(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -166,7 +167,7 @@ export async function listDataPoints(
     url.searchParams.set("pageSize", "1000");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-    const res = await fetch(url, {
+    const res = await fetchRetry(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!res.ok) {
@@ -220,7 +221,7 @@ export async function listDataPointsSince(
     const url = new URL(`${API_BASE}/${dataType}/dataPoints`);
     url.searchParams.set("pageSize", "1000");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await fetchRetry(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) throw new Error(`Google Health ${dataType} fetch failed (${res.status})`);
     const data = (await res.json()) as { dataPoints?: DataPoint[]; nextPageToken?: string };
     for (const dp of data.dataPoints ?? []) {
@@ -284,7 +285,7 @@ export async function fetchDailyTotals(
     const url = new URL(`${API_BASE}/${dataType}/dataPoints`);
     url.searchParams.set("pageSize", "1000");
     if (pageToken) url.searchParams.set("pageToken", pageToken);
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const res = await fetchRetry(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) {
       throw new Error(`Google Health ${dataType} fetch failed (${res.status})`);
     }

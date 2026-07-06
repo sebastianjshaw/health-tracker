@@ -1,5 +1,6 @@
 import "server-only";
 import { getSetting, setSetting } from "@/lib/settings";
+import { fetchRetry } from "./fetch-retry";
 import { groupsToReadings, MEASURE_TYPES, type MeasureGroup, type WithingsReading } from "./withings-parse";
 
 export { MEASURE_TYPES, type WithingsReading };
@@ -91,7 +92,7 @@ type TokenBody = {
 };
 
 async function postForm<T>(url: string, params: Record<string, string>, bearer?: string): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetchRetry(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
