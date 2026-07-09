@@ -44,6 +44,24 @@ const durationToMin = (v: unknown): number | null => {
 const dateOf = (iso: unknown): string | null =>
   typeof iso === "string" && iso.length >= 10 ? iso.slice(0, 10) : null;
 
+/**
+ * Local civil date (YYYY-MM-DD) of an absolute instant, applying Google's
+ * per-point UTC offset — a protobuf Duration string in seconds, e.g. "25200s"
+ * for UTC+7. Google returns interval times as UTC `Z` instants plus a separate
+ * offset, so slicing the raw instant misfiles a session onto the wrong local
+ * day whenever the offset pushes it across midnight: a 06:58 local wake in Asia
+ * is 23:58Z the *previous* day, which would date last night's sleep a day early.
+ * Falls back to the naive UTC date when the offset is absent/unparseable (the
+ * home-timezone case where slicing was already correct).
+ */
+const localDateOf = (iso: unknown, offset: unknown): string | null => {
+  if (typeof iso !== "string" || iso.length < 10) return null;
+  const ms = Date.parse(iso);
+  const sec = typeof offset === "string" ? parseInt(offset, 10) : NaN;
+  if (Number.isNaN(ms) || !Number.isFinite(sec)) return dateOf(iso);
+  return new Date(ms + sec * 1000).toISOString().slice(0, 10);
+};
+
 function exerciseToCardio(exerciseType?: string): CardioType {
   switch ((exerciseType ?? "").toUpperCase()) {
     case "RUNNING":
@@ -67,7 +85,14 @@ function exerciseToCardio(exerciseType?: string): CardioType {
   }
 }
 
-type Interval = { startTime?: string; endTime?: string };
+type Interval = {
+  startTime?: string;
+  endTime?: string;
+  // UTC offset of each end of the interval (protobuf Duration seconds, e.g.
+  // "25200s"). Needed to date the session to the user's local day, not UTC.
+  startUtcOffset?: string;
+  endUtcOffset?: string;
+};
 
 export type SyncSummary = {
   from: string;
@@ -135,8 +160,10 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
   // Exercise is a session type — it rejects server-side time filters, but comes
   // back newest-first, so we page only back to the recent window (boundedSince)
   // and stop, instead of pulling the whole history every run.
-  const exDateOf = (dp: DataPoint) =>
-    dateOf((dp.exercise as { interval?: Interval } | undefined)?.interval?.startTime);
+  const exDateOf = (dp: DataPoint) => {
+    const iv = (dp.exercise as { interval?: Interval } | undefined)?.interval;
+    return localDateOf(iv?.startTime, iv?.startUtcOffset);
+  };
   const exPoints = await listDataPointsSince(token, DATA_TYPES.exercise, boundedSince, exDateOf);
 
   // Two apps (Google Fit + Withings) both write the same session into Health
@@ -162,7 +189,7 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
           };
         }
       | undefined;
-    const date = dateOf(ex?.interval?.startTime);
+    const date = localDateOf(ex?.interval?.startTime, ex?.interval?.startUtcOffset);
     const externalId = typeof dp.name === "string" ? dp.name : null;
     if (!ex || !date || !externalId) continue;
 
@@ -238,8 +265,10 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
 
   // ---- Sleep → sleepSessions ---- (session type, newest-first: page back only
   // to the recent window via boundedSince rather than the whole history)
-  const sleepDateOf = (dp: DataPoint) =>
-    dateOf((dp.sleep as { interval?: Interval } | undefined)?.interval?.startTime);
+  const sleepDateOf = (dp: DataPoint) => {
+    const iv = (dp.sleep as { interval?: Interval } | undefined)?.interval;
+    return localDateOf(iv?.endTime, iv?.endUtcOffset) ?? localDateOf(iv?.startTime, iv?.startUtcOffset);
+  };
   const sleepPoints = await listDataPointsSince(token, DATA_TYPES.sleep, boundedSince, sleepDateOf);
   const sleepStmts: SqliteBatchItem[] = [];
   for (const dp of sleepPoints) {
@@ -252,8 +281,10 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
           };
         }
       | undefined;
-    // wake date = end of the interval
-    const date = dateOf(sl?.interval?.endTime) ?? dateOf(sl?.interval?.startTime);
+    // wake date = end of the interval, in the user's local timezone
+    const date =
+      localDateOf(sl?.interval?.endTime, sl?.interval?.endUtcOffset) ??
+      localDateOf(sl?.interval?.startTime, sl?.interval?.startUtcOffset);
     const externalId = typeof dp.name === "string" ? dp.name : null;
     if (!sl || !date || !externalId || date < start) continue;
     const stages = new Map<string, number>();
