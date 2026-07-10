@@ -11,6 +11,7 @@ import {
   FiberChart,
   HeartRateChart,
   HydrationChart,
+  ProteinChart,
   SatFatChart,
   SleepChart,
   TrainingLoadChart,
@@ -264,6 +265,7 @@ export function StatsView({
           start={startOf(fCalories)}
           end={today}
         />
+        <ProteinChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
         <FiberChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
         <SatFatChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
         <HydrationChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />

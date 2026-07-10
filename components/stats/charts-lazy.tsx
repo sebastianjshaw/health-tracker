@@ -36,6 +36,11 @@ export const CalorieChart = dynamic(
   { ssr: false, loading: makeSkeleton(220) },
 );
 
+export const ProteinChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.ProteinChart })),
+  { ssr: false, loading: makeSkeleton(200) },
+);
+
 export const FiberChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.FiberChart })),
   { ssr: false, loading: makeSkeleton(200) },

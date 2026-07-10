@@ -6,6 +6,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Line,
   LineChart,
   ReferenceLine,
@@ -53,6 +54,13 @@ const CAL_COLORS = {
   none: "var(--muted-foreground)", // no target / nothing logged
 };
 
+// Protein-bar status colours: hit the day's target (a floor to reach) or fell short.
+const PROTEIN_COLORS = {
+  met: "#22c55e", // at or above the target that day/bucket
+  under: "#f59e0b", // below it
+  none: "var(--muted-foreground)", // no target / nothing logged
+};
+
 const AXIS = "var(--muted-foreground)";
 const GRID = "var(--border)";
 
@@ -84,6 +92,11 @@ type NutRow = {
   key: string;
   loggedDays: number;
   kcal: number;
+  protein: number;
+  /** Protein target for the bucket: the per-day target (day view), or the sum of
+   * each logged day's target (week/month), so it scales to the total-protein bar
+   * and steps as the goal changed. */
+  proteinTarget: number;
   fiber: number;
   fiberEstimated: number;
   satFat: number;
@@ -103,6 +116,10 @@ function nutritionRows(
       key: d.date,
       loggedDays: d.kcal > 0 ? 1 : 0,
       kcal: d.kcal,
+      protein: d.protein,
+      // Day view: always show the day's own target (the moving dotted line), even
+      // on unlogged days, so the goal-over-time line stays continuous.
+      proteinTarget: d.targetProtein,
       fiber: d.fiber,
       fiberEstimated: d.fiberEstimated,
       satFat: d.satFat,
@@ -116,13 +133,14 @@ function nutritionRows(
   const acc = new Map(
     keys.map((k) => [
       k,
-      { kcal: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
+      { kcal: 0, protein: 0, proteinTarget: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
     ]),
   );
   for (const d of data) {
     const a = acc.get(bucketKey(g, d.date));
     if (!a) continue;
     a.kcal += d.kcal;
+    a.protein += d.protein;
     a.fiber += d.fiber;
     a.fiberEstimated += d.fiberEstimated;
     a.satFat += d.satFat;
@@ -130,7 +148,12 @@ function nutritionRows(
     a.waterWater += d.waterWater;
     a.waterDrink += d.waterDrink;
     a.waterFood += d.waterFood;
-    if (d.kcal > 0) a.loggedDays += 1;
+    // Sum the target only over logged days, so a partly-logged week isn't judged
+    // against a full week's worth of protein goal (mirrors the calorie logic).
+    if (d.kcal > 0) {
+      a.loggedDays += 1;
+      a.proteinTarget += d.targetProtein;
+    }
   }
   return keys.map((k) => ({ key: k, ...acc.get(k)! }));
 }
@@ -629,6 +652,96 @@ export function CalorieChart({
               {isDay
                 ? `· judged vs the day’s logged-meal share of ${target} kcal`
                 : `· each ${groupNoun(granularity)} judged vs ${target} kcal × days logged`}
+            </span>
+          </div>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+/**
+ * Protein grams per day (or bucket total) with a dotted target line that steps
+ * over time — each day is compared against the target that was in effect *that*
+ * day, so past days keep their old goal when the goal later changes. Bars are
+ * green when they meet the target, amber when short. Week/month sum both the
+ * protein and (over logged days) the target, so the line stays comparable.
+ */
+export function ProteinChart({ data, granularity = "day", start, end }: NutrientChartProps) {
+  const isDay = granularity === "day";
+  const rows = React.useMemo(
+    () => nutritionRows(data, granularity, start ?? data[0]?.date ?? "", end ?? data[data.length - 1]?.date ?? ""),
+    [data, granularity, start, end],
+  );
+  const hasData = rows.some((r) => r.protein > 0);
+  const colorFor = (r: NutRow) =>
+    r.proteinTarget <= 0
+      ? PROTEIN_COLORS.none
+      : r.protein >= r.proteinTarget
+        ? PROTEIN_COLORS.met
+        : PROTEIN_COLORS.under;
+  const chart = rows.map((r) => ({ ...r, color: colorFor(r) }));
+
+  const dataMax = Math.max(0, ...chart.map((r) => Math.max(r.protein, r.proteinTarget)));
+  const yMax = Math.max(20, Math.ceil(dataMax / 20) * 20);
+  const totalProtein = chart.reduce((s, r) => s + r.protein, 0);
+  const totalDays = chart.reduce((s, r) => s + r.loggedDays, 0);
+  const avg = totalDays ? Math.round(totalProtein / totalDays) : 0;
+  // Latest goal (last row with a target) for the plain-language summary.
+  const latestTarget = [...data].reverse().find((d) => d.targetProtein > 0)?.targetProtein ?? 0;
+  const summary = `Protein: averaging ${avg} g per logged day versus a ${latestTarget} g target.`;
+  return (
+    <ChartCard title={`Protein (g)${groupSuffix(granularity, "total")}`}>
+      {!hasData ? (
+        <EmptyState>No food logged yet.</EmptyState>
+      ) : (
+        <>
+          <ChartFigure summary={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <ComposedChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
+                <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
+                  formatter={(value, name) => [`${Math.round(Number(value))} g`, name]}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                <Bar dataKey="protein" radius={[4, 4, 0, 0]} name="Protein">
+                  {chart.map((r) => (
+                    <Cell key={r.key} fill={r.color} />
+                  ))}
+                </Bar>
+                {/* Stepped so it holds a goal flat until it changes, and reads as
+                    "the target on that day". */}
+                <Line
+                  type="stepAfter"
+                  dataKey="proteinTarget"
+                  name="Target"
+                  stroke="var(--muted-foreground)"
+                  strokeWidth={2}
+                  strokeDasharray="4 4"
+                  dot={false}
+                  activeDot={false}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartFigure>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <Swatch color={PROTEIN_COLORS.met} label="Met target" />
+            <Swatch color={PROTEIN_COLORS.under} label="Under" />
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0 w-4 border-t-2 border-dashed border-muted-foreground" />
+              Target {isDay ? "that day" : "× days logged"}
             </span>
           </div>
         </>
