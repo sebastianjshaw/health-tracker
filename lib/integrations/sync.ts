@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { bodyMetrics, cardioSessions, dailyActivity, dailyHealthMetrics, heartRateDaily, sleepSessions } from "@/db/schema";
@@ -171,9 +171,13 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
   // dedupe overlapping ones, keep the winners, and drop the redundant copies.
   // (Historical dupes outside the window were already cleaned; a full resync
   // re-fetches everything and re-dedupes the lot.)
+  //
+  // `row` is absent for participants that are ALREADY stored (see below) — those
+  // join the dedup only so a fresh copy can supersede them; they're never
+  // re-inserted, only kept or deleted.
   type ExCandidate = DedupSession & {
     date: string;
-    row: typeof cardioSessions.$inferInsert;
+    row?: typeof cardioSessions.$inferInsert;
   };
   const candidates: ExCandidate[] = [];
   for (const dp of exPoints) {
@@ -237,9 +241,43 @@ export async function syncGoogleHealth(opts?: { full?: boolean }): Promise<SyncS
     });
   }
 
-  const { winners, loserIds } = dedupeSessions(candidates);
+  // Reconcile against already-stored sessions in the same window. Google Health
+  // re-emits a session under a NEW dataPoint id when it refines it (e.g. a walk's
+  // duration grows as data finalises), so the previous copy — which the feed no
+  // longer returns — would otherwise linger as an orphan the per-fetch dedup
+  // never sees. Fold those stored rows in (dedup-only, no `row`) so an overlapping
+  // fresh copy supersedes and deletes them.
+  const fetchedIds = new Set(candidates.map((c) => c.externalId));
+  const storedRows = await db
+    .select({
+      externalId: cardioSessions.externalId,
+      date: cardioSessions.date,
+      startedAt: cardioSessions.startedAt,
+      durationMin: cardioSessions.durationMin,
+      distanceKm: cardioSessions.distanceKm,
+    })
+    .from(cardioSessions)
+    .where(and(eq(cardioSessions.source, SOURCE), gte(cardioSessions.date, start), lte(cardioSessions.date, today)))
+    .all();
+  const participants: ExCandidate[] = [...candidates];
+  for (const r of storedRows) {
+    if (!r.externalId || fetchedIds.has(r.externalId)) continue;
+    const startMs = Date.parse(r.startedAt ?? "");
+    if (!Number.isFinite(startMs)) continue; // can't place it in time → leave alone
+    participants.push({
+      externalId: r.externalId,
+      startMs,
+      endMs: startMs + (r.durationMin ?? 0) * 60_000,
+      hasDistance: r.distanceKm != null && r.distanceKm > 0,
+      durationMin: r.durationMin ?? 0,
+      date: r.date,
+    });
+  }
+
+  const { winners, loserIds } = dedupeSessions(participants);
   const cardioStmts: SqliteBatchItem[] = [];
   for (const w of winners) {
+    if (!w.row) continue; // stored winner — already persisted, nothing to write
     if (w.date < start) continue; // outside the window — already imported
     cardioStmts.push(
       db

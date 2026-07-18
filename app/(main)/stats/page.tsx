@@ -12,6 +12,7 @@ import {
   getBodyMetrics,
   getCalorieSeriesAll,
   getCardioDistances,
+  getEnergyBalanceSeries,
   getCardioLoadSessions,
   getRecoverySeries,
   getRestingHrSeries,
@@ -41,6 +42,10 @@ export default async function StatsPage() {
       getCardioLoadSessions(),
       getHealthSeries(addDays(today, -363), today),
     ]);
+
+  // Derived from the already-loaded calorie series, so recurring foods aren't
+  // materialised a second time in parallel.
+  const energy = await getEnergyBalanceSeries(calories);
 
   // Behaviour / energy-balance insights that belong with trends.
   const insights = {
@@ -85,6 +90,7 @@ export default async function StatsPage() {
         weight={weight}
         predictions={predictions}
         calories={calories}
+        energy={energy}
         distances={distances}
         sleep={sleep}
         restingHr={restingHr}

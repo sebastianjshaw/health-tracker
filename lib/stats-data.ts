@@ -17,13 +17,13 @@ import {
 import { Exercise, Meal, contingencyMultiplier } from "./constants";
 import { vo2maxFromRun, type LoadSession } from "./fitness";
 import { addDays, todayISO } from "./date";
-import { ageFrom } from "./health";
+import { ageFrom, bmr } from "./health";
 import { estimateWaterMl, waterSourceOf } from "./hydration";
 import { netPassiveKm, passiveWalkKcal } from "./passive-activity";
 import { materializeRecurringRange } from "./recurring-materialize";
 import { getContingency, getProfile, getTargetHistory } from "./settings";
 import { targetForDate } from "./targets";
-import { predictWeights, type WeightPrediction } from "./weight-prediction";
+import { BASELINE_ACTIVITY_FACTOR, predictWeights, type WeightPrediction } from "./weight-prediction";
 
 /** All body-metric rows, newest-first. Optionally bounded to an inclusive
  * [from, to] date range (so the report only loads its window). */
@@ -156,6 +156,91 @@ export async function getWeightPredictions(): Promise<WeightPrediction[]> {
     heightCm: profile.heightCm,
     age: ageFrom(profile.dob),
     sex: profile.sex,
+  });
+}
+
+export type EnergyPoint = {
+  date: string;
+  /** Contingency-adjusted calories consumed (0 = nothing logged that day). */
+  consumed: number;
+  /** Total daily burn: resting maintenance (BMR × factor) + net exercise. Null
+   *  when the profile is too sparse to compute BMR. */
+  burned: number | null;
+};
+
+/**
+ * Per-day energy in vs out across the logged history. "Out" is the same model
+ * the weight predictor uses: resting maintenance (BMR × baseline factor) plus the
+ * NET cost of logged cardio (device gross minus the resting minutes it already
+ * includes) and passive walking. Weight for each day's BMR is carried forward
+ * from the most recent weigh-in on/before it, so the burn line tracks the person
+ * even on days without a fresh weigh-in.
+ *
+ * Takes the already-computed calorie series (consumed per day) rather than
+ * re-deriving it, so /stats materialises recurring foods once, not twice.
+ */
+export async function getEnergyBalanceSeries(consumedSeries: CaloriePoint[]): Promise<EnergyPoint[]> {
+  if (consumedSeries.length === 0) return [];
+  const start = consumedSeries[0].date;
+  const end = consumedSeries[consumedSeries.length - 1].date;
+
+  const [weighIns, cardio, activity, profile] = await Promise.all([
+    getWeightSeries(),
+    db
+      .select({
+        date: cardioSessions.date,
+        kcal: cardioSessions.kcal,
+        distanceKm: cardioSessions.distanceKm,
+        durationMin: cardioSessions.durationMin,
+      })
+      .from(cardioSessions)
+      .where(and(gte(cardioSessions.date, start), lte(cardioSessions.date, end)))
+      .all(),
+    db
+      .select({ date: dailyActivity.date, distanceKm: dailyActivity.distanceKm })
+      .from(dailyActivity)
+      .where(and(gte(dailyActivity.date, start), lte(dailyActivity.date, end)))
+      .all(),
+    getProfile(),
+  ]);
+
+  const age = ageFrom(profile.dob);
+  const cardioKcalByDate = new Map<string, number>();
+  const cardioMinByDate = new Map<string, number>();
+  const sessionDistByDate = new Map<string, number>();
+  for (const c of cardio) {
+    if (c.kcal != null) cardioKcalByDate.set(c.date, (cardioKcalByDate.get(c.date) ?? 0) + c.kcal);
+    if (c.durationMin != null)
+      cardioMinByDate.set(c.date, (cardioMinByDate.get(c.date) ?? 0) + c.durationMin);
+    if (c.distanceKm != null)
+      sessionDistByDate.set(c.date, (sessionDistByDate.get(c.date) ?? 0) + c.distanceKm);
+  }
+  const passiveDistByDate = new Map<string, number>();
+  for (const a of activity) passiveDistByDate.set(a.date, a.distanceKm ?? 0);
+
+  // Weight carried forward from the latest weigh-in on/before each day.
+  const sortedWeighIns = [...weighIns].sort((a, b) => a.date.localeCompare(b.date));
+
+  return consumedSeries.map((c) => {
+    // Latest weigh-in on or before this date (fall back to the earliest known).
+    let weight = sortedWeighIns[0]?.weight ?? null;
+    for (const w of sortedWeighIns) {
+      if (w.date <= c.date) weight = w.weight;
+      else break;
+    }
+    const base = bmr(weight, profile.heightCm, age, profile.sex);
+    let burned: number | null = null;
+    if (base != null) {
+      const maintenance = base * BASELINE_ACTIVITY_FACTOR;
+      const restCardio = (base / 1440) * (cardioMinByDate.get(c.date) ?? 0);
+      const netCardio = Math.max(0, (cardioKcalByDate.get(c.date) ?? 0) - restCardio);
+      const passive = passiveWalkKcal(
+        netPassiveKm(passiveDistByDate.get(c.date) ?? 0, sessionDistByDate.get(c.date) ?? 0),
+        weight,
+      );
+      burned = Math.round(maintenance + netCardio + passive);
+    }
+    return { date: c.date, consumed: c.kcal, burned };
   });
 }
 

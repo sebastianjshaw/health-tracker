@@ -34,6 +34,7 @@ import type {
   ActivityPoint,
   CaloriePoint,
   DistancePoint,
+  EnergyPoint,
   LiftPoint,
   RestingHrPoint,
   SleepPoint,
@@ -59,6 +60,14 @@ const PROTEIN_COLORS = {
   met: "#22c55e", // at or above the target that day/bucket
   under: "#f59e0b", // below it
   none: "var(--muted-foreground)", // no target / nothing logged
+};
+
+// Energy-balance bar colours (consumed vs burned) + the burn line.
+const ENERGY_COLORS = {
+  deficit: "#22c55e", // ate at or under what was burned → net loss
+  surplus: "#ef4444", // ate more than burned → net gain
+  none: "var(--muted-foreground)",
+  burn: "#f97316", // total-burn overlay line
 };
 
 const AXIS = "var(--muted-foreground)";
@@ -742,6 +751,125 @@ export function ProteinChart({ data, granularity = "day", start, end }: Nutrient
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-0 w-4 border-t-2 border-dashed border-muted-foreground" />
               Target {isDay ? "that day" : "× days logged"}
+            </span>
+          </div>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+/**
+ * Energy balance: calories consumed (bars) with total daily burn overlaid as a
+ * line, so you can see at a glance whether intake sat above or below expenditure.
+ * Bars are green on a deficit day/bucket (ate ≤ burned) and red on a surplus.
+ * Averaged per logged day at every grouping, so a week reads as a typical day in
+ * vs out (not a total that unlogged days would distort).
+ */
+export function EnergyBalanceChart({
+  data,
+  granularity = "day",
+  start,
+  end,
+}: {
+  data: EnergyPoint[];
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
+}) {
+  const isDay = granularity === "day";
+  const s = start ?? data[0]?.date ?? "";
+  const e = end ?? data[data.length - 1]?.date ?? "";
+  // Compare in vs out over days actually logged, so unlogged days (0 consumed)
+  // don't drag the average down against a burn figure that exists every day.
+  const logged = React.useMemo(() => data.filter((d) => d.consumed > 0), [data]);
+  const rows = React.useMemo(() => {
+    const inn = bucketReduce(logged, (d) => d.date, (d) => d.consumed, granularity, s, e, "avg");
+    const out = bucketReduce(logged, (d) => d.date, (d) => d.burned, granularity, s, e, "avg");
+    const burnByKey = new Map(out.map((o) => [o.key, o.value]));
+    return inn
+      .map((i) => ({
+        key: i.key,
+        consumed: i.value == null ? null : Math.round(i.value),
+        burned: burnByKey.get(i.key) == null ? null : Math.round(burnByKey.get(i.key)!),
+      }))
+      .filter((r) => r.consumed != null || r.burned != null);
+  }, [logged, granularity, s, e]);
+
+  const hasData = rows.some((r) => (r.consumed ?? 0) > 0);
+  const chart = rows.map((r) => ({
+    ...r,
+    color:
+      r.consumed == null || r.burned == null
+        ? ENERGY_COLORS.none
+        : r.consumed <= r.burned
+          ? ENERGY_COLORS.deficit
+          : ENERGY_COLORS.surplus,
+  }));
+
+  const dataMax = Math.max(0, ...chart.flatMap((r) => [r.consumed ?? 0, r.burned ?? 0]));
+  const yMax = Math.ceil(dataMax / 200) * 200 || 200;
+
+  // Averages over logged days for the summary line.
+  const avg = (pick: (r: (typeof chart)[number]) => number | null) => {
+    const vals = chart.map(pick).filter((v): v is number => v != null);
+    return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+  };
+  const avgIn = avg((r) => r.consumed);
+  const avgOut = avg((r) => r.burned);
+  const net = avgIn - avgOut;
+  const summary = `Energy balance: averaging ${avgIn} kcal in versus ${avgOut} kcal burned per logged day (${net >= 0 ? "+" : ""}${net} net).`;
+
+  return (
+    <ChartCard title={`Energy balance${groupSuffix(granularity, "avg")}`}>
+      {!hasData ? (
+        <EmptyState>No food logged yet.</EmptyState>
+      ) : (
+        <>
+          <ChartFigure summary={summary}>
+            <ResponsiveContainer width="100%" height={220}>
+              <ComposedChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis
+                  dataKey="key"
+                  tickFormatter={(v) => bucketLabel(granularity, String(v))}
+                  stroke={AXIS}
+                  fontSize={11}
+                  interval="preserveStartEnd"
+                />
+                <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  itemStyle={{ color: "var(--foreground)" }}
+                  labelFormatter={(label) =>
+                    isDay ? shortDateYear(String(label)) : bucketLabel(granularity, String(label))
+                  }
+                  formatter={(value, name) => [`${Math.round(Number(value))} kcal`, name]}
+                  cursor={{ fill: "var(--muted)" }}
+                />
+                <Bar dataKey="consumed" radius={[4, 4, 0, 0]} name="Consumed">
+                  {chart.map((r) => (
+                    <Cell key={r.key} fill={r.color} />
+                  ))}
+                </Bar>
+                <Line
+                  type="monotone"
+                  dataKey="burned"
+                  name="Burned"
+                  stroke={ENERGY_COLORS.burn}
+                  strokeWidth={2}
+                  dot={{ r: 2, fill: ENERGY_COLORS.burn }}
+                  connectNulls
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </ChartFigure>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <Swatch color={ENERGY_COLORS.deficit} label="Deficit (ate ≤ burned)" />
+            <Swatch color={ENERGY_COLORS.surplus} label="Surplus" />
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0 w-4 border-t-2" style={{ borderColor: ENERGY_COLORS.burn }} />
+              Total burned
             </span>
           </div>
         </>

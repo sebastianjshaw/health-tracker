@@ -128,7 +128,13 @@ export async function materializeRecurringForDates(db: AppDb, dates: string[]): 
     }
   }
 
-  if (inserts.length > 0) await db.insert(foodLog).values(inserts);
+  // onConflictDoNothing: /stats fans out several readers (calorie series, energy
+  // balance, weight prediction) that each materialise overlapping date ranges in
+  // parallel, so two can independently decide the same (date, recurringId) row is
+  // missing and both insert it. The unique index makes the loser a no-op instead
+  // of throwing.
+  if (inserts.length > 0)
+    await db.insert(foodLog).values(inserts).onConflictDoNothing();
 }
 
 /** Hide a recurring default on one day and remove any materialised log row. */

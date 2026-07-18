@@ -8,6 +8,7 @@ import { bmi, bmiClass } from "@/lib/health";
 import {
   CalorieChart,
   CompositionChart,
+  EnergyBalanceChart,
   FiberChart,
   HeartRateChart,
   HydrationChart,
@@ -39,6 +40,7 @@ const GROUPINGS: { key: Granularity; label: string }[] = [
 import type {
   CaloriePoint,
   DistancePoint,
+  EnergyPoint,
   RecoveryPoint,
   RestingHrPoint,
   SleepPoint,
@@ -78,6 +80,7 @@ export function StatsView({
   weight,
   predictions,
   calories,
+  energy,
   distances,
   sleep,
   restingHr,
@@ -99,6 +102,7 @@ export function StatsView({
   weight: WeightPoint[];
   predictions: WeightPrediction[];
   calories: CaloriePoint[];
+  energy: EnergyPoint[];
   distances: DistancePoint[];
   sleep: SleepPoint[];
   restingHr: RestingHrPoint[];
@@ -123,6 +127,7 @@ export function StatsView({
   const fWeight = withinRange(weight, cutoff);
   const fPredictions = withinRange(predictions, cutoff);
   const fCalories = withinRange(calories, cutoff);
+  const fEnergy = withinRange(energy, cutoff);
   const fDistances = withinRange(distances, cutoff);
   const fSleep = withinRange(sleep, cutoff);
   const fHr = withinRange(restingHr, cutoff);
@@ -265,6 +270,7 @@ export function StatsView({
           start={startOf(fCalories)}
           end={today}
         />
+        <EnergyBalanceChart data={fEnergy} granularity={group} start={startOf(fEnergy)} end={today} />
         <ProteinChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
         <FiberChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
         <SatFatChart data={fCalories} granularity={group} start={startOf(fCalories)} end={today} />
