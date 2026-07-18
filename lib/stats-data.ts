@@ -114,6 +114,7 @@ export async function getWeightPredictions(): Promise<WeightPrediction[]> {
         date: cardioSessions.date,
         kcal: cardioSessions.kcal,
         distanceKm: cardioSessions.distanceKm,
+        durationMin: cardioSessions.durationMin,
       })
       .from(cardioSessions)
       .where(and(gte(cardioSessions.date, start), lte(cardioSessions.date, end)))
@@ -128,9 +129,12 @@ export async function getWeightPredictions(): Promise<WeightPrediction[]> {
 
   const intakeByDate = new Map(series.map((c) => [c.date, c.kcal]));
   const cardioByDate = new Map<string, number>();
+  const cardioMinutesByDate = new Map<string, number>();
   const sessionDistByDate = new Map<string, number>();
   for (const c of cardio) {
     if (c.kcal != null) cardioByDate.set(c.date, (cardioByDate.get(c.date) ?? 0) + c.kcal);
+    if (c.durationMin != null)
+      cardioMinutesByDate.set(c.date, (cardioMinutesByDate.get(c.date) ?? 0) + c.durationMin);
     if (c.distanceKm != null)
       sessionDistByDate.set(c.date, (sessionDistByDate.get(c.date) ?? 0) + c.distanceKm);
   }
@@ -148,6 +152,7 @@ export async function getWeightPredictions(): Promise<WeightPrediction[]> {
     weighIns,
     intakeByDate,
     cardioByDate,
+    cardioMinutesByDate,
     heightCm: profile.heightCm,
     age: ageFrom(profile.dob),
     sex: profile.sex,

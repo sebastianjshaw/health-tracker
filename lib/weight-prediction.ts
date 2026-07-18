@@ -51,16 +51,26 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
  *   Δweight = Σ(intake − [BMR·factor + cardio]) / KCAL_PER_KG
  * Intake is the contingency-adjusted figure the caller passes in. Windows with
  * too large a gap, or too little logged food, are skipped (no dot emitted).
+ *
+ * `cardioByDate` is the gross energy a device (e.g. Fitbit) reports for logged
+ * sessions, which INCLUDES the resting metabolism the person would burn anyway.
+ * Since `maintenance` already covers resting for all 24h, we subtract the resting
+ * cost of the session minutes (`cardioMinutesByDate`) so exercise counts only its
+ * *net* cost — otherwise a heavy-exercise stretch (e.g. a walking holiday) double-
+ * counts resting energy and wrongly predicts a loss. Passive walking, folded into
+ * `cardioByDate` by the caller, is already a net figure and carries no minutes, so
+ * it is left untouched.
  */
 export function predictWeights(opts: {
   weighIns: WeighIn[]; // ascending by date
   intakeByDate: Map<string, number>; // contingency-adjusted kcal; absent/0 = unlogged
-  cardioByDate: Map<string, number>; // kcal burned in logged cardio
+  cardioByDate: Map<string, number>; // gross kcal burned in logged cardio (+ net passive)
+  cardioMinutesByDate?: Map<string, number>; // minutes of logged cardio sessions (for the resting offset)
   heightCm: number | null;
   age: number | null;
   sex: string;
 }): WeightPrediction[] {
-  const { weighIns, intakeByDate, cardioByDate, heightCm, age, sex } = opts;
+  const { weighIns, intakeByDate, cardioByDate, cardioMinutesByDate, heightCm, age, sex } = opts;
   const out: WeightPrediction[] = [];
 
   for (let i = 1; i < weighIns.length; i++) {
@@ -73,6 +83,7 @@ export function predictWeights(opts: {
     const base = bmr(anchor.weight, heightCm, age, sex);
     if (base == null) continue;
     const maintenance = base * BASELINE_ACTIVITY_FACTOR;
+    const restingPerMin = base / 1440; // resting kcal/min, to net out of session gross
 
     const loggedIntakes = days
       .map((d) => intakeByDate.get(d))
@@ -85,7 +96,11 @@ export function predictWeights(opts: {
     for (const d of days) {
       const raw = intakeByDate.get(d);
       const intake = raw != null && raw > 0 ? raw : meanIntake; // fill rare gaps
-      const burn = maintenance + (cardioByDate.get(d) ?? 0);
+      // Net the resting cost of the session minutes out of the device's gross
+      // cardio figure so resting isn't counted twice (maintenance already has it).
+      const restCardio = restingPerMin * (cardioMinutesByDate?.get(d) ?? 0);
+      const cardio = Math.max(0, (cardioByDate.get(d) ?? 0) - restCardio);
+      const burn = maintenance + cardio;
       netKcal += intake - burn;
     }
 

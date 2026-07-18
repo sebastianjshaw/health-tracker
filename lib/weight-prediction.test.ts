@@ -56,6 +56,33 @@ describe("predictWeights", () => {
     assert.ok(out[0].predicted < 99.5);
   });
 
+  it("nets resting metabolism out of gross session calories", () => {
+    const weighIns: WeighIn[] = [
+      { date: "2026-01-01", weight: 100 },
+      { date: "2026-01-08", weight: 99 },
+    ];
+    // 600 kcal gross over 60 min. BMR 1930 → resting 1930/1440 ≈ 1.34 kcal/min,
+    // so ~80 kcal of the 600 is resting the day already counts → ~520 net.
+    const gross = new Map(WEEK.map((d) => [d, 600]));
+    const minutes = new Map(WEEK.map((d) => [d, 60]));
+    const withMinutes = predictWeights({
+      weighIns,
+      intakeByDate: intake(WEEK, 1800),
+      cardioByDate: gross,
+      cardioMinutesByDate: minutes,
+      ...profile,
+    });
+    const withoutMinutes = predictWeights({
+      weighIns,
+      intakeByDate: intake(WEEK, 1800),
+      cardioByDate: gross,
+      ...profile,
+    });
+    // Netting resting out means less burn → higher predicted weight than treating
+    // the gross figure as pure exercise.
+    assert.ok(withMinutes[0].predicted > withoutMinutes[0].predicted);
+  });
+
   it("skips windows with too large a gap", () => {
     const weighIns: WeighIn[] = [
       { date: "2026-01-01", weight: 100 },
