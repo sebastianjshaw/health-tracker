@@ -41,6 +41,7 @@ import {
 } from "../lib/constants";
 import { addDays, todayISO } from "../lib/date";
 import { inferCategory } from "../lib/food-category";
+import { isReusableFoodMatch, normalizeFoodName } from "../lib/food-match";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
 import { ageFrom } from "../lib/health";
 import { estimateCardioKcal } from "../lib/cardio-calories";
@@ -62,7 +63,47 @@ const isRemote = url.startsWith("libsql://") || url.startsWith("http");
 const client = createClient(isRemote ? { url, authToken } : { url });
 const db = drizzle(client) as AppDb;
 
-/** Ensure an MCP-logged food exists in the library (one serving = the portion eaten). */
+/**
+ * Find an existing library food to reuse for a portion, so we don't mint a new
+ * row for every wording of the same item. Candidates are narrowed by a kcal
+ * window in SQL, then filtered by isReusableFoodMatch (related name AND matching
+ * per-serving nutrition — see lib/food-match). Prefers an exact-name match, then
+ * the closest calories, then the oldest (lowest-id, most-established) food.
+ */
+async function findReusableFoodId(
+  name: string,
+  portion: { kcal: number; protein: number; carbs: number; fat: number },
+): Promise<number | null> {
+  const kcalTol = Math.max(8, portion.kcal * 0.05);
+  const candidates = await db
+    .select()
+    .from(foods)
+    .where(and(gte(foods.kcal, portion.kcal - kcalTol), lte(foods.kcal, portion.kcal + kcalTol)))
+    .all();
+  const target = normalizeFoodName(name);
+  let bestId: number | null = null;
+  let bestScore = Infinity;
+  for (const f of candidates) {
+    if (
+      !isReusableFoodMatch(
+        { name, ...portion },
+        { name: f.name, kcal: f.kcal, protein: f.protein, carbs: f.carbs, fat: f.fat },
+      )
+    ) {
+      continue;
+    }
+    const exactPenalty = normalizeFoodName(f.name) === target ? 0 : 1000;
+    const score = exactPenalty + Math.abs(f.kcal - portion.kcal) + f.id / 1e9;
+    if (score < bestScore) {
+      bestScore = score;
+      bestId = f.id;
+    }
+  }
+  return bestId;
+}
+
+/** Ensure an MCP-logged food exists in the library (one serving = the portion
+ *  eaten), reusing an existing matching library food where one exists. */
 async function ensureMcpLibraryFood(opts: {
   name: string;
   kcal: number;
@@ -83,15 +124,10 @@ async function ensureMcpLibraryFood(opts: {
     fiber: opts.fiber ?? null,
     saturatedFat: opts.saturatedFat ?? null,
   };
-  const existing = await db
-    .select()
-    .from(foods)
-    .where(and(sql`lower(${foods.name}) = ${name.toLowerCase()}`, eq(foods.source, "mcp")))
-    .get();
-  if (existing) {
-    await db.update(foods).set(serving).where(eq(foods.id, existing.id));
-    return existing.id;
-  }
+  // Reuse a matching existing food (any source) rather than creating a duplicate.
+  const reuseId = await findReusableFoodId(name, serving);
+  if (reuseId != null) return reuseId;
+
   const [row] = await db
     .insert(foods)
     .values({
@@ -373,7 +409,14 @@ server.tool(
     const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
     if (!food) return text(`Failed to save "${name}".`);
     await db.insert(foodLog).values(foodLogSnapshot(food, { date: d, meal, quantity: 1 }));
-    return text(`Logged "${name}" to ${meal} on ${d} (${Math.round(kcal)} kcal).`);
+    // When an existing library food was reused, its name/nutrition win — report
+    // that so the difference from the requested wording is transparent.
+    const reused = food.name.trim().toLowerCase() !== name.trim().toLowerCase();
+    return text(
+      reused
+        ? `Logged "${food.name}" to ${meal} on ${d} (${Math.round(food.kcal)} kcal) — matched an existing library food for "${name}".`
+        : `Logged "${food.name}" to ${meal} on ${d} (${Math.round(food.kcal)} kcal).`,
+    );
   },
 );
 
