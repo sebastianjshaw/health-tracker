@@ -28,6 +28,7 @@ export type BodyInput = {
   waistCm?: number | null;
   chestCm?: number | null;
   hipsCm?: number | null;
+  neckCm?: number | null;
   restingHr?: number | null;
   notes?: string | null;
 };
@@ -39,6 +40,7 @@ function hasBodyInput(input: BodyInput): boolean {
     input.waistCm != null ||
     input.chestCm != null ||
     input.hipsCm != null ||
+    input.neckCm != null ||
     input.restingHr != null ||
     (input.notes != null && input.notes.trim() !== "")
   );
@@ -50,9 +52,15 @@ export async function logBody(input: BodyInput): Promise<ActionResult> {
   if (!isValidISO(input.date)) return actionFail("Invalid date");
   if (!hasBodyInput(input)) return actionFail("Enter at least one measurement");
   if (
-    ![input.weightKg, input.bodyFatPct, input.waistCm, input.chestCm, input.hipsCm, input.restingHr].every(
-      isFiniteOrNull,
-    )
+    ![
+      input.weightKg,
+      input.bodyFatPct,
+      input.waistCm,
+      input.chestCm,
+      input.hipsCm,
+      input.neckCm,
+      input.restingHr,
+    ].every(isFiniteOrNull)
   ) {
     return actionFail("Measurements must be numbers");
   }
@@ -63,6 +71,7 @@ export async function logBody(input: BodyInput): Promise<ActionResult> {
     waistCm: input.waistCm ?? null,
     chestCm: input.chestCm ?? null,
     hipsCm: input.hipsCm ?? null,
+    neckCm: input.neckCm ?? null,
     restingHr: input.restingHr ?? null,
     notes: input.notes ?? null,
   };
@@ -83,6 +92,7 @@ export async function logBody(input: BodyInput): Promise<ActionResult> {
         waistCm: values.waistCm ?? existing.waistCm,
         chestCm: values.chestCm ?? existing.chestCm,
         hipsCm: values.hipsCm ?? existing.hipsCm,
+        neckCm: values.neckCm ?? existing.neckCm,
         restingHr: values.restingHr ?? existing.restingHr,
         notes: values.notes ?? existing.notes,
       })

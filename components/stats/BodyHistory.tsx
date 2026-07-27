@@ -19,6 +19,7 @@ export function BodyHistory({ metrics }: { metrics: BodyMetric[] }) {
           m.weightKg != null ? `${trimNum(m.weightKg)} kg` : null,
           m.bodyFatPct != null ? `${trimNum(m.bodyFatPct)}% bf` : null,
           m.waistCm != null ? `${trimNum(m.waistCm)} cm waist` : null,
+          m.neckCm != null ? `${trimNum(m.neckCm)} cm neck` : null,
           m.restingHr != null ? `${m.restingHr} bpm` : null,
         ].filter(Boolean);
         return (

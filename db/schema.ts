@@ -114,6 +114,7 @@ export const bodyMetrics = sqliteTable("body_metrics", {
   waistCm: real("waist_cm"),
   chestCm: real("chest_cm"),
   hipsCm: real("hips_cm"),
+  neckCm: real("neck_cm"),
   restingHr: integer("resting_hr"),
   notes: text("notes"),
   createdAt: createdAt(),

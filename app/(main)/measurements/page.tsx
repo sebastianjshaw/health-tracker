@@ -10,7 +10,7 @@ export default async function MeasurementsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Measurements" subtitle="Weight, body fat, waist, resting HR" />
+      <PageHeader title="Measurements" subtitle="Weight, body fat, waist, neck, resting HR" />
       <BodyForm />
       <div>
         <h3 className="mb-2 text-sm font-medium text-muted-foreground">History</h3>

@@ -27,6 +27,7 @@ export function BodyForm() {
         waistCm: nullableNum(fd.get("waistCm")),
         chestCm: nullableNum(fd.get("chestCm")),
         hipsCm: nullableNum(fd.get("hipsCm")),
+        neckCm: nullableNum(fd.get("neckCm")),
         restingHr: nullableNum(fd.get("restingHr")),
         notes: String(fd.get("notes") ?? "").trim() || null,
       });
@@ -65,6 +66,9 @@ export function BodyForm() {
             </Field>
             <Field label="Hips (cm)">
               <Input name="hipsCm" type="number" step="any" inputMode="decimal" />
+            </Field>
+            <Field label="Neck (cm)">
+              <Input name="neckCm" type="number" step="any" inputMode="decimal" />
             </Field>
             <Field label="Notes" className="col-span-2">
               <Input name="notes" placeholder="optional" />
