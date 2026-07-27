@@ -278,7 +278,7 @@ export const medicationDoses = sqliteTable("medication_doses", {
   // 'tirzepatide' (Mounjaro) | 'semaglutide' (Ozempic) | free text
   drug: text("drug").notNull().default("tirzepatide"),
   doseMg: real("dose_mg"),
-  // 'abdomen' | 'thigh' | 'upper_arm' | free text — rotate to avoid lipohypertrophy
+  // 'abdomen' | 'left_thigh' | 'right_thigh' | 'upper_arm' | free text — rotate to avoid lipohypertrophy
   site: text("site"),
   notes: text("notes"),
   createdAt: createdAt(),

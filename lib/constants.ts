@@ -123,12 +123,15 @@ export const MED_DOSE_OPTIONS: Record<MedDrug, number[]> = {
   semaglutide: [0.25, 0.5, 1, 1.7, 2.4],
 };
 
-export const INJECTION_SITES = ["abdomen", "thigh", "upper_arm"] as const;
+// Upper arm stays single (self-injecting either arm is a two-person job); thighs
+// are split left/right so rotation between them can be tracked.
+export const INJECTION_SITES = ["abdomen", "left_thigh", "right_thigh", "upper_arm"] as const;
 export type InjectionSite = (typeof INJECTION_SITES)[number];
 
 export const INJECTION_SITE_LABELS: Record<InjectionSite, string> = {
   abdomen: "Abdomen",
-  thigh: "Thigh",
+  left_thigh: "Left thigh",
+  right_thigh: "Right thigh",
   upper_arm: "Upper arm",
 };
 
