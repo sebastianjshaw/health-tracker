@@ -96,12 +96,23 @@ export function proteinForLeanMass(leanKg: number | null): number | null {
   return round5(leanKg * PROTEIN_PER_KG_LEAN);
 }
 
+/** Top of the healthy BMI range — caps the reference weight so protein isn't
+ *  scaled off excess fat when body fat is unknown. */
+const REFERENCE_BMI = 25;
+/** g protein per kg of reference (near-lean) weight for the no-body-fat path. */
+const PROTEIN_PER_KG_REFERENCE = 2.0;
+
 /**
- * Suggested daily protein (g), rounded to 5 g. Preferred basis is LEAN mass
- * (2.2 g/kg ≈ 1 g/lb lean): per-bodyweight over-prescribes when there's a lot of
- * fat to lose. When body fat isn't known, fall back to bodyweight — easing to
- * ~1.3 g/kg for an obese BMI (≈0.6 g/lb, the simplified high-body-fat rule) and
- * 2.0 g/kg otherwise. Null without a weight.
+ * Suggested daily protein (g), rounded to 5 g.
+ *
+ * Preferred basis is LEAN mass (2.2 g/kg — see proteinForLeanMass): scaling off
+ * total bodyweight over-prescribes when there's a lot of fat to lose. When body
+ * fat isn't known, fall back to a REFERENCE weight — the actual weight, but
+ * capped at the top of the healthy BMI range for their height — so a heavier
+ * person is scaled off a near-lean figure rather than their fat mass (e.g. a
+ * 112 kg / 1.80 m person uses an 81 kg reference). Without a height we can't form
+ * a reference, so use a moderate per-bodyweight figure instead of the higher
+ * near-lean multiplier. Null without a weight.
  */
 export function suggestedProtein(
   currentWeightKg: number | null,
@@ -111,9 +122,9 @@ export function suggestedProtein(
   if (!currentWeightKg || currentWeightKg <= 0) return null;
   const fromLean = proteinForLeanMass(leanBodyMass(currentWeightKg, bodyFatPct));
   if (fromLean != null) return fromLean;
-  const b = bmi(currentWeightKg, heightCm);
-  if (b != null && b >= 30) return round5(currentWeightKg * 1.3); // obese proxy for high body fat
-  return round5(currentWeightKg * 2.0);
+  if (heightCm == null || heightCm <= 0) return round5(currentWeightKg * 1.6);
+  const referenceWeight = Math.min(currentWeightKg, REFERENCE_BMI * (heightCm / 100) ** 2);
+  return round5(referenceWeight * PROTEIN_PER_KG_REFERENCE);
 }
 
 /** Maintenance calories (TDEE) = BMR × the sedentary-to-light activity factor.

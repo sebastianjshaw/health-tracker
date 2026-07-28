@@ -24,12 +24,19 @@ describe("suggestedProtein", () => {
     // 112 kg @ 31% bf → lean 77.3 kg × 2.2 ≈ 170 g (not the ~225 g per-bodyweight gives)
     assert.equal(suggestedProtein(112, 31, 180), 170);
   });
-  it("eases off for an obese BMI when body fat is unknown (~0.6 g/lb)", () => {
-    // no bf, BMI 34.6 → 112 × 1.3 ≈ 145 g
-    assert.equal(suggestedProtein(112, null, 180), 145);
+  it("caps at a reference weight when body fat is unknown (no over-prescribing from fat)", () => {
+    // no bf → reference = min(112, BMI-25 weight 81 kg) = 81 × 2.0 = 162 → 160 g
+    assert.equal(suggestedProtein(112, null, 180), 160);
+    // a much heavier person is capped at the same 81 kg reference, not scaled up
+    assert.equal(suggestedProtein(150, null, 180), 160);
   });
-  it("uses 2.0 g/kg bodyweight for a normal BMI without body fat", () => {
-    assert.equal(suggestedProtein(80, null, 180), 160); // BMI ~24.7
+  it("uses actual weight when already within the healthy BMI range", () => {
+    // 80 kg @ 1.80 m is under the 81 kg BMI-25 cap → 80 × 2.0 = 160 g
+    assert.equal(suggestedProtein(80, null, 180), 160);
+  });
+  it("falls back to a moderate per-bodyweight figure without a height", () => {
+    // can't form a reference → 112 × 1.6 = 179.2 → 180 g
+    assert.equal(suggestedProtein(112, null, null), 180);
   });
   it("is null without a weight", () => {
     assert.equal(suggestedProtein(null), null);
