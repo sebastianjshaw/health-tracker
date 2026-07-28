@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui";
-import { MED_DRUG_LABELS, type MedDrug } from "@/lib/constants";
+import { injectionSiteLabel, MED_DRUG_LABELS, type MedDrug } from "@/lib/constants";
 import type { NextDoseInfo } from "@/lib/medication-data";
 
 /** Compact "next dose due" reminder for the Today page; links to /medication. */
@@ -15,6 +15,7 @@ export function MedicationCard({ next }: { next: NextDoseInfo }) {
   const tone =
     status === "overdue" ? "text-danger" : status === "due-today" ? "text-accent" : "text-foreground";
   const drug = last ? (MED_DRUG_LABELS[last.drug as MedDrug] ?? last.drug) : null;
+  const site = last ? injectionSiteLabel(last.site) : null;
 
   return (
     <Link href="/medication" className="block">
@@ -25,6 +26,7 @@ export function MedicationCard({ next }: { next: NextDoseInfo }) {
             <p className="truncate text-xs text-muted-foreground">
               Last: {drug}
               {last.doseMg != null ? ` ${last.doseMg} mg` : ""} · {last.date}
+              {site ? ` · ${site}` : ""}
             </p>
           )}
         </div>

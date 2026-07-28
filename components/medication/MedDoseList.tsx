@@ -5,17 +5,13 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, EmptyState } from "@/components/ui";
 import { TrashIcon } from "@/components/icons";
-import { INJECTION_SITE_LABELS, MED_DRUG_LABELS, type InjectionSite, type MedDrug } from "@/lib/constants";
+import { injectionSiteLabel as siteLabel, MED_DRUG_LABELS, type MedDrug } from "@/lib/constants";
 import { prettyDate, relativeLabel } from "@/lib/date";
 import { deleteDose } from "@/lib/medication-actions";
 import type { MedicationDose } from "@/db/schema";
 
 function drugLabel(drug: string): string {
   return MED_DRUG_LABELS[drug as MedDrug] ?? drug;
-}
-function siteLabel(site: string | null): string | null {
-  if (!site) return null;
-  return INJECTION_SITE_LABELS[site as InjectionSite] ?? site;
 }
 
 export function MedDoseList({ doses }: { doses: MedicationDose[] }) {

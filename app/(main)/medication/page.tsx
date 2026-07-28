@@ -4,6 +4,7 @@ import { WeightChart } from "@/components/stats/Charts";
 import { MedDoseForm } from "@/components/medication/MedDoseForm";
 import { MedCheckin } from "@/components/medication/MedCheckin";
 import { MedDoseList } from "@/components/medication/MedDoseList";
+import { injectionSiteLabel } from "@/lib/constants";
 import { todayISO } from "@/lib/date";
 import { getGoalWeight } from "@/lib/settings";
 import { getWeightSeries } from "@/lib/stats-data";
@@ -58,6 +59,7 @@ export default async function MedicationPage() {
           <p className="mt-1 text-xs text-muted-foreground">
             Last: {next.last.drug}
             {next.last.doseMg != null ? ` ${next.last.doseMg} mg` : ""} on {next.last.date}
+            {injectionSiteLabel(next.last.site) ? ` · ${injectionSiteLabel(next.last.site)}` : ""}
           </p>
         )}
       </Card>

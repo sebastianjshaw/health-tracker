@@ -135,6 +135,12 @@ export const INJECTION_SITE_LABELS: Record<InjectionSite, string> = {
   upper_arm: "Upper arm",
 };
 
+/** Display label for a stored injection site (falls back to raw free text). */
+export function injectionSiteLabel(site: string | null | undefined): string | null {
+  if (!site) return null;
+  return INJECTION_SITE_LABELS[site as InjectionSite] ?? site;
+}
+
 export const SIDE_EFFECTS = [
   "nausea",
   "reflux",
