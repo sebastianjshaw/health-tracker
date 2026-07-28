@@ -76,11 +76,16 @@ export function suggestedCalorieTarget(opts: {
 }
 
 /**
- * Suggested daily protein (g) from bodyweight. ~1.6–2.2 g/kg preserves lean
- * mass in a deficit (the classic "1 g per lb" ≈ 2.2 g/kg); we use 2.0 g/kg as a
- * sensible middle, rounded to the nearest 5 g. Null without a weight.
+ * Protein target scales by LEAN (fat-free) mass, not total bodyweight, so a
+ * higher-body-fat person isn't over-prescribed from their fat mass. 2.2 g/kg FFM
+ * sits just UNDER the evidence-based range for preserving muscle in a calorie
+ * deficit — 2.3–3.1 g/kg FFM for resistance-trained dieters (Helms 2014), ~2.5
+ * g/kg FFM for minimal fat-free-mass loss (recent meta-analysis) — i.e. a
+ * deliberately conservative choice that lands around 1.5 g/kg of bodyweight.
+ * Muscle preservation matters doubly on a GLP-1, where much of the weight lost
+ * can otherwise be lean mass. Rounded to the nearest 5 g.
  */
-const PROTEIN_PER_KG_LEAN = 2.2; // ≈1 g/lb of lean mass — the standard "general rule"
+const PROTEIN_PER_KG_LEAN = 2.2;
 const round5 = (g: number) => Math.round(g / 5) * 5;
 
 /** Protein (g, rounded to 5) for a known lean mass (kg) at 2.2 g/kg. The single
