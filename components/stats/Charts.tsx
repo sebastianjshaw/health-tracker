@@ -101,6 +101,10 @@ type NutRow = {
   key: string;
   loggedDays: number;
   kcal: number;
+  /** Calorie target for the bucket: the per-day target (day view), or the sum of
+   * each logged day's target (week/month). Uses the target in effect *that* day,
+   * so it steps as the goal changed and never retroactively re-judges past days. */
+  targetKcal: number;
   protein: number;
   /** Protein target for the bucket: the per-day target (day view), or the sum of
    * each logged day's target (week/month), so it scales to the total-protein bar
@@ -125,6 +129,9 @@ function nutritionRows(
       key: d.date,
       loggedDays: d.kcal > 0 ? 1 : 0,
       kcal: d.kcal,
+      // Day view: the day's own goal (drives the stepped goal line), shown even on
+      // unlogged days so the line stays continuous.
+      targetKcal: d.targetKcal,
       protein: d.protein,
       // Day view: always show the day's own target (the moving dotted line), even
       // on unlogged days, so the goal-over-time line stays continuous.
@@ -142,7 +149,7 @@ function nutritionRows(
   const acc = new Map(
     keys.map((k) => [
       k,
-      { kcal: 0, protein: 0, proteinTarget: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
+      { kcal: 0, targetKcal: 0, protein: 0, proteinTarget: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
     ]),
   );
   for (const d of data) {
@@ -161,6 +168,7 @@ function nutritionRows(
     // against a full week's worth of protein goal (mirrors the calorie logic).
     if (d.kcal > 0) {
       a.loggedDays += 1;
+      a.targetKcal += d.targetKcal;
       a.proteinTarget += d.targetProtein;
     }
   }
@@ -583,30 +591,30 @@ export function CalorieChart({
   );
   const hasData = rows.some((r) => r.kcal > 0);
 
-  // Day view judges each day against the target in effect that day, counting only
-  // the meals actually logged (so a half-logged day isn't unfairly "over").
+  // Judge each bar against the goal that was in effect *then*, never the current
+  // one: the day's own target (day view, scaled to the meals actually logged so a
+  // half-logged day isn't unfairly "over"), or the sum of each logged day's goal
+  // (week/month). Past days keep their old goal when the goal later changes.
   const dayByKey = new Map(data.map((d) => [d.date, d]));
   const fraction = (meals: Meal[]) => meals.reduce((s, m) => s + (mealSplit[m] ?? 0), 0) / 100;
+  const effTarget = (r: NutRow) =>
+    isDay ? r.targetKcal * fraction(dayByKey.get(r.key)?.meals ?? []) : r.targetKcal;
   const colorFor = (r: NutRow) => {
-    if (isDay) {
-      const d = dayByKey.get(r.key)!;
-      const eff = (d.targetKcal ?? target) * fraction(d.meals);
-      if (eff <= 0) return CAL_COLORS.none;
-      return d.kcal > eff * 1.1 ? CAL_COLORS.over : d.kcal > eff ? CAL_COLORS.near : CAL_COLORS.under;
-    }
-    // Week/month: total vs the daily target scaled to days actually logged.
-    const eff = target * r.loggedDays;
+    const eff = effTarget(r);
     if (eff <= 0) return CAL_COLORS.none;
     return r.kcal > eff * 1.1 ? CAL_COLORS.over : r.kcal > eff ? CAL_COLORS.near : CAL_COLORS.under;
   };
-  const chart = rows.map((r) => ({ ...r, color: colorFor(r) }));
+  // `goal` drives the stepped dotted line: the day's goal (day view) or the
+  // bucket's summed goal (week/month). Null on empty buckets so the line breaks
+  // rather than dropping to zero.
+  const chart = rows.map((r) => ({ ...r, color: colorFor(r), goal: r.targetKcal > 0 ? r.targetKcal : null }));
 
-  const dataMax = Math.max(0, ...chart.map((r) => r.kcal));
-  const yMax = Math.ceil(Math.max(dataMax, isDay ? target : 0) / 100) * 100 || 100;
+  const dataMax = Math.max(0, ...chart.map((r) => Math.max(r.kcal, r.goal ?? 0)));
+  const yMax = Math.ceil(dataMax / 100) * 100 || 100;
   const totalKcal = chart.reduce((s, r) => s + r.kcal, 0);
   const totalDays = chart.reduce((s, r) => s + r.loggedDays, 0);
   const avg = totalDays ? Math.round(totalKcal / totalDays) : 0;
-  const summary = `Calories: averaging ${avg} kcal per logged day versus a ${target} kcal target.`;
+  const summary = `Calories: averaging ${avg} kcal per logged day; each ${groupNoun(granularity)} judged against the goal in effect at the time (currently ${target} kcal).`;
   return (
     <ChartCard title={`Calories${groupSuffix(granularity, "total")}`}>
       {!hasData ? (
@@ -615,7 +623,7 @@ export function CalorieChart({
         <>
           <ChartFigure summary={summary}>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+            <ComposedChart data={chart} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
               <XAxis
                 dataKey="key"
@@ -628,39 +636,42 @@ export function CalorieChart({
               <Tooltip
                 contentStyle={tooltipStyle}
                 itemStyle={{ color: "var(--foreground)" }}
-                labelFormatter={(label) => bucketLabel(granularity, String(label))}
-                formatter={(value) => [`${Math.round(Number(value))} kcal`, "kcal"]}
+                labelFormatter={(label) =>
+                  isDay ? shortDateYear(String(label)) : bucketLabel(granularity, String(label))
+                }
+                formatter={(value, name) => [`${Math.round(Number(value))} kcal`, name === "goal" ? "Goal" : "kcal"]}
                 cursor={{ fill: "var(--muted)" }}
               />
-              {isDay && target > 0 && (
-                <ReferenceLine
-                  y={target}
-                  stroke="var(--muted-foreground)"
-                  strokeDasharray="4 4"
-                  label={{
-                    value: `goal ${target}`,
-                    position: "insideTopRight",
-                    fontSize: 10,
-                    fill: "var(--muted-foreground)",
-                  }}
-                />
-              )}
               <Bar dataKey="kcal" radius={[4, 4, 0, 0]} name="kcal">
                 {chart.map((r) => (
                   <Cell key={r.key} fill={r.color} />
                 ))}
               </Bar>
-            </BarChart>
+              <Line
+                type="stepAfter"
+                dataKey="goal"
+                name="goal"
+                stroke="var(--muted-foreground)"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={false}
+                connectNulls
+              />
+            </ComposedChart>
           </ResponsiveContainer>
           </ChartFigure>
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <Swatch color={CAL_COLORS.under} label="On/under" />
             <Swatch color={CAL_COLORS.near} label="Up to 10% over" />
             <Swatch color={CAL_COLORS.over} label="Over" />
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-0 w-4 border-t-2 border-dashed border-muted-foreground" />
+              {isDay ? "Goal that day" : "Goal (days logged)"}
+            </span>
             <span>
               {isDay
-                ? `· judged vs the day’s logged-meal share of ${target} kcal`
-                : `· each ${groupNoun(granularity)} judged vs ${target} kcal × days logged`}
+                ? "· each day vs its goal, scaled to the meals logged"
+                : `· each ${groupNoun(granularity)} vs its days’ goals`}
             </span>
           </div>
         </>
