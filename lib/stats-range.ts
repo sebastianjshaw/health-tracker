@@ -3,6 +3,14 @@ import { addDays } from "./date";
 /** Shared time-range control for the Stats page. */
 export type Range = "7d" | "30d" | "90d" | "1y" | "all";
 
+/**
+ * Days of history the Stats page loads up front. Covers every range except
+ * "All" (1y = 365d, plus headroom for the 28d ACWR/recovery baselines and the
+ * streak/TDEE insights), so switching between 7d…1y is instant client-side.
+ * Picking "All" navigates to ?range=all, which lifts the bound server-side.
+ */
+export const STATS_WINDOW_DAYS = 400;
+
 export const RANGES: { key: Range; label: string }[] = [
   { key: "7d", label: "7d" },
   { key: "30d", label: "30d" },

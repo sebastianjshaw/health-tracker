@@ -8,8 +8,10 @@ import { monthlyAverages, yearlyAverages } from "@/lib/seasonal";
 import { currentStreak } from "@/lib/streaks";
 import { measuredTdee } from "@/lib/tdee";
 import { getGoalWeight, getMealSplit, getProfile, getTargets } from "@/lib/settings";
+import { STATS_WINDOW_DAYS, type Range } from "@/lib/stats-range";
 import {
   getBodyMetrics,
+  calorieSeriesRange,
   getCalorieSeriesAll,
   getCardioDistances,
   getEnergyBalanceSeries,
@@ -22,24 +24,33 @@ import {
   getWeightSeries,
 } from "@/lib/stats-data";
 
-export default async function StatsPage() {
+export default async function StatsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ range?: string }>;
+}) {
   const today = todayISO();
+  // Load a bounded window by default so /stats doesn't ship years of daily points
+  // (7d…1y all filter within it client-side). "All" lifts the bound via ?range=all.
+  const wantsAll = (await searchParams).range === "all";
+  const from = wantsAll ? null : addDays(today, -(STATS_WINDOW_DAYS - 1));
+
   const [targets, goalWeight, mealSplit, profile, metrics, weight, predictions, calories, distances, sleep, restingHr, recovery, vo2max, loadSessions, health] =
     await Promise.all([
       getTargets(),
       getGoalWeight(),
       getMealSplit(),
       getProfile(),
-      getBodyMetrics(),
-      getWeightSeries(),
-      getWeightPredictions(),
-      getCalorieSeriesAll(), // full logged history; the range control filters client-side
-      getCardioDistances(), // for the at-a-glance Distance tile (charts live on /activity)
-      getSleepSeries(),
-      getRestingHrSeries(),
-      getRecoverySeries(),
-      getRunVo2maxSeries(),
-      getCardioLoadSessions(),
+      getBodyMetrics(), // full: body-composition snapshot
+      getWeightSeries(), // full: multi-year seasonal averages need the whole history
+      getWeightPredictions(from ?? undefined),
+      from ? calorieSeriesRange(from, today) : getCalorieSeriesAll(),
+      getCardioDistances(from ?? undefined), // for the at-a-glance Distance tile (charts live on /activity)
+      getSleepSeries(from ?? undefined),
+      getRestingHrSeries(from ?? undefined),
+      getRecoverySeries(from ?? undefined),
+      getRunVo2maxSeries(from ?? undefined),
+      getCardioLoadSessions(from ?? undefined),
       getHealthSeries(addDays(today, -363), today),
     ]);
 
@@ -87,6 +98,8 @@ export default async function StatsPage() {
       <PageHeader title="Stats" subtitle="Your trends over time" />
       <StatsView
         today={today}
+        initialRange={(wantsAll ? "all" : "30d") as Range}
+        hasFullHistory={wantsAll}
         weight={weight}
         predictions={predictions}
         calories={calories}

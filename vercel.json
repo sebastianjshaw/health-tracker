@@ -1,4 +1,6 @@
 {
+  "//": "Run functions in Dublin (dub1) to co-locate with the Turso DB in aws-eu-west-1 (Ireland). Removes the transatlantic round-trip that dominated per-query latency (~70ms → single-digit ms).",
+  "regions": ["dub1"],
   "crons": [
     {
       "path": "/api/cron/sync",

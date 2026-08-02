@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Card, SegmentedControl, Stat, type StatTone } from "@/components/ui";
 import { round1 } from "@/lib/format";
 import { Meal } from "@/lib/constants";
@@ -77,6 +78,8 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export function StatsView({
   today,
+  initialRange,
+  hasFullHistory,
   weight,
   predictions,
   calories,
@@ -99,6 +102,10 @@ export function StatsView({
   age,
 }: {
   today: string;
+  /** Range the server loaded for (only "all" changes what data is present). */
+  initialRange: Range;
+  /** Whether the server sent full history (came from ?range=all). */
+  hasFullHistory: boolean;
   weight: WeightPoint[];
   predictions: WeightPrediction[];
   calories: CaloriePoint[];
@@ -120,8 +127,20 @@ export function StatsView({
   monthly: MonthlyAverage[];
   age: number | null;
 }) {
-  const [range, setRange] = React.useState<Range>("30d");
+  const router = useRouter();
+  const [range, setRange] = React.useState<Range>(initialRange);
   const [group, setGroup] = React.useState<Granularity>("day");
+
+  // 7d…1y all filter within the pre-loaded window client-side (instant). "All"
+  // needs history the server didn't send, so the first time it's picked we
+  // navigate to ?range=all to fetch it; after that it's a client filter too.
+  const onRangeChange = (next: Range) => {
+    if (next === "all" && !hasFullHistory) {
+      router.push("/stats?range=all");
+      return;
+    }
+    setRange(next);
+  };
   const cutoff = cutoffFor(range, today);
 
   const fWeight = withinRange(weight, cutoff);
@@ -190,7 +209,7 @@ export function StatsView({
     <div className="space-y-6">
       {/* Range + grouping controls — apply to every chart below. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <SegmentedControl options={RANGES} value={range} onChange={setRange} label="Time range" />
+        <SegmentedControl options={RANGES} value={range} onChange={onRangeChange} label="Time range" />
         <SegmentedControl options={GROUPINGS} value={group} onChange={setGroup} label="Group by" />
       </div>
 
