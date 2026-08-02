@@ -1,4 +1,5 @@
 import "server-only";
+import { unstable_cache } from "next/cache";
 import { and, asc, desc, eq, gte, inArray, isNotNull, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
@@ -305,8 +306,7 @@ export async function getCalorieSeriesAll(): Promise<CaloriePoint[]> {
   return calorieSeriesRange(earliest && earliest < today ? earliest : addDays(today, -13), today);
 }
 
-/** Daily consumed totals merged for an inclusive [start, end] date range. */
-export async function calorieSeriesRange(
+async function calorieSeriesRangeUncached(
   start: string,
   end: string,
 ): Promise<CaloriePoint[]> {
@@ -415,6 +415,24 @@ export async function calorieSeriesRange(
     };
   });
 }
+
+/**
+ * Daily consumed totals for an inclusive [start, end] range (the expensive
+ * primitive behind /stats, /report and /character — it materialises recurring
+ * foods and joins the whole window).
+ *
+ * Cached in the Next data cache for a short window so repeat views (and the
+ * three pages that share it) don't re-run it each time. Time-based, NOT tag-based
+ * on purpose: the food log is also written by the sync cron and the MCP server,
+ * which run outside Next's request lifecycle and can't call revalidateTag — a
+ * short TTL picks up every writer, where tags would miss them and show stale
+ * trends. The daily start/end key also rotates the cache each day.
+ */
+export const calorieSeriesRange = unstable_cache(
+  calorieSeriesRangeUncached,
+  ["calorie-series"],
+  { revalidate: 60 },
+);
 
 export type DistancePoint = { date: string; km: number };
 
