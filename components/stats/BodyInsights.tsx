@@ -69,6 +69,13 @@ export function BodyInsights({
           {bodyComp.fatMassKg != null && (
             <Stat label="Fat mass" value={`${trimNum(bodyComp.fatMassKg)} kg`} />
           )}
+          {bodyComp.bodyFatPct != null && (
+            <Stat
+              label="Body fat"
+              value={`${trimNum(bodyComp.bodyFatPct)}%`}
+              sub={bodyComp.measured ? "scale-measured" : "estimated"}
+            />
+          )}
           {bodyComp.muscleMassKg != null && (
             <Stat label="Muscle mass" value={`${trimNum(bodyComp.muscleMassKg)} kg`} />
           )}

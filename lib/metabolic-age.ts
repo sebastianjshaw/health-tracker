@@ -150,6 +150,8 @@ export type BodyComposition = {
   weightKg: number;
   leanMassKg: number;
   fatMassKg: number | null;
+  /** Body-fat %, preferring the Withings-measured value; else derived from fat mass. */
+  bodyFatPct: number | null;
   ffmi: number | null;
   metabolicAge: number | null;
   /** Scale-measured extras (Withings), null when not provided by the reading. */
@@ -196,6 +198,13 @@ export function latestBodyComposition(
       fatMassKg: measuredLean != null
         ? Math.round((r.weightKg - measuredLean) * 10) / 10
         : fatMass(r.weightKg, r.bodyFatPct),
+      // Prefer the Withings-measured %; else derive from the fat-mass split.
+      bodyFatPct:
+        r.bodyFatPct != null
+          ? Math.round(r.bodyFatPct * 10) / 10
+          : measuredLean != null && r.weightKg > 0
+            ? Math.round(((r.weightKg - measuredLean) / r.weightKg) * 1000) / 10
+            : null,
       ffmi: h && h > 0 ? Math.round((lean / ((h / 100) * (h / 100))) * 10) / 10 : null,
       metabolicAge: metabolicAge({
         weightKg: r.weightKg,
