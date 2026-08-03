@@ -18,6 +18,7 @@ import {
   bodyMetrics,
   cardioSessions,
   dailyActivity,
+  dailyHealthMetrics,
   dayHealth,
   foodLog,
   foods,
@@ -53,7 +54,7 @@ import { addDays, todayISO } from "../lib/date";
 import { inferCategory } from "../lib/food-category";
 import { isReusableFoodMatch, normalizeFoodName } from "../lib/food-match";
 import { foodLogSnapshot, portionAsSingleServing } from "../lib/food-snapshot";
-import { ageFrom } from "../lib/health";
+import { ageFrom, bmi, bmiClass, waistToHeight } from "../lib/health";
 import { estimateCardioKcal } from "../lib/cardio-calories";
 import { parseSplits } from "../lib/splits";
 import { estimateWaterMl, waterSourceOf } from "../lib/hydration";
@@ -604,6 +605,7 @@ server.tool(
     const rows = await (from ? base : base.limit(limit ?? 30)).all();
 
     const goalWeight = await getSetting<number | null>("goalWeight", null);
+    const heightCm = (await getSetting<{ heightCm: number | null }>("profile", { heightCm: null })).heightCm;
     const latest = rows[0]?.weightKg ?? null;
 
     // Predict over the span of the returned weigh-ins (oldest → newest).
@@ -660,9 +662,13 @@ server.tool(
               ? Math.round((latest - goalWeight) * 10) / 10
               : null,
           weights: rows.map((r) => ({
+            id: r.id,
             date: r.date,
             weightKg: r.weightKg,
             bodyFatPct: r.bodyFatPct,
+            // Derived: BMI (weight+height) and waist-to-height ratio (healthy < 0.5).
+            bmi: r.weightKg != null ? bmi(r.weightKg, heightCm) : null,
+            waistToHeight: waistToHeight(r.waistCm ?? null, heightCm) ?? undefined,
             // Tape measurements (cm); omitted when not recorded that day.
             waistCm: r.waistCm ?? undefined,
             chestCm: r.chestCm ?? undefined,
@@ -881,6 +887,7 @@ server.tool(
           coverage,
           returned: rows.length,
           sessions: rows.map((r) => ({
+            id: r.id,
             date: r.date,
             startedAt: r.startedAt ?? undefined,
             type: r.type,
@@ -1104,7 +1111,7 @@ server.tool(
           // Titration history (oldest → newest) so dose escalation can be tracked against response.
           doseHistory: [...doses]
             .reverse()
-            .map((d) => ({ date: d.date, drug: drugLabel(d.drug), doseMg: d.doseMg, site: injectionSiteLabel(d.site) })),
+            .map((d) => ({ id: d.id, date: d.date, drug: drugLabel(d.drug), doseMg: d.doseMg, site: injectionSiteLabel(d.site) })),
           recentCheckins: checkinRows.map((c) => ({
             date: c.date,
             appetite: c.appetite != null ? `${APPETITE_LABELS[c.appetite] ?? c.appetite} (${c.appetite}/5)` : null,
@@ -1236,6 +1243,337 @@ server.tool(
     );
 
     return text(JSON.stringify({ today, staleAfterDays: threshold, feeds: out }, null, 2));
+  },
+);
+
+// ---- Medication logging ----
+
+server.tool(
+  "log_medication_dose",
+  "Record a GLP-1 injection (Mounjaro/tirzepatide, Ozempic/semaglutide). Defaults to today; drug defaults to tirzepatide. site: abdomen | left_thigh | right_thigh | upper_arm.",
+  {
+    date: ISO.optional(),
+    time: z.string().optional(),
+    drug: z.string().optional(),
+    doseMg: z.number().optional(),
+    site: z.string().optional(),
+    notes: z.string().optional(),
+  },
+  async ({ date, time, drug, doseMg, site, notes }) => {
+    const d = date ?? todayISO();
+    const drg = drug ?? "tirzepatide";
+    await db.insert(medicationDoses).values({
+      date: d,
+      time: time ?? null,
+      drug: drg,
+      doseMg: doseMg ?? null,
+      site: site ?? null,
+      notes: notes ?? null,
+    });
+    const label = MED_DRUG_LABELS[drg as MedDrug] ?? drg;
+    return text(
+      `Logged ${label}${doseMg != null ? ` ${doseMg} mg` : ""} on ${d}${site ? ` (${injectionSiteLabel(site)})` : ""}.`,
+    );
+  },
+);
+
+server.tool(
+  "log_medication_checkin",
+  "Record the daily GLP-1 check-in — appetite (1 none … 5 ravenous) and/or side effects. Upserts one row per date, keeping fields you don't pass. sideEffects is an array of { type, severity 1-3 }, type ∈ nausea|reflux|constipation|diarrhea|fatigue|headache|injection_site.",
+  {
+    date: ISO.optional(),
+    appetite: z.number().min(1).max(5).optional(),
+    sideEffects: z.array(z.object({ type: z.string(), severity: z.number().min(1).max(3) })).optional(),
+    notes: z.string().optional(),
+  },
+  async ({ date, appetite, sideEffects, notes }) => {
+    const d = date ?? todayISO();
+    const existing = await db.select().from(medicationCheckins).where(eq(medicationCheckins.date, d)).get();
+    const set = {
+      appetite: appetite ?? existing?.appetite ?? null,
+      sideEffects: sideEffects != null ? JSON.stringify(sideEffects) : existing?.sideEffects ?? null,
+      notes: notes ?? existing?.notes ?? null,
+    };
+    await db
+      .insert(medicationCheckins)
+      .values({ date: d, ...set })
+      .onConflictDoUpdate({ target: medicationCheckins.date, set });
+    return text(`Saved medication check-in for ${d}.`);
+  },
+);
+
+// ---- Profile / derived body ratios ----
+
+server.tool(
+  "get_profile",
+  "Physical profile + goals: height, age (from DOB), sex, medications/conditions, goal weight, plus the current BMI and waist-to-height ratio (central-adiposity signal — healthy < 0.5, 0.5–0.6 increased risk, > 0.6 high risk). Height is what unlocks BMI/FFMI/waist-ratio, so pull this for any body-composition assessment.",
+  {},
+  async () => {
+    const profile = await getSetting<{
+      name?: string;
+      dob?: string;
+      sex?: string;
+      heightCm?: number | null;
+      medications?: string;
+      conditions?: string;
+    }>("profile", {});
+    const goalWeight = await getSetting<number | null>("goalWeight", null);
+    const latest = await db
+      .select()
+      .from(bodyMetrics)
+      .where(isNotNull(bodyMetrics.weightKg))
+      .orderBy(desc(bodyMetrics.date), desc(bodyMetrics.id))
+      .get();
+    const waistRow = await db
+      .select({ waistCm: bodyMetrics.waistCm })
+      .from(bodyMetrics)
+      .where(isNotNull(bodyMetrics.waistCm))
+      .orderBy(desc(bodyMetrics.date))
+      .get();
+    const h = profile.heightCm ?? null;
+    const w = latest?.weightKg ?? null;
+    const bmiVal = w != null ? bmi(w, h) : null;
+    return text(
+      JSON.stringify(
+        {
+          name: profile.name || undefined,
+          heightCm: h,
+          age: profile.dob ? ageFrom(profile.dob) : null,
+          sex: profile.sex || undefined,
+          medications: profile.medications || undefined,
+          conditions: profile.conditions || undefined,
+          goalWeightKg: goalWeight,
+          currentWeightKg: w,
+          bmi: bmiVal,
+          bmiClass: bmiClass(bmiVal),
+          waistCm: waistRow?.waistCm ?? undefined,
+          waistToHeight: waistToHeight(waistRow?.waistCm ?? null, h),
+        },
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+// ---- Recovery (HRV / SpO2) ----
+
+server.tool(
+  "get_recovery",
+  "Daily recovery signals from the wearable, newest first (default last 30 days): HRV (RMSSD, ms — higher is better), blood-oxygen SpO2 (% mean + min), and resting HR. A sustained drop in HRV or SpO2 vs baseline can flag illness, poor sleep or overtraining — useful context for dips in training or appetite.",
+  { days: z.number().optional() },
+  async ({ days }) => {
+    const n = Math.max(1, Math.min(days ?? 30, 365));
+    const today = todayISO();
+    const start = addDays(today, -(n - 1));
+    const [metrics, hr] = await Promise.all([
+      db
+        .select()
+        .from(dailyHealthMetrics)
+        .where(and(gte(dailyHealthMetrics.date, start), lte(dailyHealthMetrics.date, today)))
+        .orderBy(desc(dailyHealthMetrics.date))
+        .all(),
+      db
+        .select({ date: heartRateDaily.date, bpm: heartRateDaily.restingBpm })
+        .from(heartRateDaily)
+        .where(and(gte(heartRateDaily.date, start), lte(heartRateDaily.date, today), isNotNull(heartRateDaily.restingBpm)))
+        .all(),
+    ]);
+    const hrByDate = new Map(hr.map((r) => [r.date, r.bpm]));
+    return text(
+      JSON.stringify(
+        {
+          rangeDays: n,
+          days: metrics.map((m) => ({
+            date: m.date,
+            hrvMs: m.hrvMs,
+            spo2: m.spo2,
+            spo2Min: m.spo2Min,
+            restingBpm: hrByDate.get(m.date) ?? null,
+          })),
+        },
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+// ---- Corrections: delete a mis-logged row ----
+
+server.tool(
+  "delete_measurement",
+  "Delete a body-measurement / weigh-in row by its id (from get_weight_trend or get_profile).",
+  { id: z.number() },
+  async ({ id }) => {
+    const row = await db.select().from(bodyMetrics).where(eq(bodyMetrics.id, id)).get();
+    if (!row) return text(`No measurement with id ${id}.`);
+    await db.delete(bodyMetrics).where(eq(bodyMetrics.id, id));
+    return text(`Deleted measurement #${id} (${row.date}).`);
+  },
+);
+
+server.tool(
+  "delete_cardio",
+  "Delete a cardio session by its id (from get_cardio).",
+  { id: z.number() },
+  async ({ id }) => {
+    const row = await db.select().from(cardioSessions).where(eq(cardioSessions.id, id)).get();
+    if (!row) return text(`No cardio session with id ${id}.`);
+    await db.delete(cardioSessions).where(eq(cardioSessions.id, id));
+    return text(`Deleted ${row.type} on ${row.date} (#${id}).`);
+  },
+);
+
+server.tool(
+  "delete_medication_dose",
+  "Delete a logged injection by its id (from get_medication).",
+  { id: z.number() },
+  async ({ id }) => {
+    const row = await db.select().from(medicationDoses).where(eq(medicationDoses.id, id)).get();
+    if (!row) return text(`No medication dose with id ${id}.`);
+    await db.delete(medicationDoses).where(eq(medicationDoses.id, id));
+    return text(`Deleted dose #${id} (${row.date}).`);
+  },
+);
+
+// ---- Hydration logging ----
+
+server.tool(
+  "log_water",
+  "Log plain water intake in millilitres for a day — counts toward the daily hydration estimate. Defaults to today.",
+  { date: ISO.optional(), ml: z.number(), meal: MEAL.optional() },
+  async ({ date, ml, meal }) => {
+    const d = date ?? todayISO();
+    // Reuse a canonical zero-calorie "Water" drink food so the entry buckets as
+    // plain water (category=drink + name matches). serving 1 ml → quantity = ml.
+    let water = await db
+      .select()
+      .from(foods)
+      .where(and(sql`lower(${foods.name}) = 'water'`, eq(foods.category, "drink"), eq(foods.servingUnit, "ml")))
+      .get();
+    if (!water) {
+      const [row] = await db
+        .insert(foods)
+        .values({
+          name: "Water",
+          category: "drink",
+          servingSize: 1,
+          servingUnit: "ml",
+          kcal: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0,
+          source: "manual",
+          evolution: evolutionForSource("manual"),
+        })
+        .returning();
+      water = row;
+    }
+    await db.insert(foodLog).values(foodLogSnapshot(water, { date: d, meal: meal ?? "snacks", quantity: ml }));
+    return text(`Logged ${ml} ml of water on ${d}.`);
+  },
+);
+
+// ---- One-call health snapshot ----
+
+server.tool(
+  "get_health_summary",
+  "One-call snapshot for a holistic assessment: latest weight + BMI + body-fat % + waist-to-height + distance to goal, current calorie/protein targets, logging streak, GLP-1 medication status (drug/dose/next injection/latest appetite), and the most recent bloodwork panel's out-of-range markers. Use as a starting point, then drill in with the specific tools.",
+  {},
+  async () => {
+    const today = todayISO();
+    const profile = await getSetting<{ heightCm: number | null; dob: string; sex: string }>("profile", {
+      heightCm: null,
+      dob: "",
+      sex: "",
+    });
+    const goalWeight = await getSetting<number | null>("goalWeight", null);
+    const targets = await getSetting("targets", DEFAULT_TARGETS);
+
+    const latest = await db
+      .select()
+      .from(bodyMetrics)
+      .where(isNotNull(bodyMetrics.weightKg))
+      .orderBy(desc(bodyMetrics.date), desc(bodyMetrics.id))
+      .get();
+    const waistRow = await db
+      .select({ waistCm: bodyMetrics.waistCm })
+      .from(bodyMetrics)
+      .where(isNotNull(bodyMetrics.waistCm))
+      .orderBy(desc(bodyMetrics.date))
+      .get();
+    const w = latest?.weightKg ?? null;
+    const bmiVal = w != null ? bmi(w, profile.heightCm) : null;
+
+    const latestDose = await db.select().from(medicationDoses).orderBy(desc(medicationDoses.date), desc(medicationDoses.id)).get();
+    const latestCheckin = await db.select().from(medicationCheckins).orderBy(desc(medicationCheckins.date)).get();
+    let medication: Record<string, unknown> = { onTherapy: false };
+    if (latestDose) {
+      const due = addDays(latestDose.date, MED_CADENCE_DAYS);
+      const until = Math.round((Date.parse(due) - Date.parse(today)) / 86_400_000);
+      medication = {
+        onTherapy: true,
+        drug: MED_DRUG_LABELS[latestDose.drug as MedDrug] ?? latestDose.drug,
+        doseMg: latestDose.doseMg,
+        lastDose: latestDose.date,
+        nextDoseDue: due,
+        nextDoseStatus: until === 0 ? "due today" : until > 0 ? `due in ${until} day(s)` : `overdue by ${-until} day(s)`,
+        latestAppetite:
+          latestCheckin?.appetite != null ? `${APPETITE_LABELS[latestCheckin.appetite] ?? latestCheckin.appetite} (${latestCheckin.appetite}/5)` : undefined,
+      };
+    }
+
+    const lastPanel = await db.select({ date: bloodMarkers.date }).from(bloodMarkers).orderBy(desc(bloodMarkers.date)).get();
+    let bloodwork: Record<string, unknown> | null = null;
+    if (lastPanel) {
+      const markers = await db.select().from(bloodMarkers).where(eq(bloodMarkers.date, lastPanel.date)).all();
+      bloodwork = {
+        date: lastPanel.date,
+        outOfRange: markers
+          .filter((m) => (m.refLow != null && m.value < m.refLow) || (m.refHigh != null && m.value > m.refHigh))
+          .map((m) => ({
+            marker: m.marker,
+            value: m.value,
+            unit: m.unit,
+            flag: m.refLow != null && m.value < m.refLow ? "low" : "high",
+          })),
+      };
+    }
+
+    // Logging streak: consecutive days back from today that have any food logged.
+    const loggedDates = new Set(
+      (await db.select({ date: foodLog.date }).from(foodLog).where(gte(foodLog.date, addDays(today, -90))).groupBy(foodLog.date).all()).map(
+        (r) => r.date,
+      ),
+    );
+    let streak = 0;
+    for (let d = today; loggedDates.has(d); d = addDays(d, -1)) streak++;
+
+    return text(
+      JSON.stringify(
+        {
+          date: today,
+          weight: latest
+            ? {
+                kg: w,
+                asOf: latest.date,
+                bmi: bmiVal,
+                bmiClass: bmiClass(bmiVal),
+                bodyFatPct: latest.bodyFatPct ?? undefined,
+                waistToHeight: waistToHeight(waistRow?.waistCm ?? null, profile.heightCm) ?? undefined,
+                toGoalKg: w != null && goalWeight != null ? Math.round((w - goalWeight) * 10) / 10 : undefined,
+              }
+            : null,
+          targets: { kcal: targets.kcal, protein: targets.protein },
+          loggingStreakDays: streak,
+          medication,
+          bloodwork,
+        },
+        null,
+        2,
+      ),
+    );
   },
 );
 
