@@ -24,20 +24,30 @@ import {
   heartRateDaily,
   liftSessions,
   liftSets,
+  medicationCheckins,
+  medicationDoses,
   recurringFoods,
   settings,
   sleepSessions,
 } from "../db/schema";
 import {
+  APPETITE_LABELS,
   DEFAULT_CONTINGENCY,
   DEFAULT_LIFT_WEIGHTS,
   DEFAULT_TARGETS,
   EXERCISE_LABELS,
   Exercise,
   HEALTH_STATUSES,
+  MED_CADENCE_DAYS,
+  MED_DRUG_LABELS,
+  SEVERITY_LABELS,
+  SIDE_EFFECT_LABELS,
   contingencyMultiplier,
   evolutionForSource,
+  injectionSiteLabel,
   type Contingency,
+  type MedDrug,
+  type SideEffect,
 } from "../lib/constants";
 import { addDays, todayISO } from "../lib/date";
 import { inferCategory } from "../lib/food-category";
@@ -971,6 +981,76 @@ server.tool(
           injuredDays: flagged.filter((r) => r.status === "injured").length,
           vacationDays: flagged.filter((r) => r.status === "vacation").length,
           days: flagged.map((r) => ({ date: r.date, status: r.status })),
+        },
+        null,
+        2,
+      ),
+    );
+  },
+);
+
+server.tool(
+  "get_medication",
+  "GLP-1 medication (Mounjaro/tirzepatide, Ozempic/semaglutide) history — essential context for assessing weight, appetite, calorie intake and side effects, since the drug is a major driver of all of them. Returns: current drug + dose, weeks on therapy, the full dose-escalation (titration) schedule, when the next weekly injection is due, and recent daily check-ins (appetite 1–5 and side-effect severities). `checkinDays` bounds the check-in window (default 90).",
+  { checkinDays: z.number().optional() },
+  async ({ checkinDays }) => {
+    const today = todayISO();
+    const doses = await db.select().from(medicationDoses).orderBy(desc(medicationDoses.date), desc(medicationDoses.id)).all();
+    const drugLabel = (d: string) => MED_DRUG_LABELS[d as MedDrug] ?? d;
+
+    if (doses.length === 0) {
+      return text(JSON.stringify({ onTherapy: false, note: "No GLP-1 injections logged." }, null, 2));
+    }
+
+    const latest = doses[0];
+    const first = doses[doses.length - 1];
+    const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+    const dueDate = addDays(latest.date, MED_CADENCE_DAYS);
+    const until = dayDiff(today, dueDate);
+    const nextDoseStatus = until === 0 ? "due today" : until > 0 ? `due in ${until} day(s)` : `overdue by ${-until} day(s)`;
+
+    const n = Math.max(1, Math.min(checkinDays ?? 90, 365));
+    const checkinRows = await db
+      .select()
+      .from(medicationCheckins)
+      .where(and(gte(medicationCheckins.date, addDays(today, -(n - 1))), lte(medicationCheckins.date, today)))
+      .orderBy(desc(medicationCheckins.date))
+      .all();
+    const parseSideEffects = (json: string | null) => {
+      if (!json) return [] as { effect: string; severity: string }[];
+      try {
+        const arr = JSON.parse(json) as { type: string; severity: number }[];
+        return (Array.isArray(arr) ? arr : []).map((s) => ({
+          effect: SIDE_EFFECT_LABELS[s.type as SideEffect] ?? s.type,
+          severity: SEVERITY_LABELS[s.severity] ?? String(s.severity),
+        }));
+      } catch {
+        return [];
+      }
+    };
+
+    return text(
+      JSON.stringify(
+        {
+          onTherapy: true,
+          currentDrug: drugLabel(latest.drug),
+          currentDoseMg: latest.doseMg,
+          firstDose: first.date,
+          weeksOnTherapy: Math.max(1, Math.round(dayDiff(first.date, today) / 7)),
+          totalDoses: doses.length,
+          lastDose: { date: latest.date, doseMg: latest.doseMg, site: injectionSiteLabel(latest.site) },
+          nextDoseDue: dueDate,
+          nextDoseStatus,
+          // Titration history (oldest → newest) so dose escalation can be tracked against response.
+          doseHistory: [...doses]
+            .reverse()
+            .map((d) => ({ date: d.date, drug: drugLabel(d.drug), doseMg: d.doseMg, site: injectionSiteLabel(d.site) })),
+          recentCheckins: checkinRows.map((c) => ({
+            date: c.date,
+            appetite: c.appetite != null ? `${APPETITE_LABELS[c.appetite] ?? c.appetite} (${c.appetite}/5)` : null,
+            sideEffects: parseSideEffects(c.sideEffects),
+            notes: c.notes || undefined,
+          })),
         },
         null,
         2,
