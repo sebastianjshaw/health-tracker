@@ -296,7 +296,7 @@ const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, and the logged health status (healthy/unwell/injured/vacation).",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR).",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
@@ -307,6 +307,12 @@ server.tool(
       .select()
       .from(dailyActivity)
       .where(eq(dailyActivity.date, d))
+      .get();
+    const bodyRow = await db
+      .select()
+      .from(bodyMetrics)
+      .where(eq(bodyMetrics.date, d))
+      .orderBy(desc(bodyMetrics.id))
       .get();
 
     const entries = logged.map((r) => ({
@@ -349,6 +355,18 @@ server.tool(
           activity: activityRow
             ? { steps: activityRow.steps ?? 0, distanceKm: activityRow.distanceKm ?? 0 }
             : null, // passive steps/distance (background-counted); null = none synced
+          // Body weight / composition / tape measurements logged that day; null = none.
+          measurements: bodyRow
+            ? {
+                weightKg: bodyRow.weightKg ?? undefined,
+                bodyFatPct: bodyRow.bodyFatPct ?? undefined,
+                waistCm: bodyRow.waistCm ?? undefined,
+                chestCm: bodyRow.chestCm ?? undefined,
+                hipsCm: bodyRow.hipsCm ?? undefined,
+                neckCm: bodyRow.neckCm ?? undefined,
+                restingHr: bodyRow.restingHr ?? undefined,
+              }
+            : null,
           entries,
         },
         null,
@@ -501,32 +519,69 @@ server.tool(
 
 server.tool(
   "log_weight",
-  "Record a body weight / vitals measurement. Defaults to today.",
+  "Record a body weight / vitals / tape measurement (weight, body-fat %, resting HR, and waist/chest/hips/neck circumference in cm). Merges into the day's existing row — one row per date — so weight and circumferences can be logged in separate calls without creating duplicates; only the fields you pass change. Defaults to today.",
   {
     date: ISO.optional(),
     weightKg: z.number().optional(),
     bodyFatPct: z.number().optional(),
     waistCm: z.number().optional(),
+    chestCm: z.number().optional(),
+    hipsCm: z.number().optional(),
+    neckCm: z.number().optional(),
     restingHr: z.number().optional(),
     notes: z.string().optional(),
   },
-  async ({ date, weightKg, bodyFatPct, waistCm, restingHr, notes }) => {
+  async ({ date, weightKg, bodyFatPct, waistCm, chestCm, hipsCm, neckCm, restingHr, notes }) => {
     const d = date ?? todayISO();
-    await db.insert(bodyMetrics).values({
-      date: d,
-      weightKg: weightKg ?? null,
-      bodyFatPct: bodyFatPct ?? null,
-      waistCm: waistCm ?? null,
-      restingHr: restingHr ?? null,
-      notes: notes ?? null,
-    });
-    return text(`Logged measurement on ${d}${weightKg != null ? ` (${weightKg} kg)` : ""}.`);
+    const existing = await db
+      .select()
+      .from(bodyMetrics)
+      .where(eq(bodyMetrics.date, d))
+      .orderBy(desc(bodyMetrics.id))
+      .get();
+    if (existing) {
+      // Coalesce: keep the prior value where this call doesn't supply one (mirrors the app's logBody).
+      await db
+        .update(bodyMetrics)
+        .set({
+          weightKg: weightKg ?? existing.weightKg,
+          bodyFatPct: bodyFatPct ?? existing.bodyFatPct,
+          waistCm: waistCm ?? existing.waistCm,
+          chestCm: chestCm ?? existing.chestCm,
+          hipsCm: hipsCm ?? existing.hipsCm,
+          neckCm: neckCm ?? existing.neckCm,
+          restingHr: restingHr ?? existing.restingHr,
+          notes: notes ?? existing.notes,
+        })
+        .where(eq(bodyMetrics.id, existing.id));
+    } else {
+      await db.insert(bodyMetrics).values({
+        date: d,
+        weightKg: weightKg ?? null,
+        bodyFatPct: bodyFatPct ?? null,
+        waistCm: waistCm ?? null,
+        chestCm: chestCm ?? null,
+        hipsCm: hipsCm ?? null,
+        neckCm: neckCm ?? null,
+        restingHr: restingHr ?? null,
+        notes: notes ?? null,
+      });
+    }
+    const parts = [
+      weightKg != null && `${weightKg} kg`,
+      bodyFatPct != null && `${bodyFatPct}% bf`,
+      waistCm != null && `waist ${waistCm}cm`,
+      chestCm != null && `chest ${chestCm}cm`,
+      hipsCm != null && `hips ${hipsCm}cm`,
+      neckCm != null && `neck ${neckCm}cm`,
+    ].filter(Boolean);
+    return text(`Logged measurement on ${d}${parts.length ? ` (${parts.join(", ")})` : ""}.`);
   },
 );
 
 server.tool(
   "get_weight_trend",
-  "Body weight (newest first) plus goal distance and an energy-balance PREDICTION per weigh-in: what weight the logged food (contingency-adjusted) and exercise imply, vs the actual measured weight. A persistent gap means logging/contingency is off — predicted above actual = losing faster than logs suggest (under-reported intake); below = the reverse. Returns the most recent `limit` weigh-ins by default; the `coverage` field reports the TRUE full span (history can go back many years), and pass `from` (YYYY-MM-DD) to pull everything since a date for older analysis.",
+  "Body weight (newest first) plus goal distance and an energy-balance PREDICTION per weigh-in: what weight the logged food (contingency-adjusted) and exercise imply, vs the actual measured weight. A persistent gap means logging/contingency is off — predicted above actual = losing faster than logs suggest (under-reported intake); below = the reverse. Returns the most recent `limit` weigh-ins by default; the `coverage` field reports the TRUE full span (history can go back many years), and pass `from` (YYYY-MM-DD) to pull everything since a date for older analysis. Each weigh-in also carries any tape measurements taken that day (waist/chest/hips/neck cm) — useful for tracking recomposition when scale weight is flat.",
   { limit: z.number().optional(), from: ISO.optional() },
   async ({ limit, from }) => {
     // True extent of the data, independent of the returned slice, so callers
@@ -608,6 +663,11 @@ server.tool(
             date: r.date,
             weightKg: r.weightKg,
             bodyFatPct: r.bodyFatPct,
+            // Tape measurements (cm); omitted when not recorded that day.
+            waistCm: r.waistCm ?? undefined,
+            chestCm: r.chestCm ?? undefined,
+            hipsCm: r.hipsCm ?? undefined,
+            neckCm: r.neckCm ?? undefined,
             // Scale-measured composition (Withings); null on manual/legacy days.
             leanMassKg: r.leanMassKg,
             muscleMassKg: r.muscleMassKg,
