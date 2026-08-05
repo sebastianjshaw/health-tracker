@@ -987,14 +987,11 @@ function NutrientBarChart({
                       <Cell key={r.key} fill={r.color} />
                     ))}
                   </Bar>
-                  <Bar
-                    dataKey="estimated"
-                    stackId="n"
-                    radius={[4, 4, 0, 0]}
-                    name="Estimated"
-                    fill={color}
-                    fillOpacity={0.35}
-                  />
+                  <Bar dataKey="estimated" stackId="n" radius={[4, 4, 0, 0]} name="Estimated">
+                    {chart.map((r) => (
+                      <Cell key={r.key} fill={r.color} fillOpacity={0.4} />
+                    ))}
+                  </Bar>
                 </>
               ) : (
                 <Bar dataKey={dataKey} radius={[4, 4, 0, 0]} name={title}>
@@ -1007,7 +1004,8 @@ function NutrientBarChart({
           </ResponsiveContainer>
           {hasEstimated && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Lighter bars are AI-estimated fiber for foods logged without fiber data.
+              The pale top section of each bar is fiber estimated by AI for foods logged without
+              fiber data; the solid part below is fiber from label data.
             </p>
           )}
         </ChartFigure>

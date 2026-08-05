@@ -31,10 +31,17 @@ const SYSTEM =
   "You are a nutrition database. For each food you are given its name and the " +
   "grams of carbohydrate in one serving. Estimate the grams of dietary fiber in " +
   "that same serving. Dietary fiber is a subset of carbohydrate, so fiber must " +
-  "never exceed carbs. Base estimates on typical published values for the food. " +
-  "Use -1 (not 0) when the food has no meaningful fiber estimate or is too vague " +
-  "to judge (e.g. a generic drink, alcohol, or an unrecognisable name). Return 0 " +
-  "only for foods that genuinely contain no fiber (e.g. plain meat, egg, oil).";
+  "never exceed carbs. Base estimates on typical published values for the food.\n" +
+  "Return 0 for anything that genuinely contains essentially no fiber — this is a " +
+  "real value, not 'unknown'. That includes plain meat, egg, oil and dairy, and " +
+  "also water, coffee, tea, sodas and other soft drinks (including diet/zero), " +
+  "alcohol, and supplements such as fish oil, creatine, multivitamins and minerals.\n" +
+  "Give a positive estimate for any recognisable food or composite meal, even a " +
+  "branded or restaurant item (e.g. a burrito, curry, pizza, noodles, burger meal, " +
+  "oat bar) — use typical published values; do not decline just because it is a " +
+  "prepared or branded dish.\n" +
+  "Use -1 ONLY when the name is genuinely unidentifiable and you cannot tell what " +
+  "the food is at all (e.g. 'mat', 'Original', 'Coop', a bare product code, '33cl can').";
 
 const FORMAT = {
   type: "json_schema" as const,
