@@ -297,7 +297,7 @@ const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR).",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR). Each food entry's kcal/protein/carbs/fat/fiber/saturatedFat are the ACTUAL amounts eaten for that entry (the per-serving value already multiplied by its quantity), so entries sum to totals — do NOT multiply them by quantity again.",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
@@ -316,21 +316,28 @@ server.tool(
       .orderBy(desc(bodyMetrics.id))
       .get();
 
+    // Totals sum each row's per-serving macros × its quantity.
+    const macros = macroTotals(logged);
+
+    // Per-entry macros are the ACTUAL amount eaten for that entry — i.e. the
+    // stored per-serving figure already multiplied by `quantity` — so they sum
+    // to `totals` and never need scaling by the reader. `quantity`/`servingSize`
+    // are kept for context only.
+    const g1 = (n: number) => Math.round(n * 10) / 10;
     const entries = logged.map((r) => ({
       id: r.id,
       meal: r.meal,
       name: r.name,
       quantity: r.quantity,
-      kcal: r.kcal,
-      protein: r.protein,
-      carbs: r.carbs,
-      fat: r.fat,
-      fiber: r.fiber ?? undefined,
-      saturatedFat: r.saturatedFat ?? undefined,
+      kcal: Math.round(r.kcal * r.quantity),
+      protein: g1(r.protein * r.quantity),
+      carbs: g1(r.carbs * r.quantity),
+      fat: g1(r.fat * r.quantity),
+      fiber: r.fiber == null ? undefined : g1(r.fiber * r.quantity),
+      saturatedFat: r.saturatedFat == null ? undefined : g1(r.saturatedFat * r.quantity),
       source: r.source,
       recurring: r.recurringId != null,
     }));
-    const macros = macroTotals(entries);
 
     return text(
       JSON.stringify(
