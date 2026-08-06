@@ -33,6 +33,7 @@ export default async function TodayPage({
   const dayTotals = totals(entries);
   const adjustedKcal = adjustedCalories(entries, contingency);
   const waterMl = totalWaterMl(entries);
+  const fiberG = entries.reduce((s, e) => s + (e.fiber ?? 0) * e.quantity, 0);
 
   return (
     <div className="space-y-4">
@@ -45,6 +46,7 @@ export default async function TodayPage({
         targets={targets}
         adjustedKcal={adjustedKcal}
         waterMl={waterMl}
+        fiberG={fiberG}
         steps={activity?.steps}
         distanceKm={activity?.distanceKm}
       />

@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui";
+import { FIBER_TARGET_G } from "@/lib/constants";
 import type { Macros } from "@/lib/nutrition";
 
 function pct(value: number, target: number) {
@@ -31,6 +32,7 @@ export function MacroSummary({
   targets,
   adjustedKcal,
   waterMl,
+  fiberG,
   steps,
   distanceKm,
 }: {
@@ -40,6 +42,8 @@ export function MacroSummary({
   adjustedKcal?: number;
   /** Estimated water (mL) from the day's food & drink; hidden when 0/omitted. */
   waterMl?: number;
+  /** Total dietary fiber (g) for the day; hidden when 0/omitted. */
+  fiberG?: number;
   /** Passive steps synced for the day; hidden when 0/omitted. */
   steps?: number;
   /** Passive distance (km) synced for the day; shown alongside steps when known. */
@@ -94,10 +98,17 @@ export function MacroSummary({
         <MacroStat label="Fat" grams={totals.fat} color="var(--fat)" />
       </div>
 
-      {((waterMl != null && waterMl > 0) || (steps != null && steps > 0)) && (
+      {((waterMl != null && waterMl > 0) ||
+        (fiberG != null && fiberG > 0) ||
+        (steps != null && steps > 0)) && (
         <div className="mt-3 space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
           {waterMl != null && waterMl > 0 && (
             <p>💧 ~{(waterMl / 1000).toFixed(1)} L water today, estimated from food &amp; drink.</p>
+          )}
+          {fiberG != null && fiberG > 0 && (
+            <p>
+              🌾 {Math.round(fiberG)} / {FIBER_TARGET_G}g fiber today.
+            </p>
           )}
           {steps != null && steps > 0 && (
             <p>

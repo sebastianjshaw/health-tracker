@@ -21,7 +21,7 @@ import { round1 } from "@/lib/format";
 import { LogWeightButton } from "@/components/stats/LogWeightButton";
 import { projectGoalEta } from "@/lib/goal-eta";
 import { compositionBars } from "@/lib/metabolic-age";
-import { EXERCISE_LABELS, EXERCISES, Meal } from "@/lib/constants";
+import { EXERCISE_LABELS, EXERCISES, FIBER_TARGET_G, Meal } from "@/lib/constants";
 import {
   Granularity,
   bucketKey,
@@ -1023,8 +1023,8 @@ export function FiberChart({ data, granularity, start, end }: NutrientChartProps
       data={data}
       dataKey="fiber"
       color="#22c55e"
-      target={30}
-      targetLabel="30g goal"
+      target={FIBER_TARGET_G}
+      targetLabel={`${FIBER_TARGET_G}g goal`}
       mode="more"
       emptyHint="Fiber shows here once you log foods with fiber data."
       estimatedDataKey="fiberEstimated"

@@ -18,6 +18,8 @@ export type DayEntry = {
   protein: number;
   carbs: number;
   fat: number;
+  /** Per-serving fiber (g); null when logged without fiber data. Scale by quantity. */
+  fiber: number | null;
   servingSize: number;
   servingUnit: string;
   source: string;
@@ -103,6 +105,7 @@ export async function getDayEntries(date: string): Promise<DayEntry[]> {
     protein: r.protein,
     carbs: r.carbs,
     fat: r.fat,
+    fiber: r.fiber,
     servingSize: r.servingSize,
     servingUnit: r.servingUnit,
     source: r.source,

@@ -56,6 +56,9 @@ export type Contingency = { product: number; estimated: number };
 /** Percentages from the article: restaurants +20%, eyeballed home meals +50%. */
 export const DEFAULT_CONTINGENCY: Contingency = { product: 20, estimated: 50 };
 
+/** Daily dietary fiber goal (g) — general guideline, shown across the app. */
+export const FIBER_TARGET_G = 30;
+
 /** Auto-classify a food's default evolution from how it entered the library. */
 export function evolutionForSource(source: string): Evolution {
   switch (source) {
