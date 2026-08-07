@@ -36,6 +36,17 @@ export async function getCheckin(date: string) {
   );
 }
 
+/** Every injection date (ascending, de-duplicated). Used to mark each dose on
+ *  the weight chart and to bound that chart to the medication period. */
+export async function getInjectionDates(): Promise<string[]> {
+  const rows = await db
+    .select({ date: medicationDoses.date })
+    .from(medicationDoses)
+    .orderBy(medicationDoses.date, medicationDoses.id)
+    .all();
+  return [...new Set(rows.map((r) => r.date))];
+}
+
 export type DoseMarker = { date: string; label: string; drug: string; doseMg: number | null };
 
 /**

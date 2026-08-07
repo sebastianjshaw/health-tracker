@@ -46,6 +46,7 @@ import type {
 const ACTUAL_COLOR = "#22c55e";
 const PREDICTED_COLOR = "#60a5fa";
 const AVG_COLOR = "var(--muted-foreground)";
+const INJECTION_COLOR = "#f59e0b"; // amber dot marking an injection day
 
 // Calorie-bar status colours.
 const CAL_COLORS = {
@@ -234,6 +235,7 @@ export function WeightChart({
   goalWeight,
   today,
   doseMarkers = [],
+  injectionDates = [],
   granularity = "day",
   start,
   end,
@@ -243,6 +245,8 @@ export function WeightChart({
   goalWeight?: number | null;
   /** Vertical markers (e.g. medication dose changes) snapped to the nearest weigh-in. */
   doseMarkers?: { date: string; label: string }[];
+  /** Injection dates to mark as dots on the weight line (snapped to nearest weigh-in). */
+  injectionDates?: string[];
   /** When set, shows a quick weight-log button that logs against this date. */
   today?: string;
   granularity?: Granularity;
@@ -259,13 +263,37 @@ export function WeightChart({
   const e = end ?? today ?? data[data.length - 1]?.date ?? "";
 
   // `x` is the categorical axis value (date for day; bucket key otherwise).
-  type Row = { x: string; weight: number | null; predicted: number | null; avg: number | null };
+  type Row = {
+    x: string;
+    weight: number | null;
+    predicted: number | null;
+    avg: number | null;
+    dose: number | null;
+  };
   const { chartData, snappedMarkers } = React.useMemo<{
     chartData: Row[];
     snappedMarkers: { x: string; label: string }[];
   }>(() => {
     const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
     if (isDay) {
+      const chartDates = data.map((d) => d.date);
+      // Snap an ISO date to the nearest weigh-in date (the categorical X axis).
+      const snapToWeighIn = (iso: string): string | null => {
+        let best: string | null = null;
+        let bestDiff = Infinity;
+        for (const d of chartDates) {
+          const diff = Math.abs(Date.parse(d) - Date.parse(iso));
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            best = d;
+          }
+        }
+        return best;
+      };
+      // Weigh-in dates that carry an injection, so we can dot them on the line.
+      const injectionXs = new Set(
+        injectionDates.map(snapToWeighIn).filter((x): x is string => x != null),
+      );
       const rows = data.map((d, i) => {
         const window = data.slice(Math.max(0, i - 6), i + 1);
         const avg = window.reduce((sum, p) => sum + p.weight, 0) / window.length;
@@ -274,22 +302,13 @@ export function WeightChart({
           weight: d.weight,
           predicted: predByDate.get(d.date) ?? null,
           avg: showAvg ? round1(avg) : null,
+          dose: injectionXs.has(d.date) ? d.weight : null,
         };
       });
-      // Snap each dose marker to the nearest weigh-in date (categorical X axis).
-      const chartDates = data.map((d) => d.date);
       const markers = doseMarkers
         .map((m) => {
-          let best: string | null = null;
-          let bestDiff = Infinity;
-          for (const d of chartDates) {
-            const diff = Math.abs(Date.parse(d) - Date.parse(m.date));
-            if (diff < bestDiff) {
-              bestDiff = diff;
-              best = d;
-            }
-          }
-          return best ? { x: best, label: m.label } : null;
+          const x = snapToWeighIn(m.date);
+          return x ? { x, label: m.label } : null;
         })
         .filter((m): m is { x: string; label: string } => m != null);
       return { chartData: rows, snappedMarkers: markers };
@@ -298,11 +317,14 @@ export function WeightChart({
     const pr = bucketReduce(predictions, (p) => p.date, (p) => p.predicted, granularity, s, e, "avg");
     // Key on the bucket key (unique) rather than the display label (week labels
     // repeat across years), and format the label at the axis/tooltip.
+    // Buckets that contain an injection, marked at the bucket's average weight.
+    const injectionKeys = new Set(injectionDates.map((iso) => bucketKey(granularity, iso)));
     const rows = wk.map((w, i) => ({
       x: w.key,
       weight: w.value == null ? null : round1(w.value),
       predicted: pr[i]?.value == null ? null : round1(pr[i].value),
       avg: null,
+      dose: injectionKeys.has(w.key) && w.value != null ? round1(w.value) : null,
     }));
     // Map each dose marker to its bucket key.
     const bucketKeys = new Set(wk.map((w) => w.key));
@@ -313,7 +335,7 @@ export function WeightChart({
       })
       .filter((m): m is { x: string; label: string } => m != null);
     return { chartData: rows, snappedMarkers: markers };
-  }, [data, predictions, doseMarkers, granularity, s, e, isDay, showAvg]);
+  }, [data, predictions, doseMarkers, injectionDates, granularity, s, e, isDay, showAvg]);
 
   // Scope the y-axis to the actual + predicted data only; a far-off goal would
   // otherwise squash the whole weight band. The goal is shown as an annotation.
@@ -442,6 +464,20 @@ export function WeightChart({
                 name="predicted"
               />
             )}
+            {injectionDates.length > 0 && (
+              // Amber dots on injection days (no connecting line) — sit on the
+              // weight line so the response after each dose is easy to read.
+              <Line
+                type="monotone"
+                dataKey="dose"
+                stroke="none"
+                connectNulls={false}
+                isAnimationActive={false}
+                dot={{ r: 4, fill: INJECTION_COLOR, stroke: "var(--background)", strokeWidth: 1.5 }}
+                activeDot={{ r: 5, fill: INJECTION_COLOR }}
+                name="injection"
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
         </ChartFigure>
@@ -455,11 +491,12 @@ export function WeightChart({
           {goalNote}
         </p>
       )}
-      {(showAvg || predictions.length > 0) && (
+      {(showAvg || predictions.length > 0 || injectionDates.length > 0) && (
         <>
           <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
             <Swatch color={ACTUAL_COLOR} label="Actual" />
             {showAvg && <Swatch color={AVG_COLOR} label="7-day avg" />}
+            {injectionDates.length > 0 && <Swatch color={INJECTION_COLOR} label="Injection" />}
             {predictions.length > 0 && <Swatch color={PREDICTED_COLOR} label="Predicted" />}
           </div>
           {predictions.length > 0 && (

@@ -5,13 +5,14 @@ import { MedDoseForm } from "@/components/medication/MedDoseForm";
 import { MedCheckin } from "@/components/medication/MedCheckin";
 import { MedDoseList } from "@/components/medication/MedDoseList";
 import { injectionSiteLabel } from "@/lib/constants";
-import { todayISO } from "@/lib/date";
+import { addDays, todayISO } from "@/lib/date";
 import { getGoalWeight } from "@/lib/settings";
 import { getWeightSeries } from "@/lib/stats-data";
 import {
   getCheckin,
   getDoseMarkers,
   getDoses,
+  getInjectionDates,
   getNextDoseInfo,
   parseSideEffects,
   type NextDoseInfo,
@@ -38,14 +39,19 @@ function dueText(n: NextDoseInfo): { label: string; tone: string } {
 
 export default async function MedicationPage() {
   const today = todayISO();
-  const [doses, checkin, weight, doseMarkers, next, goalWeight] = await Promise.all([
+  const [doses, checkin, doseMarkers, next, goalWeight, injectionDates] = await Promise.all([
     getDoses(),
     getCheckin(today),
-    getWeightSeries(),
     getDoseMarkers(),
     getNextDoseInfo(today),
     getGoalWeight(),
+    getInjectionDates(),
   ]);
+
+  // Frame the weight trend on the medication period: start a week before the
+  // first injection so the pre-treatment baseline is visible for comparison.
+  const firstDose = injectionDates[0] ?? null;
+  const weight = await getWeightSeries(firstDose ? addDays(firstDose, -7) : undefined);
 
   const due = dueText(next);
 
@@ -85,6 +91,7 @@ export default async function MedicationPage() {
         goalWeight={goalWeight}
         today={today}
         doseMarkers={doseMarkers.map((m) => ({ date: m.date, label: m.label }))}
+        injectionDates={injectionDates}
       />
 
       <div>
