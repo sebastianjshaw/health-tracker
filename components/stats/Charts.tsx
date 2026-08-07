@@ -48,6 +48,9 @@ const PREDICTED_COLOR = "#60a5fa";
 const AVG_COLOR = "var(--muted-foreground)";
 const INJECTION_COLOR = "#f59e0b"; // amber dot marking an injection day
 
+/** epoch-ms → YYYY-MM-DD (UTC, matching Date.parse of a date-only ISO string). */
+const tsToISO = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
 // Calorie-bar status colours.
 const CAL_COLORS = {
   under: "#22c55e", // comfortably under the (meal-proportional) target
@@ -262,9 +265,11 @@ export function WeightChart({
   const s = start ?? data[0]?.date ?? today ?? "";
   const e = end ?? today ?? data[data.length - 1]?.date ?? "";
 
-  // `x` is the categorical axis value (date for day; bucket key otherwise).
+  // `x` is the axis value: a numeric epoch-ms timestamp for the daily view (so
+  // the axis is a real time scale and gaps between weigh-ins are proportional),
+  // or the categorical bucket key for week/month.
   type Row = {
-    x: string;
+    x: string | number;
     weight: number | null;
     predicted: number | null;
     avg: number | null;
@@ -272,7 +277,7 @@ export function WeightChart({
   };
   const { chartData, snappedMarkers } = React.useMemo<{
     chartData: Row[];
-    snappedMarkers: { x: string; label: string }[];
+    snappedMarkers: { x: string | number; label: string }[];
   }>(() => {
     const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
     if (isDay) {
@@ -298,7 +303,7 @@ export function WeightChart({
         const window = data.slice(Math.max(0, i - 6), i + 1);
         const avg = window.reduce((sum, p) => sum + p.weight, 0) / window.length;
         return {
-          x: d.date,
+          x: Date.parse(d.date),
           weight: d.weight,
           predicted: predByDate.get(d.date) ?? null,
           avg: showAvg ? round1(avg) : null,
@@ -308,9 +313,9 @@ export function WeightChart({
       const markers = doseMarkers
         .map((m) => {
           const x = snapToWeighIn(m.date);
-          return x ? { x, label: m.label } : null;
+          return x ? { x: Date.parse(x), label: m.label } : null;
         })
-        .filter((m): m is { x: string; label: string } => m != null);
+        .filter((m): m is { x: number; label: string } => m != null);
       return { chartData: rows, snappedMarkers: markers };
     }
     const wk = bucketReduce(data, (d) => d.date, (d) => d.weight, granularity, s, e, "avg");
@@ -395,8 +400,15 @@ export function WeightChart({
             <CartesianGrid stroke={GRID} vertical={false} />
             <XAxis
               dataKey="x"
-              tickFormatter={(v) => bucketLabel(granularity, String(v))}
-              interval="preserveStartEnd"
+              // Daily view is a true time scale so weigh-in gaps are proportional
+              // (a 5-day gap is 5× a 1-day step); week/month stay categorical.
+              type={isDay ? "number" : "category"}
+              scale={isDay ? "time" : "auto"}
+              domain={isDay ? ["dataMin", "dataMax"] : undefined}
+              tickFormatter={(v) =>
+                isDay ? bucketLabel("day", tsToISO(Number(v))) : bucketLabel(granularity, String(v))
+              }
+              interval={isDay ? undefined : "preserveStartEnd"}
               stroke={AXIS}
               fontSize={11}
             />
@@ -410,7 +422,9 @@ export function WeightChart({
             <Tooltip
               contentStyle={tooltipStyle}
               labelFormatter={(label) =>
-                isDay ? shortDateYear(String(label)) : bucketLabel(granularity, String(label))
+                isDay
+                  ? shortDateYear(tsToISO(Number(label)))
+                  : bucketLabel(granularity, String(label))
               }
               formatter={(value, name) =>
                 value == null ? ["—", name] : [`${value} kg`, name]
