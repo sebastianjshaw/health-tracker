@@ -267,7 +267,11 @@ export async function getDailyActivity(): Promise<ActivityPoint[]> {
 
 export type CaloriePoint = {
   date: string;
+  /** Contingency-adjusted total (what the app judges against the goal). */
   kcal: number;
+  /** Raw logged total before the contingency uplift; kcal − loggedKcal is the
+   * contingency buffer. Used to show the confirmed vs contingency split. */
+  loggedKcal: number;
   protein: number;
   /** Daily fiber / saturated-fat totals (only present on rows logged since the
    * snapshot columns were added; older days read as 0). */
@@ -354,6 +358,7 @@ async function calorieSeriesRangeUncached(
     string,
     {
       kcal: number;
+      loggedKcal: number;
       protein: number;
       fiber: number;
       fiberEstimated: number;
@@ -367,7 +372,8 @@ async function calorieSeriesRangeUncached(
   for (const r of logged) {
     const acc =
       loggedByDate.get(r.date) ??
-      { kcal: 0, protein: 0, fiber: 0, fiberEstimated: 0, satFat: 0, waterWater: 0, waterDrink: 0, waterFood: 0 };
+      { kcal: 0, loggedKcal: 0, protein: 0, fiber: 0, fiberEstimated: 0, satFat: 0, waterWater: 0, waterDrink: 0, waterFood: 0 };
+    acc.loggedKcal += r.kcal * r.quantity;
     acc.kcal += r.kcal * r.quantity * contingencyMultiplier(r.evolution, contingency);
     acc.protein += r.protein * r.quantity;
     const fiberG = (r.fiber ?? 0) * r.quantity;
@@ -401,6 +407,7 @@ async function calorieSeriesRangeUncached(
     return {
       date,
       kcal: Math.round(l?.kcal ?? 0),
+      loggedKcal: Math.round(l?.loggedKcal ?? 0),
       protein: Math.round(l?.protein ?? 0),
       fiber: Math.round(l?.fiber ?? 0),
       fiberEstimated: Math.round(l?.fiberEstimated ?? 0),

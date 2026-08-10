@@ -105,6 +105,8 @@ type NutRow = {
   key: string;
   loggedDays: number;
   kcal: number;
+  /** Raw logged calories before the contingency uplift (confirmed portion). */
+  loggedKcal: number;
   /** Calorie target for the bucket: the per-day target (day view), or the sum of
    * each logged day's target (week/month). Uses the target in effect *that* day,
    * so it steps as the goal changed and never retroactively re-judges past days. */
@@ -133,6 +135,7 @@ function nutritionRows(
       key: d.date,
       loggedDays: d.kcal > 0 ? 1 : 0,
       kcal: d.kcal,
+      loggedKcal: d.loggedKcal,
       // Day view: the day's own goal (drives the stepped goal line), shown even on
       // unlogged days so the line stays continuous.
       targetKcal: d.targetKcal,
@@ -153,13 +156,14 @@ function nutritionRows(
   const acc = new Map(
     keys.map((k) => [
       k,
-      { kcal: 0, targetKcal: 0, protein: 0, proteinTarget: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
+      { kcal: 0, loggedKcal: 0, targetKcal: 0, protein: 0, proteinTarget: 0, fiber: 0, fiberEstimated: 0, satFat: 0, water: 0, waterWater: 0, waterDrink: 0, waterFood: 0, loggedDays: 0 },
     ]),
   );
   for (const d of data) {
     const a = acc.get(bucketKey(g, d.date));
     if (!a) continue;
     a.kcal += d.kcal;
+    a.loggedKcal += d.loggedKcal;
     a.protein += d.protein;
     a.fiber += d.fiber;
     a.fiberEstimated += d.fiberEstimated;
@@ -620,6 +624,41 @@ export function MarkerWeightChart({
   );
 }
 
+/** Calorie tooltip: logged (confirmed) calories, the contingency uplift on top,
+ *  the full total that's judged against the goal, and the goal itself. */
+function CalorieTooltip({
+  active,
+  payload,
+  label,
+  isDay,
+  granularity,
+}: {
+  active?: boolean;
+  payload?: { payload?: { kcal: number; loggedKcal: number; goal: number | null } }[];
+  label?: string | number;
+  isDay: boolean;
+  granularity: Granularity;
+}) {
+  const r = active ? payload?.[0]?.payload : undefined;
+  if (!r) return null;
+  const contingency = Math.max(0, Math.round(r.kcal - r.loggedKcal));
+  return (
+    <div style={{ ...tooltipStyle, padding: "8px 12px", lineHeight: 1.5 }}>
+      <div style={{ fontWeight: 600, marginBottom: 2 }}>
+        {isDay ? shortDateYear(String(label)) : bucketLabel(granularity, String(label))}
+      </div>
+      <div>Logged : {Math.round(r.loggedKcal)} kcal</div>
+      {contingency > 0 && (
+        <div style={{ color: "var(--muted-foreground)" }}>Contingency : +{contingency} kcal</div>
+      )}
+      <div style={{ fontWeight: 600 }}>Total : {Math.round(r.kcal)} kcal</div>
+      {r.goal != null && (
+        <div style={{ color: "var(--muted-foreground)" }}>Goal : {Math.round(r.goal)} kcal</div>
+      )}
+    </div>
+  );
+}
+
 export function CalorieChart({
   data,
   target,
@@ -657,8 +696,17 @@ export function CalorieChart({
   };
   // `goal` drives the stepped dotted line: the day's goal (day view) or the
   // bucket's summed goal (week/month). Null on empty buckets so the line breaks
-  // rather than dropping to zero.
-  const chart = rows.map((r) => ({ ...r, color: colorFor(r), goal: r.targetKcal > 0 ? r.targetKcal : null }));
+  // rather than dropping to zero. Each bar is split into the confirmed (logged)
+  // portion and the contingency uplift on top (kcal − loggedKcal), so you can see
+  // whether being over/under depends on the contingency estimate.
+  const chart = rows.map((r) => ({
+    ...r,
+    color: colorFor(r),
+    goal: r.targetKcal > 0 ? r.targetKcal : null,
+    confirmed: r.loggedKcal,
+    contingency: Math.max(0, r.kcal - r.loggedKcal),
+  }));
+  const hasContingency = chart.some((r) => r.contingency > 0);
 
   const dataMax = Math.max(0, ...chart.map((r) => Math.max(r.kcal, r.goal ?? 0)));
   const yMax = Math.ceil(dataMax / 100) * 100 || 100;
@@ -685,17 +733,17 @@ export function CalorieChart({
               />
               <YAxis stroke={AXIS} fontSize={11} width={40} domain={[0, yMax]} />
               <Tooltip
-                contentStyle={tooltipStyle}
-                itemStyle={{ color: "var(--foreground)" }}
-                labelFormatter={(label) =>
-                  isDay ? shortDateYear(String(label)) : bucketLabel(granularity, String(label))
-                }
-                formatter={(value, name) => [`${Math.round(Number(value))} kcal`, name === "goal" ? "Goal" : "kcal"]}
+                content={<CalorieTooltip isDay={isDay} granularity={granularity} />}
                 cursor={{ fill: "var(--muted)" }}
               />
-              <Bar dataKey="kcal" radius={[4, 4, 0, 0]} name="kcal">
+              <Bar dataKey="confirmed" stackId="c" radius={[4, 4, 0, 0]} name="Logged">
                 {chart.map((r) => (
                   <Cell key={r.key} fill={r.color} />
+                ))}
+              </Bar>
+              <Bar dataKey="contingency" stackId="c" radius={[4, 4, 0, 0]} name="Contingency">
+                {chart.map((r) => (
+                  <Cell key={r.key} fill={r.color} fillOpacity={0.4} />
                 ))}
               </Bar>
               <Line
@@ -725,6 +773,14 @@ export function CalorieChart({
                 : `· each ${groupNoun(granularity)} vs its days’ goals`}
             </span>
           </div>
+          {hasContingency && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              The solid part of each bar is your logged calories; the paler top is the contingency
+              buffer added for under-reporting. Bars are still judged on the full total — so if the
+              solid part alone clears the goal you’re over regardless, and if only the paler part
+              crosses it, that depends on how accurate the contingency is.
+            </p>
+          )}
         </>
       )}
     </ChartCard>
