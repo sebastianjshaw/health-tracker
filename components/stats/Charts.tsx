@@ -1507,6 +1507,38 @@ export function DistanceChart({
 
 const SLEEP_COLORS = { deep: "#1e3a8a", rem: "#6366f1", light: "#93c5fd" };
 
+/** Sleep tooltip: the per-stage breakdown plus the total time asleep (their
+ *  sum = the stacked bar height). Recharts injects active/payload/label. */
+function SleepTooltip({
+  active,
+  payload,
+  label,
+  granularity,
+}: {
+  active?: boolean;
+  payload?: { name?: string; value?: number; color?: string }[];
+  label?: string | number;
+  granularity: Granularity;
+}) {
+  if (!active || !payload || payload.length === 0) return null;
+  const total = payload.reduce((s, p) => s + (typeof p.value === "number" ? p.value : 0), 0);
+  return (
+    <div style={{ ...tooltipStyle, padding: "8px 12px", lineHeight: 1.5 }}>
+      <div style={{ fontWeight: 600, marginBottom: 2 }}>{bucketLabel(granularity, String(label))}</div>
+      {payload.map((p) => (
+        <div key={p.name} style={{ color: p.color }}>
+          {p.name} : {p.value} h
+        </div>
+      ))}
+      {payload.length > 1 && (
+        <div style={{ marginTop: 2, fontWeight: 600, color: "var(--foreground)" }}>
+          Total asleep : {round1(total)} h
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SleepChart({
   data,
   start,
@@ -1565,11 +1597,7 @@ export function SleepChart({
                   interval="preserveStartEnd"
                 />
                 <YAxis stroke={AXIS} fontSize={11} width={40} unit="h" />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  labelFormatter={(label) => bucketLabel(granularity, String(label))}
-                  formatter={(v, n) => [`${v} h`, String(n)]}
-                />
+                <Tooltip content={<SleepTooltip granularity={granularity} />} />
                 {hasStages ? (
                   <>
                     <Bar dataKey="deep" stackId="s" fill={SLEEP_COLORS.deep} name="Deep" />
