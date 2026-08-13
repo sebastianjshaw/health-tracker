@@ -377,6 +377,29 @@ export function WeightChart({
         }`
       : null;
 
+  // Progress since the first injection (medication page only): loss from the
+  // weigh-in nearest the first dose to the latest weigh-in, plus a weekly rate.
+  const injectionNote = (() => {
+    if (injectionDates.length === 0 || data.length === 0) return null;
+    const firstInj = Date.parse(injectionDates[0]);
+    let base = data[0];
+    let bestDiff = Infinity;
+    for (const d of data) {
+      const diff = Math.abs(Date.parse(d.date) - firstInj);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        base = d;
+      }
+    }
+    const latest = data[data.length - 1];
+    const days = (Date.parse(latest.date) - Date.parse(base.date)) / 86_400_000;
+    if (days < 1) return null;
+    const lost = Math.round((base.weight - latest.weight) * 10) / 10;
+    const perWeek = Math.round((lost / (days / 7)) * 10) / 10;
+    const verb = lost >= 0 ? "lost" : "gained";
+    return `${Math.abs(lost)} kg ${verb} since first injection · ${Math.abs(perWeek)} kg/wk avg`;
+  })();
+
   const latestPred = predictions[predictions.length - 1];
   const summary = data.length
     ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.${
@@ -507,6 +530,15 @@ export function WeightChart({
             style={{ borderColor: "var(--accent)" }}
           />
           {goalNote}
+        </p>
+      )}
+      {injectionNote && (
+        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ background: INJECTION_COLOR }}
+          />
+          {injectionNote}
         </p>
       )}
       {(showAvg || predictions.length > 0 || injectionDates.length > 0) && (
