@@ -526,6 +526,86 @@ server.tool(
 );
 
 server.tool(
+  "create_library_food",
+  "Create a reusable food in the library WITHOUT logging it to any day (use add_food_from_library to log it later, or log_food to create-and-log in one step). Unlike log_food, all nutrition values are PER SERVING — i.e. for one serving of `servingSize` `servingUnit` (default 100 g) — not the whole portion eaten. If a matching food already exists it is reused rather than duplicated. Returns the food id.",
+  {
+    name: z.string(),
+    brand: z.string().optional(),
+    barcode: z.string().optional(),
+    servingSize: z.number().optional(),
+    servingUnit: z.string().optional(),
+    kcal: z.number(),
+    protein: z.number().optional(),
+    carbs: z.number().optional(),
+    fat: z.number().optional(),
+    fiber: z.number().optional(),
+    saturatedFat: z.number().optional(),
+    sugar: z.number().optional(),
+    salt: z.number().optional(),
+    sodium: z.number().optional(),
+    category: z.enum(["food", "drink", "other"]).optional(),
+    evolution: z.enum(["commodity", "product", "measured", "estimated"]).optional(),
+  },
+  async ({
+    name,
+    brand,
+    barcode,
+    servingSize,
+    servingUnit,
+    kcal,
+    protein,
+    carbs,
+    fat,
+    fiber,
+    saturatedFat,
+    sugar,
+    salt,
+    sodium,
+    category,
+    evolution,
+  }) => {
+    const cleanName = name.trim();
+    if (!cleanName) return text("Name is required.");
+    const portion = { kcal, protein: protein ?? 0, carbs: carbs ?? 0, fat: fat ?? 0 };
+
+    // Don't duplicate a food already in the library (same name + matching macros).
+    const reuseId = await findReusableFoodId(cleanName, portion);
+    if (reuseId != null) {
+      const existing = await db.select().from(foods).where(eq(foods.id, reuseId)).get();
+      return text(
+        `"${cleanName}" already matches library food #${reuseId} ("${existing?.name}") — reusing it instead of adding a duplicate.`,
+      );
+    }
+
+    const unit = servingUnit?.trim() || "g";
+    const [row] = await db
+      .insert(foods)
+      .values({
+        name: cleanName,
+        brand: brand?.trim() || null,
+        barcode: barcode?.trim() || null,
+        servingSize: servingSize ?? 100,
+        servingUnit: unit,
+        ...portion,
+        fiber: fiber ?? null,
+        // An explicitly-passed fiber value is treated as measured, not AI-estimated.
+        fiberEstimated: fiber != null ? false : null,
+        saturatedFat: saturatedFat ?? null,
+        sugar: sugar ?? null,
+        salt: salt ?? null,
+        sodium: sodium ?? null,
+        source: "mcp",
+        category: category ?? inferCategory(unit, cleanName),
+        evolution: evolution ?? evolutionForSource("mcp"),
+      })
+      .returning({ id: foods.id });
+    return text(
+      `Added "${cleanName}" to the library as food #${row.id} (${Math.round(kcal)} kcal per ${servingSize ?? 100} ${unit}). Use add_food_from_library with foodId ${row.id} to log it to a day.`,
+    );
+  },
+);
+
+server.tool(
   "log_weight",
   "Record a body weight / vitals / tape measurement (weight, body-fat %, resting HR, and waist/chest/hips/neck circumference in cm). Merges into the day's existing row — one row per date — so weight and circumferences can be logged in separate calls without creating duplicates; only the fields you pass change. Defaults to today.",
   {
