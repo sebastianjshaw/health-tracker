@@ -28,6 +28,8 @@ export function ActivityTrends({
   const fActivity = withinRange(activity, cutoff);
   const fDistances = withinRange(distances, cutoff);
   const start = cutoff ?? fDistances[0]?.date ?? today;
+  // For "all", fall back to the lifts' own earliest date so the axis still spans them.
+  const liftStart = cutoff ?? fLifts[0]?.date ?? today;
 
   return (
     <section className="space-y-4">
@@ -36,7 +38,7 @@ export function ActivityTrends({
         <SegmentedControl options={RANGES} value={range} onChange={setRange} label="Time range" />
       </div>
 
-      <LiftChart data={fLifts} />
+      <LiftChart data={fLifts} start={liftStart} end={today} />
       <StepsChart data={fActivity} />
       <DistanceChart data={fDistances} start={start} end={today} granularity={granularity} />
     </section>

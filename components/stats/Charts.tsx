@@ -1452,8 +1452,23 @@ const LIFT_COLORS: Record<string, string> = {
   deadlift: "#9333ea",
 };
 
-export function LiftChart({ data }: { data: LiftPoint[] }) {
+export function LiftChart({
+  data,
+  start,
+  end,
+}: {
+  data: LiftPoint[];
+  /** Selected window; when set, the axis spans it as a real time scale so the
+   *  chart reflects the chosen range even with only a few workouts in it. */
+  start?: string;
+  end?: string;
+}) {
   const summary = `Lift progression across ${data.length} workout${data.length === 1 ? "" : "s"}.`;
+  // Numeric epoch-ms x so the axis is a true time scale (gaps proportional, and
+  // the window reflects the selected range rather than just the data extent).
+  const chart = data.map((d) => ({ ...d, x: Date.parse(d.date) }));
+  const domain: [number | string, number | string] =
+    start && end ? [Date.parse(start), Date.parse(end)] : ["dataMin", "dataMax"];
   return (
     <ChartCard title="Lift progression (kg)">
       {data.length === 0 ? (
@@ -1462,11 +1477,22 @@ export function LiftChart({ data }: { data: LiftPoint[] }) {
         <>
           <ChartFigure summary={summary}>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={data} margin={{ top: 5, right: 8, bottom: 0, left: -16 }}>
+            <LineChart data={chart} margin={{ top: 5, right: 8, bottom: 0, left: -16 }}>
               <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={shortDate} stroke={AXIS} fontSize={11} />
+              <XAxis
+                dataKey="x"
+                type="number"
+                scale="time"
+                domain={domain}
+                tickFormatter={(v) => shortDate(tsToISO(Number(v)))}
+                stroke={AXIS}
+                fontSize={11}
+              />
               <YAxis stroke={AXIS} fontSize={11} />
-              <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => shortDate(String(label))} />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelFormatter={(label) => shortDate(tsToISO(Number(label)))}
+              />
               {EXERCISES.map((ex) => (
                 <Line
                   key={ex}
