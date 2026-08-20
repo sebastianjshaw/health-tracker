@@ -1,24 +1,7 @@
-import type { ReactNode } from "react";
-import { Card, Stat } from "@/components/ui";
+import { Card, Collapsible, Stat } from "@/components/ui";
 import { trimNum } from "@/lib/format";
 import type { BodyComposition } from "@/lib/metabolic-age";
 import type { MonthlyAverage, YearlyAverage } from "@/lib/seasonal";
-
-/** Card-styled native disclosure — closed by default, no client JS. The marker
- * is hidden and replaced with a rotating chevron driven by [open]. */
-function Collapsible({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <details className="group rounded-2xl border border-border bg-card text-card-foreground shadow-sm">
-      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground [&::-webkit-details-marker]:hidden">
-        {title}
-        <span className="transition-transform group-open:rotate-90" aria-hidden>
-          ▸
-        </span>
-      </summary>
-      <div className="px-4 pb-3">{children}</div>
-    </details>
-  );
-}
 
 /** Compact CSS bars of mean weight per calendar month (no chart lib needed). */
 function SeasonalBars({ months }: { months: MonthlyAverage[] }) {

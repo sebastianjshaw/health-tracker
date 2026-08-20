@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/cn";
+import { Collapsible } from "@/components/ui";
 import { DateNav } from "@/components/DateNav";
 import { SyncButton } from "@/components/integrations/SyncButton";
 import { CardioForm } from "./CardioForm";
@@ -69,10 +70,9 @@ export function ActivityView({
             next={nextWorkout}
             date={date}
           />
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-muted-foreground">History</h3>
+          <Collapsible title="History">
             <LiftHistory entries={liftHistory} />
-          </div>
+          </Collapsible>
         </>
       )}
 
