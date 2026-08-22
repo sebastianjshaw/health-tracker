@@ -24,7 +24,11 @@ import { netPassiveKm, passiveWalkKcal } from "./passive-activity";
 import { materializeRecurringRange } from "./recurring-materialize";
 import { getContingency, getProfile, getTargetHistory } from "./settings";
 import { targetForDate } from "./targets";
-import { BASELINE_ACTIVITY_FACTOR, predictWeights, type WeightPrediction } from "./weight-prediction";
+import {
+  BASELINE_ACTIVITY_FACTOR,
+  predictDailyWeights,
+  type DailyWeightPrediction,
+} from "./weight-prediction";
 
 /** All body-metric rows, newest-first. Optionally bounded to an inclusive
  * [from, to] date range (so the report only loads its window). */
@@ -93,15 +97,16 @@ export async function getWeightSeries(from?: string, to?: string): Promise<Weigh
   }));
 }
 
-export type { WeightPrediction } from "./weight-prediction";
+export type { DailyWeightPrediction } from "./weight-prediction";
 
 /**
- * Per-weigh-in predicted weight from energy balance (contingency-adjusted
- * intake minus BMR-baseline maintenance plus logged cardio), so expected can be
- * compared against actual. Empty if the profile can't yield a BMR or there are
- * fewer than two weigh-ins.
+ * Daily theoretical weight from energy balance (contingency-adjusted intake
+ * minus BMR-baseline maintenance plus logged cardio), anchored on each weigh-in
+ * and projected forward past the last one to today — so the logged-food/exercise
+ * trajectory can be compared against actual weigh-ins. Empty if the profile can't
+ * yield a BMR or there are fewer than two weigh-ins.
  */
-export async function getWeightPredictions(from?: string): Promise<WeightPrediction[]> {
+export async function getWeightPredictions(from?: string): Promise<DailyWeightPrediction[]> {
   const allWeighIns = await getWeightSeries(); // ascending, weight present
   // Bound to the visible window so the intake computation below (calorieSeriesRange,
   // the expensive part) doesn't span the whole weigh-in history. Keep one weigh-in
@@ -114,7 +119,12 @@ export async function getWeightPredictions(from?: string): Promise<WeightPredict
   if (weighIns.length < 2) return [];
 
   const start = weighIns[0].date;
-  const end = weighIns[weighIns.length - 1].date;
+  // Extend the intake/cardio window past the last weigh-in to today, so the
+  // theoretical line can project forward onto days with logged food but no
+  // weigh-in yet (the honesty-check horizon).
+  const today = todayISO();
+  const lastWeighIn = weighIns[weighIns.length - 1].date;
+  const end = today > lastWeighIn ? today : lastWeighIn;
 
   const [series, cardio, activity, profile] = await Promise.all([
     calorieSeriesRange(start, end), // contingency-adjusted intake per day
@@ -157,8 +167,9 @@ export async function getWeightPredictions(from?: string): Promise<WeightPredict
     if (kcal > 0) cardioByDate.set(a.date, (cardioByDate.get(a.date) ?? 0) + kcal);
   }
 
-  return predictWeights({
+  return predictDailyWeights({
     weighIns,
+    end,
     intakeByDate,
     cardioByDate,
     cardioMinutesByDate,

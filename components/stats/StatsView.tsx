@@ -47,7 +47,7 @@ import type {
   SleepPoint,
   Vo2Point,
   WeightPoint,
-  WeightPrediction,
+  DailyWeightPrediction,
 } from "@/lib/stats-data";
 import type { LoadSession } from "@/lib/fitness";
 import type { HealthStatus } from "@/lib/constants";
@@ -107,7 +107,7 @@ export function StatsView({
   /** Whether the server sent full history (came from ?range=all). */
   hasFullHistory: boolean;
   weight: WeightPoint[];
-  predictions: WeightPrediction[];
+  predictions: DailyWeightPrediction[];
   calories: CaloriePoint[];
   energy: EnergyPoint[];
   distances: DistancePoint[];

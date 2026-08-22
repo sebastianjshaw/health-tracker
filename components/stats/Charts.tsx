@@ -40,7 +40,7 @@ import type {
   SleepPoint,
   Vo2Point,
   WeightPoint,
-  WeightPrediction,
+  DailyWeightPrediction,
 } from "@/lib/stats-data";
 
 const ACTUAL_COLOR = "#22c55e";
@@ -248,7 +248,7 @@ export function WeightChart({
   end,
 }: {
   data: WeightPoint[];
-  predictions?: WeightPrediction[];
+  predictions?: DailyWeightPrediction[];
   goalWeight?: number | null;
   /** Vertical markers (e.g. medication dose changes) snapped to the nearest weigh-in. */
   doseMarkers?: { date: string; label: string }[];
@@ -286,7 +286,7 @@ export function WeightChart({
     const predByDate = new Map(predictions.map((p) => [p.date, p.predicted]));
     if (isDay) {
       const chartDates = data.map((d) => d.date);
-      // Snap an ISO date to the nearest weigh-in date (the categorical X axis).
+      // Snap an ISO date to the nearest weigh-in date.
       const snapToWeighIn = (iso: string): string | null => {
         let best: string | null = null;
         let bestDiff = Infinity;
@@ -303,15 +303,24 @@ export function WeightChart({
       const injectionXs = new Set(
         injectionDates.map(snapToWeighIn).filter((x): x is string => x != null),
       );
-      const rows = data.map((d, i) => {
+      // Rows span the union of weigh-in dates and prediction dates, so the
+      // theoretical line can extend onto days with no weigh-in (incl. forward
+      // from the last one). 7-day avg is keyed to weigh-ins only.
+      const weighByDate = new Map(data.map((d) => [d.date, d]));
+      const avgByDate = new Map<string, number>();
+      data.forEach((d, i) => {
         const window = data.slice(Math.max(0, i - 6), i + 1);
-        const avg = window.reduce((sum, p) => sum + p.weight, 0) / window.length;
+        avgByDate.set(d.date, window.reduce((sum, p) => sum + p.weight, 0) / window.length);
+      });
+      const allDates = [...new Set([...chartDates, ...predictions.map((p) => p.date)])].sort();
+      const rows = allDates.map((date) => {
+        const w = weighByDate.get(date);
         return {
-          x: Date.parse(d.date),
-          weight: d.weight,
-          predicted: predByDate.get(d.date) ?? null,
-          avg: showAvg ? round1(avg) : null,
-          dose: injectionXs.has(d.date) ? d.weight : null,
+          x: Date.parse(date),
+          weight: w ? w.weight : null,
+          predicted: predByDate.get(date) ?? null,
+          avg: showAvg && w ? round1(avgByDate.get(date)!) : null,
+          dose: w && injectionXs.has(date) ? w.weight : null,
         };
       });
       const markers = doseMarkers
@@ -400,11 +409,17 @@ export function WeightChart({
     return `${Math.abs(lost)} kg ${verb} since first injection · ${Math.abs(perWeek)} kg/wk avg`;
   })();
 
-  const latestPred = predictions[predictions.length - 1];
+  // For the summary, compare at the most recent weigh-in that has a prediction.
+  const latestPred = [...predictions].reverse().find((p) => p.actual != null);
+  const latestProjection = predictions[predictions.length - 1];
   const summary = data.length
     ? `Weight: latest ${data[data.length - 1].weight} kg${goal != null ? `, goal ${goal} kg` : ""}.${
         latestPred
           ? ` Latest prediction ${latestPred.predicted} kg vs actual ${latestPred.actual} kg.`
+          : ""
+      }${
+        latestProjection && latestProjection.actual == null
+          ? ` Projected ${latestProjection.predicted} kg on ${latestProjection.date} from logged food & exercise.`
           : ""
       }`
     : "No weight logged.";
@@ -494,6 +509,9 @@ export function WeightChart({
               name="actual"
             />
             {predictions.length > 0 && (
+              // Daily theoretical weight from logged food & exercise; dot-less
+              // since it's now a point per day. Breaks (connectNulls off) where a
+              // window was skipped for a big gap or too little logging.
               <Line
                 type="monotone"
                 dataKey="predicted"
@@ -501,7 +519,7 @@ export function WeightChart({
                 strokeWidth={1.5}
                 strokeDasharray="4 4"
                 connectNulls={false}
-                dot={{ r: 3, fill: PREDICTED_COLOR }}
+                dot={false}
                 name="predicted"
               />
             )}
@@ -551,8 +569,9 @@ export function WeightChart({
           </div>
           {predictions.length > 0 && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Predicted from the prior window&apos;s food &amp; exercise. A gap from
-              actual suggests under-reporting or that contingency needs tuning.
+              Theoretical daily weight from logged food &amp; exercise, re-anchored at each
+              weigh-in and projected ahead of the last one. When the next weigh-in lands, a gap
+              from this line suggests under-reporting or that contingency needs tuning.
             </p>
           )}
         </>
