@@ -490,12 +490,15 @@ export function WeightChart({
               />
             ))}
             {showAvg && (
+              // Bridge the prediction-only days (which carry no weigh-in/avg) so
+              // the rolling average reads as one continuous line, not segments.
               <Line
                 type="monotone"
                 dataKey="avg"
                 stroke={AVG_COLOR}
                 strokeWidth={1.5}
                 dot={false}
+                connectNulls
                 name="7-day avg"
               />
             )}
@@ -505,7 +508,7 @@ export function WeightChart({
               stroke={ACTUAL_COLOR}
               strokeWidth={2.5}
               dot={{ r: 3 }}
-              connectNulls={!isDay}
+              connectNulls
               name="actual"
             />
             {predictions.length > 0 && (
