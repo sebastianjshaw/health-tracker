@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { cardioSessions, freeformLifts, liftSessions, liftSets } from "@/db/schema";
 import {
@@ -48,6 +48,7 @@ export type LiftHistoryEntry = {
   id: number;
   date: string;
   workout: string;
+  notes: string | null;
   sets: { exercise: Exercise; targetWeightKg: number; repsDone: number | null }[];
 };
 
@@ -66,12 +67,14 @@ export async function getRecentLiftSessions(limit = 8): Promise<LiftHistoryEntry
     .select()
     .from(liftSets)
     .where(inArray(liftSets.sessionId, ids))
+    .orderBy(asc(liftSets.setNumber), asc(liftSets.id))
     .all();
 
   return sessions.map((s) => ({
     id: s.id,
     date: s.date,
     workout: s.workout,
+    notes: s.notes,
     sets: sets
       .filter((st) => st.sessionId === s.id)
       .map((st) => ({

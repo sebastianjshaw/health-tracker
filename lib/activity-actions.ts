@@ -330,3 +330,59 @@ export async function completeLiftWorkout(
   revalidatePaths("/activity", "/stats");
   return actionOk();
 }
+
+export type UpdateLiftSessionInput = {
+  id: number;
+  date: string;
+  notes?: string | null;
+  entries: LiftEntry[];
+};
+
+/** Correct a past 5×5 session: its date, notes, per-exercise weight and per-set
+ * reps. Purely a fix to the historical record — it does NOT re-run the program's
+ * progression (weights/fails/next-workout were already advanced when it was first
+ * logged), so editing history never surprises the current targets. */
+export async function updateLiftSession(input: UpdateLiftSessionInput): Promise<ActionResult> {
+  await requireAuth();
+  if (!isValidISO(input.date)) return actionFail("Invalid date");
+  if (input.entries.length === 0) return actionFail("No exercises logged");
+
+  const session = await db
+    .select({ id: liftSessions.id })
+    .from(liftSessions)
+    .where(eq(liftSessions.id, input.id))
+    .get();
+  if (!session) return actionFail("Workout not found");
+
+  await db
+    .update(liftSessions)
+    .set({ date: input.date, notes: input.notes?.trim() || null })
+    .where(eq(liftSessions.id, input.id));
+
+  // Replace the sets wholesale — simpler and safer than diffing, and the set of
+  // exercises/sets in a session is small.
+  await db.delete(liftSets).where(eq(liftSets.sessionId, input.id));
+  const setRows = input.entries.flatMap((e) =>
+    e.reps.map((reps, idx) => ({
+      sessionId: input.id,
+      exercise: e.exercise,
+      targetWeightKg: e.targetWeightKg,
+      setNumber: idx + 1,
+      repsDone: reps,
+    })),
+  );
+  if (setRows.length > 0) await db.insert(liftSets).values(setRows);
+
+  revalidatePaths("/activity", "/stats");
+  return actionOk();
+}
+
+export async function deleteLiftSession(id: number): Promise<ActionResult> {
+  await requireAuth();
+  // Delete the sets explicitly rather than rely on ON DELETE CASCADE, which
+  // only fires when SQLite's foreign_keys pragma is on.
+  await db.delete(liftSets).where(eq(liftSets.sessionId, id));
+  await db.delete(liftSessions).where(eq(liftSessions.id, id));
+  revalidatePaths("/activity", "/stats");
+  return actionOk();
+}
