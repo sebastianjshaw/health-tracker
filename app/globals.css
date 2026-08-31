@@ -15,6 +15,7 @@
   --danger: #dc2626;
   --warn: #d97706;
   --vacation: #0ea5e9;
+  --work-trip: #7c3aed;
   --protein: #2563eb;
   --carbs: #d97706;
   --fat: #db2777;
@@ -36,6 +37,7 @@
     --danger: #f87171;
     --warn: #fbbf24;
     --vacation: #38bdf8;
+    --work-trip: #a78bfa;
     --protein: #60a5fa;
     --carbs: #fbbf24;
     --fat: #f472b6;
@@ -57,6 +59,7 @@
   --color-danger: var(--danger);
   --color-warn: var(--warn);
   --color-vacation: var(--vacation);
+  --color-work-trip: var(--work-trip);
   --color-protein: var(--protein);
   --color-carbs: var(--carbs);
   --color-fat: var(--fat);

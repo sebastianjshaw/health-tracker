@@ -297,7 +297,7 @@ const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR). Each food entry's kcal/protein/carbs/fat/fiber/saturatedFat are the ACTUAL amounts eaten for that entry (the per-serving value already multiplied by its quantity), so entries sum to totals — do NOT multiply them by quantity again.",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation/work_trip), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR). Each food entry's kcal/protein/carbs/fat/fiber/saturatedFat are the ACTUAL amounts eaten for that entry (the per-serving value already multiplied by its quantity), so entries sum to totals — do NOT multiply them by quantity again.",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
@@ -1114,7 +1114,7 @@ server.tool(
 
 server.tool(
   "get_health_status",
-  "Days flagged unwell, injured or on vacation over the last N days (default 30) — context for dips (or changes) in training, appetite or weight. Healthy days are omitted.",
+  "Days flagged unwell, injured, on vacation or on a work trip over the last N days (default 30) — context for dips (or changes) in training, appetite or weight. Healthy days are omitted.",
   { days: z.number().optional() },
   async ({ days }) => {
     const n = Math.max(1, Math.min(days ?? 30, 365));
@@ -1215,7 +1215,7 @@ server.tool(
 
 server.tool(
   "set_day_status",
-  "Set a day's health status (healthy | unwell | injured | vacation). Defaults to today but accepts ANY date, including future ones — so you can mark a vacation or planned time off / injury in advance. 'healthy' is the default and clears any flag for that day.",
+  "Set a day's health status (healthy | unwell | injured | vacation | work_trip). Defaults to today but accepts ANY date, including future ones — so you can mark a vacation or planned time off / injury in advance. 'healthy' is the default and clears any flag for that day.",
   {
     status: z.enum(HEALTH_STATUSES),
     date: ISO.optional(),

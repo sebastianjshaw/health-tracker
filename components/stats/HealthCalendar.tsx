@@ -12,6 +12,7 @@ const CELL: Record<HealthStatus, string> = {
   unwell: "bg-warn",
   injured: "bg-danger",
   vacation: "bg-vacation",
+  work_trip: "bg-work-trip",
 };
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -53,7 +54,7 @@ export function HealthCalendar({
 }) {
   const [page, setPage] = React.useState(0); // 0 = most recent window
 
-  const { weeks, monthCols, rangeLabel, unwell, injured, vacation } = React.useMemo(() => {
+  const { weeks, monthCols, rangeLabel, unwell, injured, vacation, workTrip } = React.useMemo(() => {
     const lastDay = addDays(end, -page * WINDOW_WEEKS * 7);
     const firstMonday = addDays(mondayOf(lastDay), -(WINDOW_WEEKS - 1) * 7);
 
@@ -61,6 +62,7 @@ export function HealthCalendar({
     let unwell = 0;
     let injured = 0;
     let vacation = 0;
+    let workTrip = 0;
     for (let w = 0; w < WINDOW_WEEKS; w++) {
       const week: Cell[] = [];
       for (let d = 0; d < 7; d++) {
@@ -73,6 +75,7 @@ export function HealthCalendar({
         if (status === "unwell") unwell++;
         if (status === "injured") injured++;
         if (status === "vacation") vacation++;
+        if (status === "work_trip") workTrip++;
         week.push({ date, status });
       }
       weeks.push(week);
@@ -94,6 +97,7 @@ export function HealthCalendar({
       unwell,
       injured,
       vacation,
+      workTrip,
     };
   }, [statuses, end, page]);
 
@@ -102,7 +106,7 @@ export function HealthCalendar({
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-semibold">Health</h3>
         <span className="text-xs text-muted-foreground">
-          {unwell} unwell · {injured} injured · {vacation} vacation
+          {unwell} unwell · {injured} injured · {vacation} vacation · {workTrip} work trip
         </span>
       </div>
 
@@ -173,6 +177,7 @@ export function HealthCalendar({
         <Swatch className={CELL.unwell} label="Unwell" />
         <Swatch className={CELL.injured} label="Injured" />
         <Swatch className={CELL.vacation} label="Vacation" />
+        <Swatch className={CELL.work_trip} label="Work trip" />
       </div>
     </Card>
   );
