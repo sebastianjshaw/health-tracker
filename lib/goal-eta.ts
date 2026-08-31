@@ -11,10 +11,16 @@ export type GoalEta = {
 };
 
 /**
- * Estimate when the goal weight will be reached, from the trend of a trailing
- * 7-point moving average (least-squares slope vs time). Returns null when
- * there isn't enough data, the trend isn't moving toward the goal, or the ETA
- * is implausibly far (≈ effectively stalled).
+ * Estimate when the goal weight will be reached, from the least-squares slope of
+ * the weigh-ins over time. Returns null when there isn't enough data, the trend
+ * isn't moving toward the goal, or the ETA is implausibly far (≈ stalled).
+ *
+ * Fits the weigh-ins directly rather than a trailing moving average: because the
+ * caller passes only the weigh-ins in the selected window, an in-window MA warms
+ * up on the window's opening point (barely smoothed) while its tail lags the
+ * latest weight, which flattened the slope and made the rate read lower than the
+ * period's actual loss. Least-squares over ~a month of points already averages
+ * out day-to-day water-weight noise in the slope.
  */
 export function projectGoalEta(
   weighIns: WeighInPoint[],
@@ -23,16 +29,10 @@ export function projectGoalEta(
 ): GoalEta | null {
   if (weighIns.length < 5) return null;
 
-  // Trailing 7-point moving average, to match the chart's trend line.
-  const ma = weighIns.map((w, i) => {
-    const win = weighIns.slice(Math.max(0, i - 6), i + 1);
-    return { date: w.date, value: win.reduce((s, p) => s + p.weight, 0) / win.length };
-  });
-
-  const firstMs = parseISO(ma[0].date).getTime();
+  const firstMs = parseISO(weighIns[0].date).getTime();
   const dayOf = (d: string) => (parseISO(d).getTime() - firstMs) / 86_400_000;
-  const xs = ma.map((p) => dayOf(p.date));
-  const ys = ma.map((p) => p.value);
+  const xs = weighIns.map((p) => dayOf(p.date));
+  const ys = weighIns.map((p) => p.weight);
   if (xs[xs.length - 1] < 7) return null; // need at least a week of span
 
   // Least-squares slope (kg/day).
