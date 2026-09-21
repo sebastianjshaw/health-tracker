@@ -694,7 +694,9 @@ function MeasurementChart({
                     strokeDasharray="4 4"
                     label={{
                       value: b.label,
-                      position: "insideTopRight",
+                      // Above the line: the label names the band starting at this
+                      // cutoff (e.g. "Obese" ≥ 30), not the band below it.
+                      position: "insideBottomRight",
                       fontSize: 10,
                       fill: "var(--muted-foreground)",
                     }}
