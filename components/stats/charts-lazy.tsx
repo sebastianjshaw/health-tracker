@@ -61,6 +61,16 @@ export const HydrationChart = dynamic(
   { ssr: false, loading: makeSkeleton(200) },
 );
 
+export const BmiChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.BmiChart })),
+  { ssr: false, loading: makeSkeleton(200) },
+);
+
+export const BodyFatChart = dynamic(
+  () => import("./Charts").then((m) => ({ default: m.BodyFatChart })),
+  { ssr: false, loading: makeSkeleton(200) },
+);
+
 export const CompositionChart = dynamic(
   () => import("./Charts").then((m) => ({ default: m.CompositionChart })),
   { ssr: false, loading: makeSkeleton(200) },

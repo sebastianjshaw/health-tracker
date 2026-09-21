@@ -592,6 +592,217 @@ function Swatch({ color, label }: { color: string; label: string }) {
   );
 }
 
+export type MetricPoint = { date: string; value: number | null };
+type CutoffBand = { y: number; label: string };
+
+/** Single-metric line chart in the Weight-graph style (proportional time axis on
+ * the daily view, actual line + dots, 7-day average), with optional horizontal
+ * dotted cutoff lines (e.g. BMI/body-fat category boundaries). */
+function MeasurementChart({
+  title,
+  data,
+  unit,
+  digits = 1,
+  color = ACTUAL_COLOR,
+  bands = [],
+  granularity = "day",
+  start,
+  end,
+  emptyHint,
+}: {
+  title: string;
+  data: MetricPoint[];
+  unit: string;
+  digits?: number;
+  color?: string;
+  bands?: CutoffBand[];
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
+  emptyHint: string;
+}) {
+  const isDay = granularity === "day";
+  const s = start ?? data[0]?.date ?? "";
+  const e = end ?? data[data.length - 1]?.date ?? "";
+  const present = data.filter((d): d is { date: string; value: number } => d.value != null);
+  const showAvg = isDay && present.length >= 5;
+
+  type Row = { x: string | number; value: number | null; avg: number | null };
+  const chartData = React.useMemo<Row[]>(() => {
+    if (isDay) {
+      // 7-day trailing average over the logged values, keyed by date.
+      const pres = data.filter((d): d is { date: string; value: number } => d.value != null);
+      const avgByDate = new Map<string, number>();
+      pres.forEach((d, i) => {
+        const win = pres.slice(Math.max(0, i - 6), i + 1);
+        avgByDate.set(d.date, win.reduce((sm, p) => sm + p.value, 0) / win.length);
+      });
+      return data.map((d) => ({
+        x: Date.parse(d.date),
+        value: d.value,
+        avg: showAvg && d.value != null ? round1(avgByDate.get(d.date)!) : null,
+      }));
+    }
+    const wk = bucketReduce(data, (d) => d.date, (d) => d.value, granularity, s, e, "avg");
+    return wk.map((w) => ({ x: w.key, value: w.value == null ? null : round1(w.value), avg: null }));
+  }, [data, granularity, s, e, isDay, showAvg]);
+
+  const vals = present.map((d) => d.value);
+  const bandYs = bands.map((b) => b.y);
+  // Scope the y-axis to include the cutoff lines so they're always visible.
+  const lo = vals.length ? Math.floor(Math.min(...vals, ...bandYs) - 1) : 0;
+  const hi = vals.length ? Math.ceil(Math.max(...vals, ...bandYs) + 1) : 1;
+  const latest = vals.length ? vals[vals.length - 1] : null;
+  const fmt = (v: number) => `${v.toFixed(digits)}${unit ? ` ${unit}` : ""}`;
+  const summary = latest != null ? `${title}: latest ${fmt(latest)}.` : `No ${title.toLowerCase()} in range.`;
+
+  return (
+    <ChartCard title={`${title}${groupSuffix(granularity, "avg")}`}>
+      {vals.length === 0 ? (
+        <EmptyState>{emptyHint}</EmptyState>
+      ) : (
+        <>
+          <ChartFigure summary={summary}>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={chartData} margin={{ top: 5, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis
+                  dataKey="x"
+                  type={isDay ? "number" : "category"}
+                  scale={isDay ? "time" : "auto"}
+                  domain={isDay ? ["dataMin", "dataMax"] : undefined}
+                  tickFormatter={(v) =>
+                    isDay ? bucketLabel("day", tsToISO(Number(v))) : bucketLabel(granularity, String(v))
+                  }
+                  interval={isDay ? undefined : "preserveStartEnd"}
+                  stroke={AXIS}
+                  fontSize={11}
+                />
+                <YAxis stroke={AXIS} fontSize={11} width={40} domain={[lo, hi]} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelFormatter={(label) =>
+                    isDay ? shortDateYear(tsToISO(Number(label))) : bucketLabel(granularity, String(label))
+                  }
+                  formatter={(value) => (value == null ? ["—", title] : [fmt(Number(value)), title])}
+                />
+                {bands.map((b) => (
+                  <ReferenceLine
+                    key={b.label}
+                    y={b.y}
+                    stroke="var(--muted-foreground)"
+                    strokeDasharray="4 4"
+                    label={{
+                      value: b.label,
+                      position: "insideTopRight",
+                      fontSize: 10,
+                      fill: "var(--muted-foreground)",
+                    }}
+                  />
+                ))}
+                {showAvg && (
+                  <Line
+                    type="monotone"
+                    dataKey="avg"
+                    stroke={AVG_COLOR}
+                    strokeWidth={1.5}
+                    dot={false}
+                    connectNulls
+                    name="7-day avg"
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke={color}
+                  strokeWidth={2.5}
+                  dot={{ r: 3 }}
+                  connectNulls
+                  name={title}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartFigure>
+          <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+            <Swatch color={color} label="Actual" />
+            {showAvg && <Swatch color={AVG_COLOR} label="7-day avg" />}
+            {bands.length > 0 && (
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-0 w-4 border-t-2 border-dashed border-muted-foreground" />
+                {bands.map((b) => b.label).join(" / ")} cutoffs
+              </span>
+            )}
+          </div>
+        </>
+      )}
+    </ChartCard>
+  );
+}
+
+type MetricChartProps = {
+  data: MetricPoint[];
+  granularity?: Granularity;
+  start?: string;
+  end?: string;
+};
+
+/** BMI over time with the WHO category cutoffs (normal 18.5, overweight 25, obese 30). */
+export function BmiChart({ data, granularity, start, end }: MetricChartProps) {
+  return (
+    <MeasurementChart
+      title="BMI"
+      data={data}
+      unit=""
+      digits={1}
+      bands={[
+        { y: 30, label: "Obese" },
+        { y: 25, label: "Overweight" },
+        { y: 18.5, label: "Normal" },
+      ]}
+      granularity={granularity}
+      start={start}
+      end={end}
+      emptyHint="Log weight and set your height to see BMI."
+    />
+  );
+}
+
+/** Body-fat % over time with sex-specific category cutoffs. Body-fat bands are
+ * less standardised than BMI; these use common men's/women's health thresholds. */
+export function BodyFatChart({
+  data,
+  sex,
+  granularity,
+  start,
+  end,
+}: MetricChartProps & { sex: string }) {
+  const bands =
+    sex === "female"
+      ? [
+          { y: 32, label: "Obese" },
+          { y: 25, label: "Overweight" },
+          { y: 21, label: "Healthy" },
+        ]
+      : [
+          { y: 25, label: "Obese" },
+          { y: 20, label: "Overweight" },
+          { y: 14, label: "Healthy" },
+        ];
+  return (
+    <MeasurementChart
+      title="Body fat"
+      data={data}
+      unit="%"
+      digits={1}
+      bands={bands}
+      granularity={granularity}
+      start={start}
+      end={end}
+      emptyHint="Log body-fat % (e.g. from a smart scale) to see the trend."
+    />
+  );
+}
+
 const MARKER_COLOR = "#a855f7";
 
 /** A blood/lab marker over time overlaid on body weight (dual y-axis), to see

@@ -7,6 +7,8 @@ import { round1 } from "@/lib/format";
 import { Meal } from "@/lib/constants";
 import { bmi, bmiClass } from "@/lib/health";
 import {
+  BmiChart,
+  BodyFatChart,
   CalorieChart,
   CompositionChart,
   EnergyBalanceChart,
@@ -95,6 +97,7 @@ export function StatsView({
   goalWeight,
   mealSplit,
   heightCm,
+  sex,
   insights,
   bodyComp,
   yearly,
@@ -121,6 +124,7 @@ export function StatsView({
   goalWeight: number | null;
   mealSplit: Record<Meal, number>;
   heightCm: number | null;
+  sex: string;
   insights: StatsInsights;
   bodyComp: BodyComposition | null;
   yearly: YearlyAverage[];
@@ -153,6 +157,10 @@ export function StatsView({
   const fRecovery = withinRange(recovery, cutoff);
   const fVo2max = withinRange(vo2max, cutoff);
   const startOf = (rows: { date: string }[]) => cutoff ?? rows[0]?.date ?? today;
+
+  // Derived from each weigh-in: BMI (weight + height) and the logged body-fat %.
+  const bmiSeries = fWeight.map((w) => ({ date: w.date, value: bmi(w.weight, heightCm) }));
+  const bodyFatSeries = fWeight.map((w) => ({ date: w.date, value: w.bodyFat }));
 
   // ---- summary metrics ----
   const wFirst = fWeight[0]?.weight;
@@ -272,6 +280,14 @@ export function StatsView({
           predictions={fPredictions}
           goalWeight={goalWeight}
           today={today}
+          granularity={group}
+          start={startOf(fWeight)}
+          end={today}
+        />
+        <BmiChart data={bmiSeries} granularity={group} start={startOf(fWeight)} end={today} />
+        <BodyFatChart
+          data={bodyFatSeries}
+          sex={sex}
           granularity={group}
           start={startOf(fWeight)}
           end={today}

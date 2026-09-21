@@ -115,6 +115,7 @@ export default async function StatsPage({
         goalWeight={goalWeight}
         mealSplit={mealSplit}
         heightCm={profile.heightCm}
+        sex={profile.sex}
         insights={insights}
         bodyComp={bodyComp}
         yearly={yearlyAverages(weighIns)}
