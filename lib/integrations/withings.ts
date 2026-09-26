@@ -1,5 +1,6 @@
 import "server-only";
 import { getSetting, setSetting } from "@/lib/settings";
+import { ReauthRequiredError } from "./errors";
 import { fetchRetry } from "./fetch-retry";
 import { groupsToReadings, MEASURE_TYPES, type MeasureGroup, type WithingsReading } from "./withings-parse";
 
@@ -137,20 +138,40 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<b
   }
 }
 
+/** True when a token-refresh failure means the refresh token itself is no longer
+ * valid (rotated/revoked/expired) — permanent, unlike a transient 5xx/network
+ * blip. Withings reports it as a non-zero envelope status mentioning the token. */
+function isDeadRefreshToken(e: unknown): boolean {
+  const m = e instanceof Error ? e.message.toLowerCase() : "";
+  return /refresh_token|invalid_token|invalid_grant|token (?:expired|invalid)/.test(m);
+}
+
 /** Return a valid access token, refreshing if expired. The refresh response
- * carries a NEW refresh token (the old one is now invalid) — persist both. */
+ * carries a NEW refresh token (the old one is now invalid) — persist both. If
+ * the stored refresh token is itself dead, disconnect and signal a reconnect. */
 export async function getAccessToken(): Promise<string | null> {
   const tokens = await getTokens();
   if (!tokens) return null;
   if (Date.now() < tokens.expiresAt) return tokens.accessToken;
 
-  const body = await postForm<TokenBody>(TOKEN_URL, {
-    action: "requesttoken",
-    grant_type: "refresh_token",
-    client_id: process.env.WITHINGS_CLIENT_ID ?? "",
-    client_secret: process.env.WITHINGS_CLIENT_SECRET ?? "",
-    refresh_token: tokens.refreshToken,
-  });
+  let body: TokenBody;
+  try {
+    body = await postForm<TokenBody>(TOKEN_URL, {
+      action: "requesttoken",
+      grant_type: "refresh_token",
+      client_id: process.env.WITHINGS_CLIENT_ID ?? "",
+      client_secret: process.env.WITHINGS_CLIENT_SECRET ?? "",
+      refresh_token: tokens.refreshToken,
+    });
+  } catch (e) {
+    if (isDeadRefreshToken(e)) {
+      // Can't be recovered without re-consent: clear the connection so the cron
+      // stops erroring every run and the app prompts a reconnect.
+      await disconnect();
+      throw new ReauthRequiredError("Withings", "refresh token expired");
+    }
+    throw e;
+  }
   const next = storeTokens(body, tokens);
   await setSetting<WithingsTokens>(TOKENS_KEY, next);
   return next.accessToken;

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isConnected as googleConnected } from "@/lib/integrations/google-health";
 import { isConnected as withingsConnected } from "@/lib/integrations/withings";
 import { syncGoogleHealth, syncWithings } from "@/lib/integrations/sync";
+import { ReauthRequiredError } from "@/lib/integrations/errors";
 
 // The first sync pulls years of history; give it room beyond the default ~10s.
 export const maxDuration = 60;
@@ -32,28 +33,31 @@ export async function GET(request: NextRequest) {
 
   const result: Record<string, unknown> = {};
   const errors: string[] = [];
+  // Sources whose refresh token died — the user needs to reconnect them. These
+  // are auto-disconnected at the source, so they're not a hard failure: reporting
+  // 500 on every run for a dead connection just makes the poller flap forever.
+  const reauth: string[] = [];
 
-  if (google) {
+  const run = async (label: string, fn: () => Promise<unknown>) => {
     try {
-      result.google = await syncGoogleHealth();
+      result[label] = await fn();
     } catch (e) {
+      if (e instanceof ReauthRequiredError) {
+        console.warn(`[cron/sync] ${label} needs reconnect:`, e.message);
+        reauth.push(e.source);
+        return;
+      }
       const msg = e instanceof Error ? e.message : "failed";
-      console.error("[cron/sync] google-health failed:", msg);
-      errors.push(`google-health: ${msg}`);
+      console.error(`[cron/sync] ${label} failed:`, msg);
+      errors.push(`${label}: ${msg}`);
     }
-  }
-  if (withings) {
-    try {
-      result.withings = await syncWithings();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "failed";
-      console.error("[cron/sync] withings failed:", msg);
-      errors.push(`withings: ${msg}`);
-    }
-  }
+  };
+
+  if (google) await run("google", syncGoogleHealth);
+  if (withings) await run("withings", syncWithings);
 
   if (errors.length) {
-    return NextResponse.json({ ok: false, errors, ...result }, { status: 500 });
+    return NextResponse.json({ ok: false, errors, reauth, ...result }, { status: 500 });
   }
-  return NextResponse.json({ ok: true, ...result });
+  return NextResponse.json({ ok: true, reauth, ...result });
 }

@@ -1,5 +1,6 @@
 import "server-only";
 import { getSetting, setSetting } from "@/lib/settings";
+import { ReauthRequiredError } from "./errors";
 import { fetchRetry } from "./fetch-retry";
 
 /**
@@ -133,7 +134,16 @@ export async function getAccessToken(): Promise<string | null> {
       grant_type: "refresh_token",
     }),
   });
-  if (!res.ok) throw new Error(`Google token refresh failed (${res.status})`);
+  if (!res.ok) {
+    // 400/401 on a refresh_token grant means the refresh token is revoked or
+    // expired (invalid_grant) — permanent. Disconnect and signal a reconnect so
+    // the cron stops erroring; other statuses (5xx already retried) stay errors.
+    if (res.status === 400 || res.status === 401) {
+      await disconnect();
+      throw new ReauthRequiredError("Google Health", "refresh token expired");
+    }
+    throw new Error(`Google token refresh failed (${res.status})`);
+  }
   const data = (await res.json()) as TokenResponse;
   await setSetting<GoogleTokens>(TOKENS_KEY, {
     ...tokens,
