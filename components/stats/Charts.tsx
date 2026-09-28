@@ -406,7 +406,8 @@ export function WeightChart({
     const lost = Math.round((base.weight - latest.weight) * 10) / 10;
     const perWeek = Math.round((lost / (days / 7)) * 10) / 10;
     const verb = lost >= 0 ? "lost" : "gained";
-    return `${Math.abs(lost)} kg ${verb} since first injection · ${Math.abs(perWeek)} kg/wk avg`;
+    const n = injectionDates.length;
+    return `${Math.abs(lost)} kg ${verb} since first injection · ${Math.abs(perWeek)} kg/wk avg · ${n} injection${n === 1 ? "" : "s"}`;
   })();
 
   // For the summary, compare at the most recent weigh-in that has a prediction.
