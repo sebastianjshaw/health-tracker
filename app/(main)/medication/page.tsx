@@ -5,7 +5,7 @@ import { MedDoseForm } from "@/components/medication/MedDoseForm";
 import { MedCheckin } from "@/components/medication/MedCheckin";
 import { MedDoseList } from "@/components/medication/MedDoseList";
 import { injectionSiteLabel } from "@/lib/constants";
-import { addDays, todayISO } from "@/lib/date";
+import { todayISO } from "@/lib/date";
 import { getGoalWeight } from "@/lib/settings";
 import { getWeightSeries } from "@/lib/stats-data";
 import {
@@ -48,10 +48,11 @@ export default async function MedicationPage() {
     getInjectionDates(),
   ]);
 
-  // Frame the weight trend on the medication period: start a week before the
-  // first injection so the pre-treatment baseline is visible for comparison.
+  // Frame the weight trend on the medication period: start on the day of the
+  // first injection, so both the trend line and the "lost since first injection"
+  // figure measure from the same point (pre-injection weigh-ins would inflate it).
   const firstDose = injectionDates[0] ?? null;
-  const weight = await getWeightSeries(firstDose ? addDays(firstDose, -7) : undefined);
+  const weight = await getWeightSeries(firstDose ?? undefined);
 
   const due = dueText(next);
 
