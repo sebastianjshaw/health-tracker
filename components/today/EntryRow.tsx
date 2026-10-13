@@ -88,9 +88,10 @@ export function EntryRow({
   return (
     <div className={cn("flex items-center gap-2 py-2", pending && "opacity-50")}>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-medium">{entry.name}</span>
-          {entry.kind === "recurring" && <Badge>default</Badge>}
+        {/* Name gets the full line so it stays readable; chips/meta sit below. */}
+        <div className="truncate font-medium">{entry.name}</div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+          {entry.kind === "recurring" && <Badge className="shrink-0">default</Badge>}
           {entry.logId != null && (
             <button
               type="button"
@@ -99,19 +100,17 @@ export function EntryRow({
               title={`Calorie confidence: ${EVOLUTION_LABELS[evo]} — tap to change`}
               className={cn(
                 "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-                upliftPct > 0
-                  ? "bg-warn/15 text-warn"
-                  : "bg-muted text-muted-foreground",
+                upliftPct > 0 ? "bg-warn/15 text-warn" : "bg-muted text-muted-foreground",
               )}
             >
               {EVOLUTION_SHORT[evo]}
               {upliftPct > 0 ? ` +${upliftPct}%` : ""}
             </button>
           )}
-        </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {servingLabel(entry.quantity, entry.servingSize, entry.servingUnit)} ·{" "}
-          {kcal} kcal · P{protein} C{carbs} F{fat}
+          <span className="truncate">
+            {servingLabel(entry.quantity, entry.servingSize, entry.servingUnit)} · {kcal} kcal · P
+            {protein} C{carbs} F{fat}
+          </span>
         </div>
       </div>
 
