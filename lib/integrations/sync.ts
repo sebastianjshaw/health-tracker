@@ -22,6 +22,7 @@ import {
   getAccessToken as getWithingsToken,
   getCursor as getWithingsCursor,
   getMeasures,
+  getRejectedCompositionDates as getRejectedComposition,
   setCursor as setWithingsCursor,
 } from "./withings";
 
@@ -519,6 +520,9 @@ export async function syncWithings(opts?: { full?: boolean }): Promise<WithingsS
   const cursor = full ? null : await getWithingsCursor();
   const since = cursor != null ? Math.max(0, cursor - WITHINGS_LOOKBACK_SECONDS) : null;
   const { readings, updatetime } = await getMeasures(token, since);
+  // Days whose composition is a known bioimpedance misfire: keep the scale
+  // weight, but drop (and clear) the fat/lean/muscle/bone the sync would import.
+  const rejected = new Set(await getRejectedComposition());
 
   let latest: string | null = null;
   if (readings.length) {
@@ -539,6 +543,11 @@ export async function syncWithings(opts?: { full?: boolean }): Promise<WithingsS
     for (const r of readings) {
       // Scale fields win where it has a reading; keep the prior value otherwise.
       const set = (next: number | null, prev: number | null | undefined) => next ?? prev ?? null;
+      // On a rejected day, force composition to null (don't import, and clear any
+      // existing bad values); weight is mechanical and still accepted.
+      const comp = rejected.has(r.date)
+        ? () => null
+        : (next: number | null, prev: number | null | undefined) => set(next, prev);
       const ex = rowByDate.get(r.date);
       if (ex) {
         stmts.push(
@@ -546,11 +555,11 @@ export async function syncWithings(opts?: { full?: boolean }): Promise<WithingsS
             .update(bodyMetrics)
             .set({
               weightKg: set(r.weightKg, ex.weightKg),
-              bodyFatPct: set(r.bodyFatPct, ex.bodyFatPct),
-              leanMassKg: set(r.leanMassKg, ex.leanMassKg),
-              muscleMassKg: set(r.muscleMassKg, ex.muscleMassKg),
-              boneMassKg: set(r.boneMassKg, ex.boneMassKg),
-              hydrationKg: set(r.hydrationKg, ex.hydrationKg),
+              bodyFatPct: comp(r.bodyFatPct, ex.bodyFatPct),
+              leanMassKg: comp(r.leanMassKg, ex.leanMassKg),
+              muscleMassKg: comp(r.muscleMassKg, ex.muscleMassKg),
+              boneMassKg: comp(r.boneMassKg, ex.boneMassKg),
+              hydrationKg: comp(r.hydrationKg, ex.hydrationKg),
             })
             .where(eq(bodyMetrics.id, ex.id)),
         );
@@ -559,11 +568,11 @@ export async function syncWithings(opts?: { full?: boolean }): Promise<WithingsS
           db.insert(bodyMetrics).values({
             date: r.date,
             weightKg: r.weightKg,
-            bodyFatPct: r.bodyFatPct,
-            leanMassKg: r.leanMassKg,
-            muscleMassKg: r.muscleMassKg,
-            boneMassKg: r.boneMassKg,
-            hydrationKg: r.hydrationKg,
+            bodyFatPct: comp(r.bodyFatPct, null),
+            leanMassKg: comp(r.leanMassKg, null),
+            muscleMassKg: comp(r.muscleMassKg, null),
+            boneMassKg: comp(r.boneMassKg, null),
+            hydrationKg: comp(r.hydrationKg, null),
           }),
         );
       }
@@ -578,6 +587,22 @@ export async function syncWithings(opts?: { full?: boolean }): Promise<WithingsS
     } catch {
       /* non-fatal */
     }
+  }
+
+  // Enforce rejections unconditionally — not just for days in this sync's window
+  // — so composition a prior sync imported before the day was rejected is cleared
+  // too (the scale weight is left intact).
+  if (rejected.size) {
+    await db
+      .update(bodyMetrics)
+      .set({
+        bodyFatPct: null,
+        leanMassKg: null,
+        muscleMassKg: null,
+        boneMassKg: null,
+        hydrationKg: null,
+      })
+      .where(inArray(bodyMetrics.date, [...rejected]));
   }
 
   // Advance the cursor to the response's updatetime so the next run only fetches

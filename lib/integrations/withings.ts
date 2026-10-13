@@ -34,6 +34,7 @@ export const WITHINGS_SCOPE = "user.metrics";
 
 const TOKENS_KEY = "withings";
 const CURSOR_KEY = "withingsCursor"; // epoch seconds of the last sync's updatetime
+const REJECTED_KEY = "withingsRejectedComposition"; // ISO dates to drop scale body-comp for
 
 export type WithingsTokens = {
   accessToken: string;
@@ -56,6 +57,24 @@ export async function isConnected(): Promise<boolean> {
 }
 export async function disconnect(): Promise<void> {
   await setSetting(TOKENS_KEY, null);
+}
+
+/**
+ * Dates (YYYY-MM-DD) whose scale body-composition is rejected — a bioimpedance
+ * misfire (wrong body-fat, and the lean/muscle/bone derived from it). The sync
+ * keeps the mechanical weight for these days but never re-imports composition,
+ * so a correction isn't clobbered on the next run.
+ */
+export async function getRejectedCompositionDates(): Promise<string[]> {
+  return (await getSetting<string[]>(REJECTED_KEY, [])) ?? [];
+}
+
+/** Reject (or, with `on=false`, un-reject) a day's scale body-composition. */
+export async function setCompositionRejected(date: string, on = true): Promise<void> {
+  const cur = await getRejectedCompositionDates();
+  const has = cur.includes(date);
+  if (on && !has) await setSetting(REJECTED_KEY, [...cur, date]);
+  else if (!on && has) await setSetting(REJECTED_KEY, cur.filter((d) => d !== date));
 }
 
 /** Cursor is the `updatetime` (epoch seconds) returned by the last getmeas, so
