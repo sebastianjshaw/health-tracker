@@ -60,6 +60,32 @@ export const recurringFoods = sqliteTable("recurring_foods", {
   createdAt: createdAt(),
 });
 
+/** A saved "meal": a named, reusable set of library foods (e.g. a chili =
+ * mince + beans + tomatoes). Adding it to a day expands into individual food_log
+ * rows (snapshots), so the logged ingredients are then edited/deleted on their
+ * own and the saved meal is never touched. */
+export const meals = sqliteTable("meals", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  createdAt: createdAt(),
+});
+
+export const mealItems = sqliteTable(
+  "meal_items",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    mealId: integer("meal_id")
+      .notNull()
+      .references(() => meals.id, { onDelete: "cascade" }),
+    foodId: integer("food_id")
+      .notNull()
+      .references(() => foods.id, { onDelete: "cascade" }),
+    quantity: real("quantity").notNull().default(1),
+    position: integer("position").notNull().default(0),
+  },
+  (t) => [index("meal_items_meal_idx").on(t.mealId)],
+);
+
 /** Concrete food entries for a given day. */
 export const foodLog = sqliteTable("food_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
@@ -301,6 +327,8 @@ export const settings = sqliteTable("settings", {
 
 export type Food = typeof foods.$inferSelect;
 export type RecurringFood = typeof recurringFoods.$inferSelect;
+export type MealRow = typeof meals.$inferSelect;
+export type MealItemRow = typeof mealItems.$inferSelect;
 export type FoodLogRow = typeof foodLog.$inferSelect;
 export type BodyMetric = typeof bodyMetrics.$inferSelect;
 export type DayHealthRow = typeof dayHealth.$inferSelect;

@@ -8,6 +8,7 @@ import { isValidISO, todayISO } from "@/lib/date";
 import { getNextDoseInfo } from "@/lib/medication-data";
 import { getDayActivity, getDayHealth } from "@/lib/day-data";
 import { getDayEntries } from "@/lib/food-data";
+import { getMeals } from "@/lib/meal-data";
 import { totalWaterMl } from "@/lib/hydration";
 import { adjustedCalories, totals } from "@/lib/nutrition";
 import { getContingency, getTargets } from "@/lib/settings";
@@ -21,13 +22,14 @@ export default async function TodayPage({
   const date = d && isValidISO(d) ? d : todayISO();
 
   const isToday = date === todayISO();
-  const [entries, targets, health, contingency, activity, nextDose] = await Promise.all([
+  const [entries, targets, health, contingency, activity, nextDose, mealPresets] = await Promise.all([
     getDayEntries(date),
     getTargets(),
     getDayHealth(date),
     getContingency(),
     getDayActivity(date),
     getNextDoseInfo(),
+    getMeals(),
   ]);
 
   const dayTotals = totals(entries);
@@ -60,6 +62,7 @@ export default async function TodayPage({
           entries={entries.filter((e) => e.meal === meal)}
           date={date}
           contingency={contingency}
+          meals={mealPresets}
         />
       ))}
     </div>

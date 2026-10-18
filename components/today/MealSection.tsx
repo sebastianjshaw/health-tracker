@@ -2,6 +2,7 @@ import { Card } from "@/components/ui";
 import { Contingency, MEAL_LABELS, Meal } from "@/lib/constants";
 import { adjustedCalories } from "@/lib/nutrition";
 import type { DayEntry } from "@/lib/food-data";
+import type { MealWithItems } from "@/lib/meal-data";
 import { EntryRow } from "./EntryRow";
 import { AddFoodButton } from "./AddFoodButton";
 import { CopyYesterdayButton } from "./CopyYesterdayButton";
@@ -11,11 +12,13 @@ export function MealSection({
   entries,
   date,
   contingency,
+  meals,
 }: {
   meal: Meal;
   entries: DayEntry[];
   date: string;
   contingency: Contingency;
+  meals: MealWithItems[];
 }) {
   const kcal = adjustedCalories(entries, contingency);
 
@@ -38,7 +41,7 @@ export function MealSection({
       </div>
 
       <div className="px-4 pb-3 pt-2">
-        <AddFoodButton date={date} meal={meal} />
+        <AddFoodButton date={date} meal={meal} meals={meals} />
         <CopyYesterdayButton date={date} meal={meal} />
       </div>
     </Card>
