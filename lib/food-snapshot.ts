@@ -17,6 +17,7 @@ export type LibraryFoodLike = PerServingMacros & {
   fiber?: number | null;
   fiberEstimated?: boolean | null;
   saturatedFat?: number | null;
+  sugar?: number | null;
   salt?: number | null;
   sodium?: number | null;
 };
@@ -59,6 +60,7 @@ export function foodLogSnapshot(
     fiber: food.fiber ?? null,
     fiberEstimated: food.fiberEstimated ?? null,
     saturatedFat: food.saturatedFat ?? null,
+    sugar: food.sugar ?? null,
     salt: food.salt ?? null,
     sodium: food.sodium ?? null,
     servingSize: food.servingSize,
