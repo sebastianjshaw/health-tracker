@@ -123,6 +123,8 @@ async function ensureMcpLibraryFood(opts: {
   fat: number;
   fiber?: number | null;
   saturatedFat?: number | null;
+  salt?: number | null;
+  sodium?: number | null;
 }): Promise<number> {
   const name = opts.name.trim();
   const serving = {
@@ -134,6 +136,8 @@ async function ensureMcpLibraryFood(opts: {
     }),
     fiber: opts.fiber ?? null,
     saturatedFat: opts.saturatedFat ?? null,
+    salt: opts.salt ?? null,
+    sodium: opts.sodium ?? null,
   };
   // Reuse a matching existing food (any source) rather than creating a duplicate.
   const reuseId = await findReusableFoodId(name, serving);
@@ -189,6 +193,8 @@ type DayNutrition = {
   protein: number;
   fiber: number;
   satFat: number;
+  salt: number; // grams
+  sodium: number; // mg
   water: number;
   waterWater: number;
   waterDrink: number;
@@ -223,6 +229,8 @@ async function nutritionForRange(start: string, end: string): Promise<DayNutriti
       fat: foodLog.fat,
       fiber: foodLog.fiber,
       saturatedFat: foodLog.saturatedFat,
+      salt: foodLog.salt,
+      sodium: foodLog.sodium,
       servingSize: foodLog.servingSize,
       servingUnit: foodLog.servingUnit,
       evolution: foodLog.evolution,
@@ -244,6 +252,8 @@ async function nutritionForRange(start: string, end: string): Promise<DayNutriti
         protein: 0,
         fiber: 0,
         satFat: 0,
+        salt: 0,
+        sodium: 0,
         water: 0,
         waterWater: 0,
         waterDrink: 0,
@@ -254,6 +264,8 @@ async function nutritionForRange(start: string, end: string): Promise<DayNutriti
     a.protein += r.protein * r.quantity;
     a.fiber += (r.fiber ?? 0) * r.quantity;
     a.satFat += (r.saturatedFat ?? 0) * r.quantity;
+    a.salt += (r.salt ?? 0) * r.quantity;
+    a.sodium += (r.sodium ?? 0) * r.quantity;
     const we = {
       servingSize: r.servingSize,
       servingUnit: r.servingUnit,
@@ -283,6 +295,8 @@ async function nutritionForRange(start: string, end: string): Promise<DayNutriti
       protein: Math.round(a?.protein ?? 0),
       fiber: Math.round(a?.fiber ?? 0),
       satFat: Math.round(a?.satFat ?? 0),
+      salt: Math.round((a?.salt ?? 0) * 10) / 10,
+      sodium: Math.round(a?.sodium ?? 0),
       water: Math.round(a?.water ?? 0),
       waterWater: Math.round(a?.waterWater ?? 0),
       waterDrink: Math.round(a?.waterDrink ?? 0),
@@ -297,7 +311,7 @@ const server = new McpServer({ name: "health-tracker", version: "1.0.0" });
 
 server.tool(
   "get_day",
-  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation/work_trip), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR). Each food entry's kcal/protein/carbs/fat/fiber/saturatedFat are the ACTUAL amounts eaten for that entry (the per-serving value already multiplied by its quantity), so entries sum to totals — do NOT multiply them by quantity again.",
+  "Full picture for a date (default today): food entries plus nutrition totals (calories — both raw-logged and the contingency-adjusted figure the app judges you on — protein, carbs, fat, fiber, saturated fat, salt in g, sodium in mg), estimated hydration split by source (water / other drinks / food), passive activity (background-counted steps & distance, separate from logged cardio sessions; null when none synced), that day's effective calorie & protein target, the logged health status (healthy/unwell/injured/vacation/work_trip), and any body measurements taken that day (weight, body-fat %, waist/chest/hips/neck cm, resting HR). Each food entry's kcal/protein/carbs/fat/fiber/saturatedFat/salt/sodium are the ACTUAL amounts eaten for that entry (the per-serving value already multiplied by its quantity), so entries sum to totals — do NOT multiply them by quantity again. salt/sodium are omitted on entries that have no value.",
   { date: ISO.optional() },
   async ({ date }) => {
     const d = date ?? todayISO();
@@ -335,6 +349,8 @@ server.tool(
       fat: g1(r.fat * r.quantity),
       fiber: r.fiber == null ? undefined : g1(r.fiber * r.quantity),
       saturatedFat: r.saturatedFat == null ? undefined : g1(r.saturatedFat * r.quantity),
+      salt: r.salt == null ? undefined : g1(r.salt * r.quantity),
+      sodium: r.sodium == null ? undefined : Math.round(r.sodium * r.quantity),
       source: r.source,
       recurring: r.recurringId != null,
     }));
@@ -353,6 +369,8 @@ server.tool(
             fat: Math.round(macros.fat),
             fiber: day.fiber,
             saturatedFat: day.satFat,
+            salt: day.salt, // grams
+            sodium: day.sodium, // mg
           },
           hydrationMl: {
             total: day.water,
@@ -386,7 +404,7 @@ server.tool(
 
 server.tool(
   "search_foods",
-  "Search the food library by name or brand. Returns matching foods with their per-serving nutrition and id.",
+  "Search the food library by name or brand. Returns matching foods with their per-serving nutrition and id (salt in g, sodium in mg; fiber/saturatedFat/salt/sodium omitted when the food has no value).",
   { query: z.string().optional() },
   async ({ query }) => {
     const rows = query
@@ -409,6 +427,10 @@ server.tool(
           protein: f.protein,
           carbs: f.carbs,
           fat: f.fat,
+          fiber: f.fiber ?? undefined,
+          saturatedFat: f.saturatedFat ?? undefined,
+          salt: f.salt ?? undefined,
+          sodium: f.sodium ?? undefined,
         })),
         null,
         2,
@@ -419,7 +441,7 @@ server.tool(
 
 server.tool(
   "log_food",
-  "Add a free-text food entry to a day's meal. kcal/protein/carbs/fat (and optional fiber/saturatedFat) are the ABSOLUTE TOTALS in grams for the whole portion eaten — already account for the amount, do NOT pass per-unit values or a multiplier. Include fiber and saturatedFat when known so the daily fiber/sat-fat trends are accurate.",
+  "Add a free-text food entry to a day's meal. kcal/protein/carbs/fat (and optional fiber/saturatedFat/salt/sodium) are the ABSOLUTE TOTALS for the whole portion eaten — already account for the amount, do NOT pass per-unit values or a multiplier. Macros are in grams; salt in grams and sodium in mg (as on the label). Include fiber/saturatedFat/salt/sodium when known so the daily trends are accurate.",
   {
     date: ISO.optional(),
     meal: MEAL,
@@ -430,8 +452,10 @@ server.tool(
     fat: z.number().optional(),
     fiber: z.number().optional(),
     saturatedFat: z.number().optional(),
+    salt: z.number().optional(),
+    sodium: z.number().optional(),
   },
-  async ({ date, meal, name, kcal, protein, carbs, fat, fiber, saturatedFat }) => {
+  async ({ date, meal, name, kcal, protein, carbs, fat, fiber, saturatedFat, salt, sodium }) => {
     const d = date ?? todayISO();
     const foodId = await ensureMcpLibraryFood({
       name,
@@ -441,6 +465,8 @@ server.tool(
       fat: fat ?? 0,
       fiber: fiber ?? null,
       saturatedFat: saturatedFat ?? null,
+      salt: salt ?? null,
+      sodium: sodium ?? null,
     });
     const food = await db.select().from(foods).where(eq(foods.id, foodId)).get();
     if (!food) return text(`Failed to save "${name}".`);
@@ -474,7 +500,7 @@ server.tool(
 
 server.tool(
   "update_food_entry",
-  "Edit fields on an already-logged food entry by its id (from get_day) — e.g. backfill fiber/saturatedFat on an older entry, or correct a macro. Only the fields you pass change. Values are the per-serving figures stored on the entry; for free-text entries (quantity 1) that's the whole portion. Works on recurring-default entries too (edits just that day's instance).",
+  "Edit fields on an already-logged food entry by its id (from get_day) — e.g. backfill fiber/saturatedFat/salt/sodium on an older entry, or correct a macro. Only the fields you pass change. Values are the per-serving figures stored on the entry; for free-text entries (quantity 1) that's the whole portion. Salt is grams, sodium mg. Works on recurring-default entries too (edits just that day's instance).",
   {
     id: z.number(),
     meal: MEAL.optional(),
@@ -486,8 +512,10 @@ server.tool(
     fat: z.number().optional(),
     fiber: z.number().optional(),
     saturatedFat: z.number().optional(),
+    salt: z.number().optional(),
+    sodium: z.number().optional(),
   },
-  async ({ id, meal, name, quantity, kcal, protein, carbs, fat, fiber, saturatedFat }) => {
+  async ({ id, meal, name, quantity, kcal, protein, carbs, fat, fiber, saturatedFat, salt, sodium }) => {
     const row = await db.select().from(foodLog).where(eq(foodLog.id, id)).get();
     if (!row) return text(`No food entry with id ${id}.`);
 
@@ -501,6 +529,8 @@ server.tool(
     if (fat !== undefined) set.fat = fat;
     if (fiber !== undefined) set.fiber = fiber;
     if (saturatedFat !== undefined) set.saturatedFat = saturatedFat;
+    if (salt !== undefined) set.salt = salt;
+    if (sodium !== undefined) set.sodium = sodium;
 
     const fields = Object.keys(set);
     if (fields.length === 0) return text("Nothing to update — pass at least one field to change.");
@@ -1075,7 +1105,7 @@ server.tool(
 
 server.tool(
   "get_nutrition_trend",
-  "Daily nutrition & hydration over a period: per day the contingency-adjusted calories vs that day's effective target, protein, fiber, saturated fat, and estimated water (split by source), with averages and adherence counts. Defaults to the last N days (default 30, max 365); pass `from` (YYYY-MM-DD) to analyse older history instead — the `coverage` field reports the TRUE span (logging can go back years). Use for weekly/period coaching, not single-day questions (use get_day).",
+  "Daily nutrition & hydration over a period: per day the contingency-adjusted calories vs that day's effective target, protein, fiber, saturated fat, salt (g), sodium (mg), and estimated water (split by source), with averages and adherence counts. Defaults to the last N days (default 30, max 365); pass `from` (YYYY-MM-DD) to analyse older history instead — the `coverage` field reports the TRUE span (logging can go back years). Use for weekly/period coaching, not single-day questions (use get_day).",
   { days: z.number().optional(), from: ISO.optional() },
   async ({ days, from }) => {
     const today = todayISO();
@@ -1104,6 +1134,10 @@ server.tool(
       avgProtein: avg((s) => s.protein),
       avgFiber: avg((s) => s.fiber),
       avgSatFat: avg((s) => s.satFat),
+      avgSalt: logged.length
+        ? Math.round((logged.reduce((a, s) => a + s.salt, 0) / logged.length) * 10) / 10
+        : 0,
+      avgSodium: avg((s) => s.sodium),
       avgWaterMl: avg((s) => s.water),
       daysAtOrUnderKcalTarget: logged.filter((s) => s.kcal <= s.targetKcal).length,
       daysHitProteinTarget: logged.filter((s) => s.protein >= s.targetProtein).length,

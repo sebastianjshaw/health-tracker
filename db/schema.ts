@@ -105,6 +105,8 @@ export const foodLog = sqliteTable("food_log", {
   // snapshot of foods.fiberEstimated — see that column
   fiberEstimated: integer("fiber_estimated", { mode: "boolean" }),
   saturatedFat: real("saturated_fat"),
+  salt: real("salt"),
+  sodium: real("sodium"),
   servingSize: real("serving_size").notNull().default(100),
   servingUnit: text("serving_unit").notNull().default("g"),
   source: text("source").notNull().default("manual"),
