@@ -25,7 +25,7 @@ import { join } from "node:path";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import type { BatchItem } from "drizzle-orm/batch";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, inArray } from "drizzle-orm";
 import * as schema from "../db/schema";
 import { parseStravaActivities, type StravaActivity } from "./lib/strava-parse";
 import { parseTrackPoints, downsample } from "./lib/gpx-parse";
